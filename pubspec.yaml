@@ -1,0 +1,95 @@
+name: healthypi_move
+description: "Healthypi Move Mobile Application"
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.1
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  path_provider: ^2.0.11
+  flutter_reactive_ble: ^5.4.0
+  bluetooth_enable_fork: ^0.1.4
+  geolocator: ^9.0.2
+
+  connectivity: ^3.0.6
+  permission_handler: ^10.0.1
+  flutter_form_builder: ^9.0.0
+  form_builder_validators: ^11.1.1
+  shared_preferences: ^2.0.15
+  progress_indicators: ^1.0.0
+  sn_progress_dialog: 1.1.2
+  #  sentry_flutter: ^7.9.0
+  provider: ^6.0.3
+  convert: ^3.0.2
+  flutter_launcher_icons: ^0.14.3
+
+  battery_indicator: ^0.1.1
+  flutter_spinkit: ^5.1.0
+  signal_strength_indicator: ^0.4.1
+  fl_chart: 0.69.2
+  package_info_plus: ^4.1.0
+  settings_ui: ^2.0.2
+
+  #to_csv: ^2.1.0
+  file_saver: 0.2.11
+  tap_debouncer: ^2.2.0
+
+  #mcumgr: ^0.0.3
+  version: ^3.0.2
+  file_picker: ^5.5.0
+  csv: ^5.1.1
+  circular_countdown_timer: ^0.2.3
+  syncfusion_flutter_charts: ^28.2.6
+  protobuf: ^3.1.0
+  #mcumgr_flutter: ^0.4.2
+  pdf: 3.11.3
+  open_file: ^3.5.10
+
+dependency_overrides:
+  file_saver: 0.2.8
+  protobuf: 2.0.0
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.jpg"
+
