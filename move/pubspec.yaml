@@ -37,10 +37,10 @@ dependencies:
   path_provider: ^2.0.11
   flutter_reactive_ble: ^5.4.0
   #bluetooth_enable_fork: ^0.1.4
-  geolocator: ^9.0.2
+  #geolocator: ^9.0.2
 
   #connectivity: ^3.0.6
-  permission_handler: ^10.0.1
+  permission_handler: ^11.4.0
   flutter_form_builder: ^9.0.0
   form_builder_validators: ^11.1.1
   shared_preferences: ^2.0.15
@@ -59,12 +59,12 @@ dependencies:
   settings_ui: ^2.0.2
 
   #to_csv: ^2.1.0
-  file_saver: 0.2.11
+  file_saver: 0.2.14
   tap_debouncer: ^2.2.0
 
   #mcumgr: ^0.0.3
   version: ^3.0.2
-  file_picker: ^5.5.0
+  file_picker: ^9.0.2
   csv: ^5.1.1
   circular_countdown_timer: ^0.2.3
   syncfusion_flutter_charts: ^28.2.6

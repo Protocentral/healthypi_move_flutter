@@ -7,7 +7,7 @@ import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../globals.dart';
-import 'package:geolocator/geolocator.dart';
+//import 'package:geolocator/geolocator.dart';
 //import 'package:bluetooth_enable_fork/bluetooth_enable_fork.dart';
 
 class WiserBLEProvider extends ChangeNotifier {
@@ -239,12 +239,14 @@ class WiserBLEProvider extends ChangeNotifier {
       _bluetoothServiceEnabled = true;
     }
 
-    _locationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+    /*_locationServiceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!_locationServiceEnabled) {
       //AKW: User rejected to turn on location. Display dialog
       _showLocationOffDialog(context);
       return false;
-    }
+    }*/
+
+    _locationServiceEnabled=true;
 
     if (_permLocationEnabled == true &&
         _permBluetoothEnabled == true &&

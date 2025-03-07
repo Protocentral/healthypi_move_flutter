@@ -4,7 +4,6 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   file_saver
-  geolocator_windows
   permission_handler_windows
 )
 
