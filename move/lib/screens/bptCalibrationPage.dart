@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:circular_countdown_timer/circular_countdown_timer.dart';
 
-import 'home.dart';
-import 'globals.dart';
-import 'sizeConfig.dart';
+import '../home.dart';
+import '../globals.dart';
+import '../sizeConfig.dart';
 import 'bptCalibrationPage1.dart';
 
 class BPTCalibrationPage extends StatefulWidget {

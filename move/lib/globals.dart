@@ -74,7 +74,7 @@ class hPi4Global {
   static const TextStyle eventsWhite =
       TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
 
-  static const Color hpi4Color = Color(0xFF125871);
+  static const Color hpi4Color = Color(0xFFFFD551);
 
   static const TextStyle scrHeadStyle = TextStyle(
     fontSize: 24,
@@ -89,7 +89,7 @@ class hPi4Global {
   );
 
   static Color appBarColor = Colors.black38;
-  static Color appBackgroundColor = Colors.grey.shade300;
+  static Color appBackgroundColor = Colors.black;
 
   static String hpi4AppVersion = "";
   static String hpi4AppBuildNumber = "";

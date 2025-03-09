@@ -1,25 +1,16 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'home.dart';
-import 'pdfGenerator.dart';
-import 'sizeConfig.dart';
+import '../home.dart';
+import '../sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
-import 'globals.dart';
+import '../globals.dart';
 
-import 'package:file_picker/file_picker.dart';
-import 'package:csv/csv.dart';
-import 'dart:convert' show LineSplitter, utf8;
-
-class HRPage extends StatefulWidget {
-  const HRPage({Key? key}) : super(key: key);
+class SPO2Page extends StatefulWidget {
+  const SPO2Page({Key? key}) : super(key: key);
   @override
-  State<HRPage> createState() => _HRPageState();
+  State<SPO2Page> createState() => _SPO2PageState();
 }
-class _HRPageState extends State<HRPage>
+class _SPO2PageState extends State<SPO2Page>
     with SingleTickerProviderStateMixin {
 
   @override
@@ -43,24 +34,21 @@ class _HRPageState extends State<HRPage>
                       ),
                       primaryYAxis: NumericAxis(
                           minimum: 0,
-                          maximum: 200
+                          maximum: 100
                       ),
                       palette: <Color>[
-                      Color(0xFF125871),
+                        Color(0xFF125871),
                       ],
                       series: <CartesianSeries>[
                         HiloSeries<ChartData, int>(
                             dataSource: <ChartData>[
-                              ChartData(50, 60, 70),
-                              ChartData(55, 61, 95),
-                              ChartData(60, 62, 71),
-                              ChartData(65, 61, 73),
-                              ChartData(70, 60, 75),
+
                             ],
                             xValueMapper: (ChartData data, _) => data.x,
                             lowValueMapper: (ChartData data, _) => data.low,
                             highValueMapper: (ChartData data, _) => data.high
-                        ),
+                        )
+
                       ]
                   )
               )
@@ -78,39 +66,13 @@ class _HRPageState extends State<HRPage>
       child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: Colors.black),
-              onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => HomePage()))
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => HomePage()))
           ),
-          title: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              //mainAxisSize: MainAxisSize.max,
-              children: [
-                const Text(
-                  'Heart Rate',
-                  style: TextStyle(fontSize: 16),
-                ),
-                SizedBox(width:30.0),
-                IconButton(
-                    icon: Icon(Icons.file_open, color: Colors.black),
-                    onPressed: () async{
-
-                      String myData = await rootBundle.loadString("assets/test.txt");
-                      List<String> result = myData.split('\n');
-                      print(result);
-                      List<String> timestamp = result.map((f) => f.split(",")[0]).toList();
-
-                      List<String> HR = result.map((f) => f.split(",")[1]).toList();
-
-                      List<String> HR1 = result.map((f) => f.split(",")[2]).toList();
-
-                      //print(".........time"+timestamp.toString());
-                      //print(".........HR"+HR.toString());
-                      //print(".........HR1"+HR1.toString());
-
-                    }
-                ),
-              ]
+          title: const Text(
+            'SPO2',
+            style: TextStyle(fontSize: 16),
           ),
           centerTitle: true,
           bottom: PreferredSize(
@@ -164,8 +126,9 @@ class _HRPageState extends State<HRPage>
                             mainAxisAlignment: MainAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text("91", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
-                              Text("BPM", style: TextStyle(fontSize: 12, color: Colors.black),),
+                              Text("98", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
+                              Text("%", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
+                              Text("AVERAGE", style: TextStyle(fontSize: 12, color: Colors.black),),
                             ],
                           ),
                         ),
@@ -190,7 +153,7 @@ class _HRPageState extends State<HRPage>
                               height: SizeConfig.blockSizeVertical * 20,
                               width: SizeConfig.blockSizeHorizontal * 44,
                               child: Card(
-                               // color: Colors.white,
+                                // color: Colors.white,
                                 child: Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
@@ -201,7 +164,7 @@ class _HRPageState extends State<HRPage>
                                             SizedBox(
                                               width: 10.0,
                                             ),
-                                            Text('RANGE',
+                                            Text('MAXIMUM',
                                                 style: hPi4Global.movecardSubValueTextStyle),
                                             SizedBox(
                                               width: 15.0,
@@ -210,41 +173,19 @@ class _HRPageState extends State<HRPage>
                                           ],
                                         ),
                                         SizedBox(
-                                          height: 50.0,
+                                          height: 70.0,
                                         ),
                                         Row(
                                           children: <Widget>[
                                             SizedBox(
                                               width: 10.0,
                                             ),
-                                            Text('67',
+                                            Text('98%',
                                                 style: hPi4Global.moveValueTextStyle),
                                             SizedBox(
                                               width: 10.0,
                                             ),
-                                            Text('-',
-                                                style: hPi4Global.moveValueTextStyle),
-                                            SizedBox(
-                                              width: 10.0,
-                                            ),
-                                            Text('167',
-                                                style: hPi4Global.moveValueTextStyle),
-                                            SizedBox(
-                                              width: 10.0,
-                                            ),
-                                          ],
-                                        ),
-                                        Row(
-                                          children: <Widget>[
-                                            SizedBox(
-                                              width: 10.0,
-                                            ),
-                                            Text('BPM',
-                                                style: hPi4Global.movecardSubValueTextStyle),
-                                            SizedBox(
-                                              width: 15.0,
-                                            ),
-                                            //Icon(Icons.favorite_border, color: Colors.black),
+
                                           ],
                                         ),
                                       ]),
@@ -252,7 +193,7 @@ class _HRPageState extends State<HRPage>
                               ),
                             ),
                             Column(
-                                //mainAxisAlignment: MainAxisAlignment.start,
+                              //mainAxisAlignment: MainAxisAlignment.start,
                                 children: <Widget>[
                                   Container(
                                     height: SizeConfig.blockSizeVertical * 10,
@@ -269,7 +210,7 @@ class _HRPageState extends State<HRPage>
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
-                                                  Text('87',
+                                                  Text('98%',
                                                       style: hPi4Global.moveValueTextStyle),
                                                   SizedBox(
                                                     width: 15.0,
@@ -282,7 +223,7 @@ class _HRPageState extends State<HRPage>
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
-                                                  Text('AVERAGE',
+                                                  Text('MINIMUM',
                                                       style: hPi4Global.movecardSubValueTextStyle),
                                                 ],
                                               ),
@@ -306,7 +247,7 @@ class _HRPageState extends State<HRPage>
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
-                                                  Text('67',
+                                                  Text('98%',
                                                       style: hPi4Global.moveValueTextStyle),
                                                   SizedBox(
                                                     width: 15.0,
@@ -319,7 +260,7 @@ class _HRPageState extends State<HRPage>
                                                   SizedBox(
                                                     width: 10.0,
                                                   ),
-                                                  Text('RESTING',
+                                                  Text('AVERAGE',
                                                       style: hPi4Global.movecardSubValueTextStyle),
                                                 ],
                                               ),
@@ -347,7 +288,6 @@ class _HRPageState extends State<HRPage>
     );
   }
 }
-
 
 class ChartData {
   ChartData(this.x, this.high, this.low);

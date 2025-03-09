@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'home.dart';
-import 'sizeConfig.dart';
+import '../home.dart';
+import '../sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
-import 'globals.dart';
+import '../globals.dart';
 
 class SkinTemperaturePage extends StatefulWidget {
   const SkinTemperaturePage({Key? key}) : super(key: key);
