@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/scan_screen.dart';
+import 'package:move/widgets/scan_result_tile.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -66,9 +67,12 @@ class _HomePageState extends State<HomePage> {
         padding: EdgeInsets.zero,
         children: <Widget>[
           DrawerHeader(
-            child: Image.asset('assets/healthypi_move.png', fit: BoxFit.contain),
             decoration: BoxDecoration(
               //color: hPi4Global.hpi4Color,
+            ),
+            child: Image.asset(
+              'assets/healthypi_move.png',
+              fit: BoxFit.contain,
             ),
           ),
           ListTile(
@@ -359,8 +363,8 @@ class _HomePageState extends State<HomePage> {
             Padding(
               padding: const EdgeInsets.all(4.0),
               child: Text(
-                "Ver: " + hPi4Global.hpi4AppVersion,
-                style: new TextStyle(fontSize: 12),
+                "Ver: ${hPi4Global.hpi4AppVersion}",
+                style: TextStyle(fontSize: 12),
               ),
             ),
           ],
@@ -785,6 +789,72 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future onScanPressed() async {
+    /*try {
+      // `withServices` is required on iOS for privacy purposes, ignored on android.
+      //var withServices = [Guid("180f")]; // Battery Level Service
+      _systemDevices = await FlutterBluePlus.systemDevices();//withServices);
+    } catch (e, backtrace) {
+      Snackbar.show(ABC.b, prettyException("System Devices Error:", e), success: false);
+      print(e);
+      print("backtrace: $backtrace");
+    }*/
+    try {
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 15),
+        /*webOptionalServices: [
+          Guid("180f"), // battery
+          Guid("1800"), // generic access
+          Guid("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // Nordic UART
+        ],*/
+      );
+    } catch (e, backtrace) {
+      Snackbar.show(
+        ABC.b,
+        prettyException("Start Scan Error:", e),
+        success: false,
+      );
+      print(e);
+      print("backtrace: $backtrace");
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future onStopPressed() async {
+    try {
+      FlutterBluePlus.stopScan();
+    } catch (e, backtrace) {
+      Snackbar.show(
+        ABC.b,
+        prettyException("Stop Scan Error:", e),
+        success: false,
+      );
+      print(e);
+      print("backtrace: $backtrace");
+    }
+  }
+
+  Widget buildScanButton(BuildContext context) {
+    return MaterialButton(
+      child: const Text("SCAN"),
+      onPressed: onScanPressed,
+      color: Colors.green,
+    );
+  }
+
+  List<Widget> _buildScanResultTiles(BuildContext context) {
+    return _scanResults
+        .map(
+          (r) => ScanResultTile(
+            result: r,
+            //onTap: () => onConnectPressed(r.device),
+          ),
+        )
+        .toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
@@ -810,7 +880,15 @@ class _HomePageState extends State<HomePage> {
           Center(
             child: Column(
               children: <Widget>[
-                ScanScreen(),
+                buildScanButton(context),
+                Expanded(
+                  child: ListView(
+                    children: <Widget>[
+                      //..._buildSystemDeviceTiles(context),
+                      ..._buildScanResultTiles(context),
+                    ],
+                  ),
+                ),
 
                 /*Container(
                   //height: SizeConfig.blockSizeVertical * 42,
