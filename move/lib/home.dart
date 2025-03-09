@@ -8,20 +8,17 @@ import 'skinTempPage.dart';
 import 'spo2Page.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
-import 'connectToFetchFiles.dart';
 import 'globals.dart';
-import 'hrPage.dart';
 import 'sizeConfig.dart';
-import 'dfu.dart';
+import 'hrPage.dart';
+import 'bptCalibrationPage.dart';
 
-import 'ble/ble_scanner.dart';
-import 'states/WiserBLEProvider.dart';
 import 'package:provider/provider.dart';
 //import 'package:battery_indicator/battery_indicator.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+//import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'bptCalibrationPage.dart';
+//import '../archived/bptCalibrationPage.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -30,11 +27,11 @@ late StreamSubscription streamECGSubscription;
 late StreamSubscription streamPPGSubscription;
 late StreamSubscription streamRESPSubscription;
 
-late QualifiedCharacteristic CommandCharacteristic;
+/*late QualifiedCharacteristic CommandCharacteristic;
 late QualifiedCharacteristic ECGCharacteristic;
 late QualifiedCharacteristic PPGCharacteristic;
 late QualifiedCharacteristic RESPCharacteristic;
-late QualifiedCharacteristic BatteryCharacteristic;
+late QualifiedCharacteristic BatteryCharacteristic;*/
 
 late Stream<List<int>> _streamECG;
 late Stream<List<int>> _streamPPG;
@@ -46,10 +43,10 @@ bool listeningPPGStream = false;
 bool listeningRESPStream = false;
 bool listeningBatteryStream = false;
 
-late FlutterReactiveBle _fble;
+//late FlutterReactiveBle _fble;
 bool connectedToDevice = false;
 
-late StreamSubscription<ConnectionStateUpdate> _connection;
+//late StreamSubscription<ConnectionStateUpdate> _connection;
 
 int globalHeartRate = 0;
 int globalSpO2 = 0;
@@ -84,7 +81,7 @@ class _HomePageState extends State<HomePage> {
           DrawerHeader(
             child: Image.asset('assets/healthypi5.png', fit: BoxFit.contain),
             decoration: BoxDecoration(
-              color: hPi4Global.hpi4Color,
+              //color: hPi4Global.hpi4Color,
             ),
           ),
           ListTile(
@@ -92,11 +89,11 @@ class _HomePageState extends State<HomePage> {
             title: Text('DFU'),
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
+             /* Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => DeviceManagement(),
-                  ));
+                  ));*/
             },
           ),
           Divider(
@@ -200,10 +197,10 @@ class _HomePageState extends State<HomePage> {
     }
 
     connectedToDevice = false;
-    await _connection.cancel();
+    //await _connection.cancel();
   }
 
-  Future<void> connectToDevice(
+  /*Future<void> connectToDevice(
       BuildContext context, DiscoveredDevice currentDevice) async {
 
     _fble =
@@ -259,7 +256,7 @@ class _HomePageState extends State<HomePage> {
     }, onError: (dynamic error) {
       logConsole("Connect error: " + error.toString());
     });
-  }
+  }*/
 
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
@@ -282,7 +279,7 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(f);
   }
 
-  Future<void> _setMTU(String deviceMAC) async {
+  /*Future<void> _setMTU(String deviceMAC) async {
     int recdMTU = await _fble.requestMtu(deviceId: deviceMAC, mtu: 200);
     logConsole("MTU negotiated: " + recdMTU.toString());
     Navigator.pop(context);
@@ -488,7 +485,7 @@ class _HomePageState extends State<HomePage> {
         }),
       ]));
     });
-  }
+  }*/
 
   Future<void> _initPackageInfo() async {
     final PackageInfo info = await PackageInfo.fromPlatform();
@@ -496,6 +493,7 @@ class _HomePageState extends State<HomePage> {
       hPi4Global.hpi4AppVersion = info.version;
     });
   }
+
 
   Widget _buildConnectionBlock() {
     return Padding(
@@ -505,7 +503,7 @@ class _HomePageState extends State<HomePage> {
         child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              showScanResults(),
+              //showScanResults(),
               Padding(
                 padding: const EdgeInsets.all(4.0),
                 child: Text(
@@ -1055,7 +1053,7 @@ class _HomePageState extends State<HomePage> {
                     height: 50.0,
                     color: Colors.white,
                     child: Align(
-                      alignment: Alignment.center, // Align however you like (i.e .centerRight, centerLeft)
+                      alignment: Alignment.center, 
                       child: Text('Fetch ECG Data',
                           style: new TextStyle(
                               fontSize: 18.0, color: Colors.black)),
@@ -1064,8 +1062,9 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(8.0),
                     ),
                     onPressed: () async {
+                      /*
                       Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => ConnectToFetchFileData()));
+                          MaterialPageRoute(builder: (_) => ConnectToFetchFileData()));*/
                     },
                   )
               ),

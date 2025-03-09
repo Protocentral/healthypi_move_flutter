@@ -35,7 +35,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   path_provider: ^2.0.11
-  flutter_reactive_ble: ^5.4.0
+  #flutter_reactive_ble: ^5.4.0
   #bluetooth_enable_fork: ^0.1.4
   #geolocator: ^9.0.2
 
