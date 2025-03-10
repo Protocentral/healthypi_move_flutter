@@ -20,7 +20,6 @@ import 'package:provider/provider.dart';
 //import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-//import '../archived/bptCalibrationPage.dart';
 
 import 'package:flutter/cupertino.dart';
 
@@ -349,28 +348,6 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       hPi4Global.hpi4AppVersion = info.version;
     });
-  }
-
-  Widget _buildConnectionBlock() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            showScanResults(),
-            Padding(
-              padding: const EdgeInsets.all(4.0),
-              child: Text(
-                "Ver: ${hPi4Global.hpi4AppVersion}",
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget buildConnectedBlock() {
@@ -836,6 +813,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+
   Widget buildScanButton(BuildContext context) {
     return MaterialButton(
       child: const Text("SCAN"),
@@ -851,9 +829,9 @@ class _HomePageState extends State<HomePage> {
             result: r,
             //onTap: () => onConnectPressed(r.device),
           ),
-        )
-        .toList();
+        ).toList();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -881,16 +859,14 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               children: <Widget>[
                 buildScanButton(context),
-                Expanded(
-                  child: ListView(
-                    children: <Widget>[
-                      //..._buildSystemDeviceTiles(context),
-                      ..._buildScanResultTiles(context),
-                    ],
-                  ),
+                 ListView(
+                   shrinkWrap: true,
+                     physics: ScrollPhysics(),
+                  children: <Widget>[
+                    ..._buildScanResultTiles(context),
+                  ],
                 ),
-
-                /*Container(
+                Container(
                   //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
@@ -919,7 +895,8 @@ class _HomePageState extends State<HomePage> {
                       Navigator.of(context).pushReplacement(
                           MaterialPageRoute(builder: (_) => ConnectToFetchFileData()));*/
                     },
-                  ),*/
+                  ),
+                ),
               ],
             ),
           ),
