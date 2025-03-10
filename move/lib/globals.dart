@@ -68,6 +68,9 @@ class hPi4Global {
   static const TextStyle movecardSubValueTextStyle =
   TextStyle(fontSize: 12, color: Colors.black);
 
+  static const TextStyle subValueWhiteTextStyle =
+  TextStyle(fontSize: 12, color: Colors.white);
+
   static const TextStyle cardBlackTextStyle =
       TextStyle(fontSize: 20, color: Colors.black);
 

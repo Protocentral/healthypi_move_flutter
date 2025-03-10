@@ -2,16 +2,12 @@
 import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
-
-import '../ble/ble_scanner.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import '../globals.dart';
 import 'package:flutter/material.dart';
 import '../home.dart';
-import '../states/WiserBLEProvider.dart';
 
 import 'dart:async';
 
@@ -34,13 +30,9 @@ typedef LogHeader = ({
 
 class FetchFileData extends StatefulWidget {
   const FetchFileData(
-      {Key? key,
-      required this.currentDevice,
-      required this.currConnection})
+      {Key? key})
       : super(key: key);
 
-  final DiscoveredDevice currentDevice;
-  final StreamSubscription<ConnectionStateUpdate> currConnection;
   @override
   _FetchFileDataState createState() => _FetchFileDataState();
 }
@@ -58,8 +50,6 @@ class _FetchFileDataState extends State<FetchFileData> {
   late StreamSubscription _streamCommandSubscription;
   late StreamSubscription _streamDataSubscription;
 
-  late QualifiedCharacteristic commandTxCharacteristic;
-  late QualifiedCharacteristic dataCharacteristic;
 
   double displayPercent = 0;
   double globalDisplayPercentOffset = 0;
@@ -80,20 +70,10 @@ class _FetchFileDataState extends State<FetchFileData> {
   @override
   void initState() {
     tappedIndex = 0;
-    _getBLE();
+
 
     pcConnected = true;
     connectedToDevice = true;
-
-    dataCharacteristic = QualifiedCharacteristic(
-        characteristicId: Uuid.parse(hPi4Global.UUID_CHAR_CMD_DATA),
-        serviceId: Uuid.parse(hPi4Global.UUID_SERVICE_CMD),
-        deviceId: widget.currentDevice.id);
-
-    commandTxCharacteristic = QualifiedCharacteristic(
-        characteristicId: Uuid.parse(hPi4Global.UUID_CHAR_CMD),
-        serviceId: Uuid.parse(hPi4Global.UUID_SERVICE_CMD),
-        deviceId: widget.currentDevice.id);
 
    /*WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _fetchLogCount(widget.currentDevice.id, context);
@@ -103,10 +83,6 @@ class _FetchFileDataState extends State<FetchFileData> {
     super.initState();
   }
 
-  void _getBLE() async {
-    _fble =
-        await Provider.of<WiserBLEProvider>(context, listen: false).getBLE();
-  }
 
   @override
   void dispose() async {
@@ -130,7 +106,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     _listeningCommandStream = true;
 
     await Future.delayed(Duration(seconds: 1), () async {
-      _streamCommand = _fble.subscribeToCharacteristic(commandTxCharacteristic);
+      //_streamCommand = _fble.subscribeToCharacteristic(commandTxCharacteristic);
     });
 
     _streamCommandSubscription = _streamCommand.listen((value) async {
@@ -261,7 +237,7 @@ class _FetchFileDataState extends State<FetchFileData> {
       String deviceID, int expectedLength, int sessionID, String formattedTime) async {
     listeningDataStream = true;
     await Future.delayed(Duration(seconds: 1), () async {
-      _streamData = _fble.subscribeToCharacteristic(dataCharacteristic);
+     // _streamData = _fble.subscribeToCharacteristic(dataCharacteristic);
     });
 
     _streamDataSubscription = _streamData.listen((value) async {
@@ -392,7 +368,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     fetchingFile = false;
     try {
       logConsole('Disconnecting ');
-      if (connectedToDevice == true) await widget.currConnection.cancel();
+      //if (connectedToDevice == true) await widget.currConnection.cancel();
     } on Exception catch (e, _) {
       logConsole("Error disconnecting from a device: $e");
     } finally {
@@ -413,73 +389,11 @@ class _FetchFileDataState extends State<FetchFileData> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Consumer2<ConnectionStateUpdate, BleScannerState>(builder:
-                        (context, connStateUpdate, bleScannerState, child) {
-                      return Column(
-                        children: [
-                          Row(
-                            children: <Widget>[
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 4, 4, 4), // .all(8.0),
-                                child: Text(
-                                  "Connected to Device: ",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    //color: Colors.white,
-                                  ),
-                                  //textAlign: TextAlign.center,
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 4, 4, 4), // .all(8.0),
-                                child: Text(widget.currentDevice.id,
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    //color: Colors.white,
-                                  ),
-                                  //textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ]
-                          ),
 
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: MaterialButton(
-                              color: hPi4Global.hpi4Color,
-                              onPressed: () async {
-                                await _fetchLogCount(widget.currentDevice.id, context);
-                                await _fetchLogIndex(widget.currentDevice.id, context);
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.download,
-                                      color: Colors.white,
-                                    ),
-                                    const Text(
-                                      'Fetch refresh',
-                                      style: TextStyle(
-                                          fontSize: 16, color: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
                   ]))),
     );
   }
 
-  late FlutterReactiveBle _fble;
   bool connectedToDevice = false;
 
   Future<void> _fetchLogCount(String deviceID, BuildContext context) async {
@@ -517,7 +431,7 @@ class _FetchFileDataState extends State<FetchFileData> {
       await _sendCommand(commandFetchLogFile, deviceID);
     });
     Navigator.pop(context);
-    await _fetchLogIndex(widget.currentDevice.id, context);
+    //await _fetchLogIndex(widget.currentDevice.id, context);
   }
 
   Future<void> _fetchLogFile(
@@ -549,8 +463,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     logConsole(
         "Tx CMD " + commandList.toString() + " 0x" + hex.encode(commandList));
 
-    await _fble.writeCharacteristicWithoutResponse(commandTxCharacteristic,
-        value: commandList);
+
   }
 
   Future<void> cancelAction() async {
@@ -696,29 +609,6 @@ class _FetchFileDataState extends State<FetchFileData> {
                                                       index;
                                                 });
 
-                                                await _fetchLogFile(
-                                                    widget
-                                                        .currentDevice
-                                                        .id,
-                                                    logHeaderList[
-                                                    index]
-                                                        .logFileID,
-                                                    logHeaderList[
-                                                    index]
-                                                        .sessionLength,
-                                                    _getFormattedDate(
-                                                        logHeaderList[index]
-                                                            .tmYear,
-                                                        logHeaderList[index]
-                                                            .tmMon,
-                                                        logHeaderList[index]
-                                                            .tmMday,
-                                                        logHeaderList[index]
-                                                            .tmHour,
-                                                        logHeaderList[index]
-                                                            .tmMin,
-                                                        logHeaderList[index]
-                                                            .tmSec));
                                               },
                                               icon: Icon(Icons
                                                   .download_rounded),
@@ -730,14 +620,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                                                 : IconButton(
                                               onPressed:
                                                   () async {
-                                                _deleteLogIndex(
-                                                    widget
-                                                        .currentDevice
-                                                        .id,
-                                                    logHeaderList[
-                                                    index]
-                                                        .logFileID,
-                                                    context);
+
                                               },
                                               icon: Icon(
                                                   Icons.delete),
@@ -821,9 +704,8 @@ class _FetchFileDataState extends State<FetchFileData> {
             ],
           ),
         ),
-        body: Center(child: Consumer2<ConnectionStateUpdate, BleScannerState>(
-            builder: (context, connStateUpdates, bleScannerState, child) {
-          return SingleChildScrollView(
+        body: Center(child:
+           SingleChildScrollView(
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
@@ -890,7 +772,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                   ),
               ),
 
-              ]));
-        })));
+              ])),
+    ));
   }
 }
