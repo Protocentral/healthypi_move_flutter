@@ -36,9 +36,18 @@ PODS:
   - file_saver (0.0.1):
     - Flutter
   - Flutter (1.0.0)
+  - flutter_archive (0.0.1):
+    - Flutter
+    - ZIPFoundation (= 0.9.19)
   - flutter_blue_plus_darwin (0.0.2):
     - Flutter
     - FlutterMacOS
+  - iOSMcuManagerLibrary (1.6):
+    - SwiftCBOR (= 0.4.4)
+  - mcumgr_flutter (0.0.2):
+    - Flutter
+    - iOSMcuManagerLibrary (= 1.6)
+    - SwiftProtobuf
   - open_file_ios (0.0.1):
     - Flutter
   - package_info_plus (0.4.5):
@@ -54,13 +63,18 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - SwiftCBOR (0.4.4)
+  - SwiftProtobuf (1.29.0)
   - SwiftyGif (5.4.5)
+  - ZIPFoundation (0.9.19)
 
 DEPENDENCIES:
   - file_picker (from `.symlinks/plugins/file_picker/ios`)
   - file_saver (from `.symlinks/plugins/file_saver/ios`)
   - Flutter (from `Flutter`)
+  - flutter_archive (from `.symlinks/plugins/flutter_archive/ios`)
   - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
+  - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
   - open_file_ios (from `.symlinks/plugins/open_file_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
@@ -71,8 +85,12 @@ SPEC REPOS:
   trunk:
     - DKImagePickerController
     - DKPhotoGallery
+    - iOSMcuManagerLibrary
     - SDWebImage
+    - SwiftCBOR
+    - SwiftProtobuf
     - SwiftyGif
+    - ZIPFoundation
 
 EXTERNAL SOURCES:
   file_picker:
@@ -81,8 +99,12 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/file_saver/ios"
   Flutter:
     :path: Flutter
+  flutter_archive:
+    :path: ".symlinks/plugins/flutter_archive/ios"
   flutter_blue_plus_darwin:
     :path: ".symlinks/plugins/flutter_blue_plus_darwin/darwin"
+  mcumgr_flutter:
+    :path: ".symlinks/plugins/mcumgr_flutter/ios"
   open_file_ios:
     :path: ".symlinks/plugins/open_file_ios/ios"
   package_info_plus:
@@ -100,14 +122,20 @@ SPEC CHECKSUMS:
   file_picker: b159e0c068aef54932bb15dc9fd1571818edaf49
   file_saver: 503e386464dbe118f630e17b4c2e1190fa0cf808
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  flutter_archive: cb3e0219e555897ba4b36f166baa1eca394890b9
   flutter_blue_plus_darwin: 3ea4ec9133b377febcc8a70b28cd2d2dc9242bd9
+  iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
+  mcumgr_flutter: 097e59bec5917b527ba6d095da57bdaed2de1fa2
   open_file_ios: 461db5853723763573e140de3193656f91990d9e
   package_info_plus: 115f4ad11e0698c8c1c5d8a689390df880f47e85
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
   permission_handler_apple: 9878588469a2b0d0fc1e048d9f43605f92e6cec2
   SDWebImage: f84b0feeb08d2d11e6a9b843cb06d75ebf5b8868
   shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
+  SwiftCBOR: ce5354ec8b660da2d6fc754462881119dbe1f963
+  SwiftProtobuf: b7aa08087e2ab6d162862d143020091254095f69
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
+  ZIPFoundation: b8c29ea7ae353b309bc810586181fd073cb3312c
 
 PODFILE CHECKSUM: 4305caec6b40dde0ae97be1573c53de1882a07e5
 

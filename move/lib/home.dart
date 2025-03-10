@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/scan_screen.dart';
 import 'package:move/widgets/scan_result_tile.dart';
+import 'dfu.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -16,8 +17,6 @@ import 'screens/hrPage.dart';
 import 'screens/bptCalibrationPage.dart';
 
 import 'package:provider/provider.dart';
-//import 'package:battery_indicator/battery_indicator.dart';
-//import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -79,11 +78,11 @@ class _HomePageState extends State<HomePage> {
             title: Text('DFU'),
             onTap: () {
               Navigator.pop(context);
-              /* Navigator.push(
+               Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => DeviceManagement(),
-                  ));*/
+                  ));
             },
           ),
           Divider(color: Colors.black),
