@@ -4,19 +4,19 @@ import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
-import 'ble/ble_scanner.dart';
+import '../ble/ble_scanner.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'globals.dart';
+import '../globals.dart';
 import 'package:flutter/material.dart';
-import 'home.dart';
-import 'states/WiserBLEProvider.dart';
+import '../home.dart';
+import '../states/WiserBLEProvider.dart';
 
 import 'dart:async';
 
 import 'dart:typed_data';
-import 'home.dart';
+import '../home.dart';
 import 'package:csv/csv.dart';
 
 typedef LogHeader = ({

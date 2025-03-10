@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'globals.dart';
-import 'sizeConfig.dart';
+import '../globals.dart';
+import '../sizeConfig.dart';
 import 'package:fl_chart/fl_chart.dart';
 //import 'bptCalibrationPage.dart';
 

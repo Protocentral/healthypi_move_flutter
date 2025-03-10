@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+//#import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 import 'home.dart';
-import 'ble/ble_status_monitor.dart';
+/*import 'ble/ble_status_monitor.dart';
 import 'ble/ble_device_connector.dart';
 import 'ble/ble_logger.dart';
 import 'ble/ble_scanner.dart';
 import 'states/WiserBLEProvider.dart';
+*/
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final _bleLogger = BleLogger();
+  /*final _bleLogger = BleLogger();
   final _ble = FlutterReactiveBle();
   final _scanner = BleScanner(ble: _ble, logMessage: _bleLogger.addToLog);
   final _connector = BleDeviceConnector(
@@ -20,8 +21,10 @@ void main() async {
     logMessage: _bleLogger.addToLog,
   );
   final _monitor = BleStatusMonitor(_ble);
+  */
 
   runApp(
+    /*
     MultiProvider(
       providers: [
         ChangeNotifierProvider<WiserBLEProvider>(
@@ -65,6 +68,19 @@ void main() async {
           ),
           home: HomePage() //HomeScreen(),
           ),
+    ),*/
+    MaterialApp(
+      title: 'HealthyPi',
+      theme: ThemeData(
+        primarySwatch: Colors.purple,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ButtonStyle(
+            //shape: MaterialStateProperty.resolveWith(getBorder),
+          ),
+        ),
+      ),
+      home: HomePage(), //HomeScreen(),
     ),
   );
   //runApp(MyApp());

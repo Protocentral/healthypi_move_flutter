@@ -1,14 +1,14 @@
 import 'dart:io';
 import 'dart:async';
 
-import 'sizeConfig.dart';
+import '../sizeConfig.dart';
 
 import 'fetchfileData.dart';
-import 'home.dart';
-import 'states/WiserBLEProvider.dart';
+import '../home.dart';
+import '../states/WiserBLEProvider.dart';
 import 'package:provider/provider.dart';
 
-import 'globals.dart';
+import '../globals.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
-import 'ble/ble_scanner.dart';
+import '../ble/ble_scanner.dart';
 
 late FlutterReactiveBle _fble;
 
