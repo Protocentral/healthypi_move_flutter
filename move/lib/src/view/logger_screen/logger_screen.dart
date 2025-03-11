@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mcumgr_flutter/mcumgr_flutter.dart';
 
+import '../../../globals.dart';
+
 class LoggerScreen extends StatelessWidget {
   const LoggerScreen({required this.logger, super.key});
   final FirmwareUpdateLogger logger;
@@ -8,7 +10,9 @@ class LoggerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+        backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
+          backgroundColor: hPi4Global.hpi4Color,
           title: Text('Log'),
         ),
         body: _logFutureBuilder());
@@ -56,7 +60,7 @@ class LoggerScreen extends StatelessWidget {
       case McuMgrLogLevel.error:
         return Colors.red;
       default:
-        return Colors.black;
+        return Colors.white;
     }
   }
 }

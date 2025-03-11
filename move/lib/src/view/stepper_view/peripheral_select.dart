@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../globals.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
 import '/src/view/peripheral_select/peripheral_list.dart';
@@ -15,7 +16,7 @@ class PeripheralSelect extends StatelessWidget {
     return Column(
       children: [
         if (updateParameters.peripheral != null)
-          Text(updateParameters.peripheral!.name),
+          Text(updateParameters.peripheral!.name,style: hPi4Global.subValueWhiteTextStyle),
         ElevatedButton(
             onPressed: () {
               Navigator.push(

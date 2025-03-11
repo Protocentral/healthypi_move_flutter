@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../globals.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +17,7 @@ class FirmwareSelect extends StatelessWidget {
     return Column(
       children: [
         if (updateParameters.firmware != null)
-          Text(updateParameters.firmware!.name),
+          Text(updateParameters.firmware!.name, style: hPi4Global.subValueWhiteTextStyle),
         ElevatedButton(
             onPressed: () {
               Navigator.push(

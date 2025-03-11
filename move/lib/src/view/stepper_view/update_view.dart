@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../globals.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
 import '/src/view/logger_screen/logger_screen.dart';
@@ -36,7 +37,7 @@ class UpdateStepView extends StatelessWidget {
                   Row(
                     children: [
                       _stateIcon(state),
-                      Text(state.stage),
+                      Text(state.stage,style: hPi4Global.subValueWhiteTextStyle),
                     ],
                   ),
                 if (state.currentState != null)
@@ -68,7 +69,7 @@ class UpdateStepView extends StatelessWidget {
               ],
             );
           default:
-            return Text('Unknown state');
+            return Text('Unknown state',style: hPi4Global.subValueWhiteTextStyle);
         }
       },
     );
@@ -85,11 +86,11 @@ class UpdateStepView extends StatelessWidget {
   Text _currentState(UpdateFirmwareStateHistory state) {
     final currentState = state.currentState;
     if (currentState == null) {
-      return Text('Unknown state');
+      return Text('Unknown state',style: hPi4Global.subValueWhiteTextStyle);
     } else if (currentState is UpdateProgressFirmware) {
-      return Text("Uploading ${currentState.progress}%");
+      return Text("Uploading ${currentState.progress}%",style: hPi4Global.subValueWhiteTextStyle);
     } else {
-      return Text(currentState.stage);
+      return Text(currentState.stage,style: hPi4Global.subValueWhiteTextStyle);
     }
   }
 
@@ -99,21 +100,21 @@ class UpdateStepView extends StatelessWidget {
     } else if (firmware is RemoteFirmware) {
       return _remoteFirmwareInfo(context, firmware);
     } else {
-      return Text('Unknown firmware type');
+      return Text('Unknown firmware type',style: hPi4Global.subValueWhiteTextStyle);
     }
   }
 
   Widget _localFirmwareInfo(BuildContext context, LocalFirmware firmware) {
-    return Text('Firmware: ${firmware.name}');
+    return Text('Firmware: ${firmware.name}',style: hPi4Global.subValueWhiteTextStyle);
   }
 
   Widget _remoteFirmwareInfo(BuildContext context, RemoteFirmware firmware) {
     return Column(
       children: [
-        Text('Firmware: ${firmware.application.appName}'),
-        Text('Version: ${firmware.version.version}'),
-        Text('Board: ${firmware.board.name}'),
-        Text('Firmware: ${firmware.firmware.name}'),
+        Text('Firmware: ${firmware.application.appName}',style: hPi4Global.subValueWhiteTextStyle),
+        Text('Version: ${firmware.version.version}',style: hPi4Global.subValueWhiteTextStyle),
+        Text('Board: ${firmware.board.name}',style: hPi4Global.subValueWhiteTextStyle),
+        Text('Firmware: ${firmware.firmware.name}',style: hPi4Global.subValueWhiteTextStyle),
       ],
     );
   }

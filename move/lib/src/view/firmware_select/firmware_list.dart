@@ -2,19 +2,21 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import '/src/model/firmware_image.dart';
+import '../../../globals.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
-import '/src/repository/firmware_image_repository.dart';
 import 'package:provider/provider.dart';
 
 class FirmwareList extends StatelessWidget {
-  final repository = FirmwareImageRepository();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: const Text('Firmware List')),
+        backgroundColor: hPi4Global.appBackgroundColor,
+        appBar: AppBar(
+            backgroundColor: hPi4Global.hpi4Color,
+            title: const Text('Firmware')
+        ),
         body: _body(),
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
@@ -45,47 +47,24 @@ class FirmwareList extends StatelessWidget {
         ));
   }
 
-  Container _body() {
-    return Container(
-      child: FutureBuilder(
-          future: repository.getFirmwareImages(),
-          builder: (context, AsyncSnapshot snapshot) {
-            if (snapshot.hasData) {
-              List<Application> apps = snapshot.data.applications;
-              return _listBuilder(apps);
-            } else if (snapshot.hasError) {
-              return Text('${snapshot.error}');
-            }
-            return const CircularProgressIndicator();
-          }),
+  Widget _body() {
+    return SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
+                child: Text(
+                  "Select firmware to upload",
+                  style: hPi4Global.cardWhiteTextStyle,
+                ),
+              ),
+            ],
+          ),
+        )
     );
+
   }
 
-  Widget _listBuilder(List<Application> apps) {
-    return ListView.builder(
-      itemCount: apps.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          title: Text(apps[index].appName),
-          onTap: () {
-            final app = apps[index];
-            final version = app.versions[0];
-            final board = version.board[0];
-            final firmware = board.buildConfig[0];
-
-            final selectedFW = RemoteFirmware(
-              application: app,
-              version: version,
-              board: board,
-              firmware: firmware,
-            );
-            context
-                .read<FirmwareUpdateRequestProvider>()
-                .setFirmware(selectedFW);
-            Navigator.pop(context, 'Firmware $index');
-          },
-        );
-      },
-    );
-  }
 }

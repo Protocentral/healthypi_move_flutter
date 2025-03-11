@@ -71,8 +71,9 @@ class hPi4Global {
   static const TextStyle subValueWhiteTextStyle =
   TextStyle(fontSize: 12, color: Colors.white);
 
-  static const TextStyle cardBlackTextStyle =
-      TextStyle(fontSize: 20, color: Colors.black);
+  static const TextStyle cardBlackTextStyle = TextStyle(fontSize: 20, color: Colors.black);
+
+  static const TextStyle cardWhiteTextStyle = TextStyle(fontSize: 20, color: Colors.white);
 
   static const TextStyle eventsWhite =
       TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
