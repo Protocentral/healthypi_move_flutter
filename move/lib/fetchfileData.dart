@@ -2,17 +2,18 @@
 import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import '../globals.dart';
+import 'globals.dart';
 import 'package:flutter/material.dart';
-import '../home.dart';
+import 'home.dart';
 
 import 'dart:async';
 
 import 'dart:typed_data';
-import '../home.dart';
+import 'home.dart';
 import 'package:csv/csv.dart';
 
 typedef LogHeader = ({
@@ -30,8 +31,11 @@ typedef LogHeader = ({
 
 class FetchFileData extends StatefulWidget {
   const FetchFileData(
-      {Key? key})
+      {Key? key, required this.connectionState,required this. connectedDevice})
       : super(key: key);
+
+  final BluetoothConnectionState connectionState;
+  final BluetoothDevice connectedDevice;
 
   @override
   _FetchFileDataState createState() => _FetchFileDataState();
@@ -368,7 +372,9 @@ class _FetchFileDataState extends State<FetchFileData> {
     fetchingFile = false;
     try {
       logConsole('Disconnecting ');
-      //if (connectedToDevice == true) await widget.currConnection.cancel();
+      if (widget.connectionState == BluetoothConnectionState.connected) {
+        await widget.connectedDevice.disconnect();
+      }
     } on Exception catch (e, _) {
       logConsole("Error disconnecting from a device: $e");
     } finally {
@@ -462,7 +468,6 @@ class _FetchFileDataState extends State<FetchFileData> {
   Future<void> _sendCommand(List<int> commandList, String deviceID) async {
     logConsole(
         "Tx CMD " + commandList.toString() + " 0x" + hex.encode(commandList));
-
 
   }
 
@@ -699,7 +704,7 @@ class _FetchFileDataState extends State<FetchFileData> {
             mainAxisAlignment: MainAxisAlignment.end,
             mainAxisSize: MainAxisSize.max,
             children: <Widget>[
-              Image.asset('assets/healthypi5.png',
+              Image.asset( 'assets/healthypi_move.png',
                   fit: BoxFit.fitWidth, height: 30),
             ],
           ),

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+import '../globals.dart';
+
 class ScanResultTile extends StatefulWidget {
   const ScanResultTile({Key? key, required this.result, this.onTap}) : super(key: key);
 
@@ -56,6 +58,7 @@ class _ScanResultTileState extends State<ScanResultTile> {
     return _connectionState == BluetoothConnectionState.connected;
   }
 
+
   Widget _buildTitle(BuildContext context) {
     if (widget.result.device.platformName.isNotEmpty) {
       return Column(
@@ -63,29 +66,29 @@ class _ScanResultTileState extends State<ScanResultTile> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
-            widget.result.device.platformName,
+            widget.result.device.platformName,style: hPi4Global.eventsWhite,
             overflow: TextOverflow.ellipsis,
           ),
           Text(
             widget.result.device.remoteId.str,
-            style: Theme.of(context).textTheme.bodySmall,
+            style: hPi4Global.subValueWhiteTextStyle,
           )
         ],
       );
     } else {
-      return Text(widget.result.device.remoteId.str);
+      return Text(widget.result.device.remoteId.str,style: hPi4Global.eventsWhite);
     }
   }
 
   Widget _buildConnectButton(BuildContext context) {
-    return ElevatedButton(
-      child: isConnected ? const Text('OPEN') : const Text('CONNECT'),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-      ),
-      onPressed: (widget.result.advertisementData.connectable) ? widget.onTap : null,
-    );
+      return ElevatedButton(
+        child: isConnected ? const Text('OPEN') : const Text('CONNECT'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+        onPressed: (widget.result.advertisementData.connectable) ? widget.onTap : null,
+      );
   }
 
   Widget _buildAdvRow(BuildContext context, String title, String value) {
@@ -94,14 +97,14 @@ class _ScanResultTileState extends State<ScanResultTile> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(title, style: Theme.of(context).textTheme.bodySmall),
+          Text(title, style: hPi4Global.subValueWhiteTextStyle),
           const SizedBox(
             width: 12.0,
           ),
           Expanded(
             child: Text(
               value,
-              style: Theme.of(context).textTheme.bodySmall?.apply(color: Colors.black),
+              style: hPi4Global.subValueWhiteTextStyle,
               softWrap: true,
             ),
           ),
@@ -115,7 +118,7 @@ class _ScanResultTileState extends State<ScanResultTile> {
     var adv = widget.result.advertisementData;
     return ExpansionTile(
       title: _buildTitle(context),
-      leading: Text(widget.result.rssi.toString()),
+      leading: Text(widget.result.rssi.toString(),style: hPi4Global.subValueWhiteTextStyle),
       trailing: _buildConnectButton(context),
       children: <Widget>[
         if (adv.advName.isNotEmpty) _buildAdvRow(context, 'Name', adv.advName),

@@ -32,8 +32,7 @@ class PeripheralRepository {
     });
 
     await FlutterBluePlus.adapterState
-        .where(
-            (BluetoothAdapterState state) => state == BluetoothAdapterState.on)
+        .where((BluetoothAdapterState state) => state == BluetoothAdapterState.on)
         .first;
 
     await FlutterBluePlus.startScan();

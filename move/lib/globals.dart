@@ -80,6 +80,8 @@ class hPi4Global {
 
   static const Color hpi4Color = Color(0xFFFFD551);
 
+  static const Color oldHpi4Color = Color(0xFF125871);
+
   static const TextStyle scrHeadStyle = TextStyle(
     fontSize: 24,
     color: Colors.white,
