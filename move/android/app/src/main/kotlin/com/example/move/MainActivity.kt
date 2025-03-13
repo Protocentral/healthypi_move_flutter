@@ -1,4 +1,4 @@
-package com.example.move
+package com.protocentral.move
 
 import io.flutter.embedding.android.FlutterActivity
 
