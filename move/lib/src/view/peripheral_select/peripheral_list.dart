@@ -15,11 +15,21 @@ class PeripheralList extends StatelessWidget {
     return Scaffold(
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
-          backgroundColor: hPi4Global.hpi4Color,
-          iconTheme: IconThemeData(
-            color: Colors.white, //change your color here
-          ),
-          title: const Text('Peripheral List')
+        backgroundColor: hPi4Global.hpi4AppBarColor,
+        iconTheme: IconThemeData(
+          color: hPi4Global.hpi4AppBarIconsColor, //change your color here
+        ),
+        title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            //mainAxisSize: MainAxisSize.max,
+            children: [
+              const Text(
+                'Peripheral List',
+                style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
+              ),
+              SizedBox(width:30.0),
+            ]
+        ),
       ),
       body: _body(),
     );

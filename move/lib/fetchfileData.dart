@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:move/sizeConfig.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -510,6 +511,7 @@ class _FetchFileDataState extends State<FetchFileData> {
         width: 320,
         height: 100,
         child: Card(
+          color: Colors.grey[900],
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8.0)),
           child: Column(
@@ -520,7 +522,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                 Text(
                   "No logs present on device ",
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 18, color: hPi4Global.hpi4AppBarIconsColor,
                   ),
                 ),
               ]),
@@ -544,8 +546,8 @@ class _FetchFileDataState extends State<FetchFileData> {
                   Text(
                     "Session logs on device ",
                     style: TextStyle(
-                      fontSize: 22,
-                      //color: Colors.white,
+                      fontSize: 20,
+                      color: hPi4Global.hpi4AppBarIconsColor,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -559,6 +561,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                       itemBuilder: (BuildContext context, int index) {
                         return (index >= 0)
                             ? Card(
+                            color: Colors.grey[900],
                             child: Padding(
                                 padding: const EdgeInsets.all(8),
                                 child: ListTile(
@@ -686,7 +689,7 @@ class _FetchFileDataState extends State<FetchFileData> {
       child: SingleChildScrollView(
         child: Text(
           debugText,
-          style: TextStyle(fontSize: 12),
+          style: TextStyle(fontSize: 12, color: hPi4Global.hpi4AppBarIconsColor,),
           maxLines: 4,
         ),
       ),
@@ -698,7 +701,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     return Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
-          backgroundColor: hPi4Global.hpi4Color,
+          backgroundColor: hPi4Global.hpi4AppBarColor,
           automaticallyImplyLeading: false,
           title: Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -715,10 +718,10 @@ class _FetchFileDataState extends State<FetchFileData> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                _getDeviceCard(),
+                //_getDeviceCard(),
                 _getSessionIDList(),
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(32),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -728,41 +731,53 @@ class _FetchFileDataState extends State<FetchFileData> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: MaterialButton(
-                              onPressed: () async {
-                                await cancelAction();
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: <Widget>[
-                                    Icon(
-                                      Icons.cancel,
-                                      color: Colors.white,
-                                    ),
-                                    const Text(
-                                      ' Disconnect & Close ',
-                                      style: TextStyle(
-                                          fontSize: 16, color: Colors.white),
-                                    ),
-                                  ],
-                                ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: hPi4Global.hpi4Color, // background color
+                              foregroundColor: Colors.white, // text color
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              color: Colors.red,
+                              minimumSize: Size(SizeConfig.blockSizeHorizontal* 60, 40),
+                            ),
+                            onPressed: () async{
+                              await cancelAction();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Row(
+                                //mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: <Widget>[
+                                  Icon(
+                                    Icons.system_update,
+                                    color: Colors.white,
+                                  ),
+                                  const Text(
+                                    ' Disconnect & Close ',
+                                    style: TextStyle(
+                                        fontSize: 16, color: Colors.white),
+                                  ),
+                                  Spacer(),
+                                  const Text(
+                                    ' >',
+                                    style: TextStyle(
+                                        fontSize: 20, color: Colors.white),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
+
                         ],
                       ),
                     ],
                   ),
                 ),
-              Padding(
+              /*Padding(
                   padding: const EdgeInsets.all(16),
                   child: Card(
-                    color: Colors.white,
+                    color: Colors.grey[900],
                     elevation: 2,
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -775,7 +790,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                       ),
                     ),
                   ),
-              ),
+              ),*/
 
               ])),
     ));

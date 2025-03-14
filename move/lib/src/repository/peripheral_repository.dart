@@ -35,7 +35,9 @@ class PeripheralRepository {
         .where((BluetoothAdapterState state) => state == BluetoothAdapterState.on)
         .first;
 
-    await FlutterBluePlus.startScan();
+    await FlutterBluePlus.startScan(
+      withNames: ['healthypi move'],
+    );
   }
 
   Future<void> stopScan() async {

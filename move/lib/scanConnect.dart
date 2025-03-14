@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/fetchfileData.dart';
+import 'package:move/sizeConfig.dart';
 
 import '../utils/snackbar.dart';
 import '../widgets/scan_result_tile.dart';
@@ -50,7 +51,7 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
   }
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
     _connectionStateSubscription.cancel();
@@ -61,6 +62,7 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
     try {
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
+        withNames: ['healthypi move'],
         /*webOptionalServices: [
           Guid("180f"), // battery
           Guid("1800"), // generic access
@@ -127,15 +129,29 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
   }
 
   Widget buildScanButton(BuildContext context) {
-    if (FlutterBluePlus.isScanningNow) {
-      return FloatingActionButton(
-        child: const Icon(Icons.stop),
-        onPressed: onStopPressed,
-        backgroundColor: Colors.red,
-      );
-    } else {
-      return FloatingActionButton(child: const Text("SCAN"), onPressed: onScanPressed);
-    }
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: hPi4Global.hpi4Color, // background color
+        foregroundColor: Colors.white, // text color
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        minimumSize: Size(SizeConfig.blockSizeHorizontal*60, 40),
+      ),
+      onPressed: () {
+        onScanPressed();
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Text('SCAN', style: new TextStyle(fontSize: 16, color:Colors.white)
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> _buildScanResultTiles(BuildContext context) {
@@ -155,18 +171,40 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
       child: Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
-          backgroundColor: hPi4Global.hpi4Color,
-          title: const Text('Find Devices'),
+          backgroundColor: hPi4Global.hpi4AppBarColor,
+          leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: hPi4Global.hpi4AppBarIconsColor),
+              onPressed: () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => HomePage()))
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            //mainAxisSize: MainAxisSize.max,
+            children: [
+              const Text(
+                'Find Devices',
+                style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
+              ),
+              SizedBox(width:30.0),
+
+            ]
+        ),
         ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
           child: ListView(
             children: <Widget>[
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    buildScanButton(context),
+                  ]),
               ..._buildScanResultTiles(context),
             ],
           ),
         ),
-        floatingActionButton: buildScanButton(context),
+        //floatingActionButton: buildScanButton(context),
       ),
     );
   }

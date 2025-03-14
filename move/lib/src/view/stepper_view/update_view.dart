@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../globals.dart';
+import '../../../sizeConfig.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
 import '/src/view/logger_screen/logger_screen.dart';
@@ -23,10 +24,18 @@ class UpdateStepView extends StatelessWidget {
               children: [
                 _firmwareInfo(context, request.firmware!),
                 ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hPi4Global.hpi4Color, // background color
+                    foregroundColor: Colors.white, // text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
+                  ),
                   onPressed: () {
                     context.read<UpdateBloc>().add(BeginUpdateProcess());
                   },
-                  child: Text('Update'),
+                  child: Text('Update', style: TextStyle(fontSize: 12, color:hPi4Global.hpi4AppBarIconsColor)),
                 ),
               ],
             );
@@ -49,6 +58,14 @@ class UpdateStepView extends StatelessWidget {
                   ),
                 if (state.isComplete && state.updateManager?.logger != null)
                   ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: hPi4Global.hpi4Color, // background color
+                        foregroundColor: Colors.white, // text color
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
+                      ),
                       onPressed: () {
                         Navigator.push(
                             context,
@@ -57,14 +74,22 @@ class UpdateStepView extends StatelessWidget {
                                       logger: state.updateManager!.logger,
                                     )));
                       },
-                      child: Text('Show Log')),
+                      child: Text('Show Log',style: TextStyle(fontSize: 12, color:hPi4Global.hpi4AppBarIconsColor))),
                 if (state.isComplete)
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: hPi4Global.hpi4Color, // background color
+                      foregroundColor: Colors.white, // text color
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
+                    ),
                     onPressed: () {
                       BlocProvider.of<UpdateBloc>(context).add(ResetUpdate());
                       provider.reset();
                     },
-                    child: Text('Update Again'),
+                    child: Text('Update Again',style: TextStyle(fontSize: 12, color:hPi4Global.hpi4AppBarIconsColor)),
                   ),
               ],
             );

@@ -12,8 +12,21 @@ class LoggerScreen extends StatelessWidget {
     return Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
-          backgroundColor: hPi4Global.hpi4Color,
-          title: Text('Log'),
+          backgroundColor: hPi4Global.hpi4AppBarColor,
+          iconTheme: IconThemeData(
+            color: hPi4Global.hpi4AppBarIconsColor, //change your color here
+          ),
+          title: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              //mainAxisSize: MainAxisSize.max,
+              children: [
+                const Text(
+                  'Logs',
+                  style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
+                ),
+                SizedBox(width:30.0),
+              ]
+          ),
         ),
         body: _logFutureBuilder());
   }

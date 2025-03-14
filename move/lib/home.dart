@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' show Platform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:move/scanConnect.dart';
-import 'dfu.dart';
+import 'package:move/settings.dart';
+import 'device.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
-import 'package:syncfusion_flutter_charts/charts.dart';
 
 import 'globals.dart';
 import 'sizeConfig.dart';
@@ -26,138 +25,84 @@ int _globalBatteryLevel = 50;
 String pcCurrentDeviceID = "";
 String pcCurrentDeviceName = "";
 
-class HomePage extends StatefulWidget {
-  HomePage({Key? key}) : super(key: key);
 
+class HomePage extends StatefulWidget {
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = [
+    HomeScreen(),
+    DevicePage(),
+    SettingsPage(),
+  ];
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar:new Theme(
+        data: Theme.of(context).copyWith(
+            canvasColor: hPi4Global.hpi4Color,
+           ), // sets the inactive color of the `BottomNavigationBar`
+        child:  Container(
+          color:hPi4Global.hpi4AppBarColor,
+          height: Platform.isAndroid? 80 : 110,
+          padding: const EdgeInsets.all(8.0),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10.0),
+            child:BottomNavigationBar(
+          type: BottomNavigationBarType.shifting, // Shifting
+          selectedItemColor: hPi4Global.oldHpi4Color,
+          unselectedItemColor: Colors.white,
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.devices),
+              label: 'Device',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings),
+              label: 'Settings',
+            ),
+          ],
+        ),
+    ),
+        ),
+      ),
+
+    );
+  }
+}
+
+
+class HomeScreen extends StatefulWidget {
+  HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
   bool connectedToDevice = false;
 
   @override
   void initState() {
     super.initState();
     _initPackageInfo();
-  }
-
-  Widget _buildAppDrawer() {
-    return Drawer(
-      backgroundColor: hPi4Global.hpi4Color,
-      child: ListView(
-        // Important: Remove any padding from the ListView.
-        padding: EdgeInsets.zero,
-        children: <Widget>[
-          DrawerHeader(
-            decoration: BoxDecoration(
-              //color: hPi4Global.hpi4Color,
-            ),
-            child: Image.asset(
-              'assets/healthypi_move.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-          ListTile(
-            leading: Icon(Icons.search),
-            title: Text('DFU'),
-            onTap: () {
-              Navigator.pop(context);
-               Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DeviceManagement(),
-                  ));
-            },
-          ),
-          Divider(color: Colors.black),
-          _getPoliciesTile(),
-          ListTile(
-            title: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "v " + hPi4Global.hpi4AppVersion + " ",
-                  style: new TextStyle(fontSize: 12),
-                ),
-                Text(
-                  "© 2020-2022 Circuitects Electronic Solutions",
-                  style: new TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _getPoliciesTile() {
-    return ListTile(
-      title: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-            child: OutlinedButton(
-              onPressed: () async {
-                //_launchURL();
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Text(
-                      'circuitects.com', //style: new TextStyle(fontSize: 12)
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RichText(
-                textAlign: TextAlign.center,
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: ' Privacy Policy',
-
-                      //'s', // Privacy Policy and Terms of Service ',
-                      style: TextStyle(fontSize: 16, color: Colors.blue),
-                      recognizer:
-                          TapGestureRecognizer()
-                            ..onTap = () async {
-                              //_showPrivacyDialog();
-                            },
-                    ),
-                    TextSpan(
-                      text: ' | ',
-
-                      //'s', // Privacy Policy and Terms of Service ',
-                      style: TextStyle(fontSize: 16, color: Colors.black),
-                    ),
-                    TextSpan(
-                      text: 'Terms of use',
-
-                      //'s', // Privacy Policy and Terms of Service ',
-                      style: TextStyle(fontSize: 16, color: Colors.blue),
-                      recognizer:
-                          TapGestureRecognizer()
-                            ..onTap = () async {
-                              //_showTermsDialog();
-                            },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
   }
 
   void logConsole(String logString) async {
@@ -177,17 +122,17 @@ class _HomePageState extends State<HomePage> {
 
   int getGridCount() {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return 4;
+      return 1;
     } else {
-      return 2;
+      return 1;
     }
   }
 
   double getAspectRatio() {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return MediaQuery.of(context).size.aspectRatio * 1.65 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 4.0 / 2;
     } else {
-      return MediaQuery.of(context).size.aspectRatio * 4.2 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 10.0 / 2;
     }
   }
 
@@ -209,7 +154,7 @@ class _HomePageState extends State<HomePage> {
             ).pushReplacement(MaterialPageRoute(builder: (_) => HRPage()));
           },
           child: Card(
-            color: Colors.white,
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -217,18 +162,11 @@ class _HomePageState extends State<HomePage> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
+                      Icon(Icons.favorite_border, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Heartrate', style: hPi4Global.movecardTextStyle),
                       SizedBox(width: 15.0),
-                      Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'Today',
-                        style: hPi4Global.movecardSubValueTextStyle,
+                      Text(' (Today)', style: hPi4Global.movecardSubValueTextStyle,
                       ),
                     ],
                   ),
@@ -243,7 +181,7 @@ class _HomePageState extends State<HomePage> {
                       Text("bpm", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 40.0),
+                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
@@ -251,7 +189,7 @@ class _HomePageState extends State<HomePage> {
                         '00:00',
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      SizedBox(width: 50.0),
+                      SizedBox(width: 90.0),
                       Text(
                         '24:00',
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -272,7 +210,7 @@ class _HomePageState extends State<HomePage> {
             ).pushReplacement(MaterialPageRoute(builder: (_) => SPO2Page()));
           },
           child: Card(
-            color: Colors.white,
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -280,19 +218,12 @@ class _HomePageState extends State<HomePage> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
+                      Icon(Icons.favorite_border, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('SpO2', style: hPi4Global.movecardTextStyle),
                       SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'Today',
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      Text('(Today)', style: hPi4Global.movecardSubValueTextStyle,),
+                      //Icon(Icons.directions_run, color: Colors.white),
                     ],
                   ),
                   Row(
@@ -306,7 +237,7 @@ class _HomePageState extends State<HomePage> {
                       Text("%", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 40.0),
+                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
@@ -314,7 +245,7 @@ class _HomePageState extends State<HomePage> {
                         '00:00',
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      SizedBox(width: 50.0),
+                      SizedBox(width: 90.0),
                       Text(
                         '24:00',
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -334,7 +265,7 @@ class _HomePageState extends State<HomePage> {
             );
           },
           child: Card(
-            color: Colors.white,
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -342,19 +273,11 @@ class _HomePageState extends State<HomePage> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
+                      Icon(Icons.thermostat, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Temperature', style: hPi4Global.movecardTextStyle),
                       SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'Today',
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      Text('(Today)', style: hPi4Global.movecardSubValueTextStyle,),
                     ],
                   ),
                   Row(
@@ -368,7 +291,7 @@ class _HomePageState extends State<HomePage> {
                       Text("\u00b0 C", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 40.0),
+                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
@@ -376,7 +299,7 @@ class _HomePageState extends State<HomePage> {
                         '00:00',
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      SizedBox(width: 50.0),
+                      SizedBox(width: 90.0),
                       Text(
                         '24:00',
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -389,8 +312,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ),
-
-        InkWell(
+        /*InkWell(
           onTap: () {
             Navigator.push(
               context,
@@ -398,7 +320,7 @@ class _HomePageState extends State<HomePage> {
             );
           },
           child: Card(
-            color: Colors.white,
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -455,9 +377,9 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-        ),
+        ),*/
         Card(
-          color: Colors.white,
+          color: Colors.grey[900],
           child: Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -465,31 +387,26 @@ class _HomePageState extends State<HomePage> {
               children: <Widget>[
                 Row(
                   children: <Widget>[
+                    Icon(Icons.directions_run, color: Colors.white),
                     SizedBox(width: 10.0),
                     Text('Activity', style: hPi4Global.movecardTextStyle),
                     SizedBox(width: 15.0),
-                    //Icon(Icons.favorite_border, color: Colors.black),
+                    Text('(Today)', style: hPi4Global.movecardSubValueTextStyle),
                   ],
                 ),
                 Row(
                   children: <Widget>[
                     SizedBox(width: 10.0),
-                    Text('Today', style: hPi4Global.movecardSubValueTextStyle),
-                  ],
-                ),
-                Row(
-                  children: <Widget>[
-                    SizedBox(width: 10.0),
-                    Text("1 ", style: hPi4Global.movecardValueTextStyle),
+                    Text("0 ", style: hPi4Global.movecardValueTextStyle),
                     SizedBox(width: 5.0),
                     Text("Hour", style: hPi4Global.movecardSubValueTextStyle),
                     SizedBox(width: 5.0),
-                    Text("12 ", style: hPi4Global.movecardValueTextStyle),
+                    Text("0 ", style: hPi4Global.movecardValueTextStyle),
                     SizedBox(width: 5.0),
                     Text("min", style: hPi4Global.movecardSubValueTextStyle),
                   ],
                 ),
-                SizedBox(height: 40.0),
+                SizedBox(height: 20.0),
                 Row(
                   children: <Widget>[
                     SizedBox(width: 10.0),
@@ -510,9 +427,9 @@ class _HomePageState extends State<HomePage> {
     SizeConfig().init(context);
     return Scaffold(
       backgroundColor: hPi4Global.appBackgroundColor,
-      drawer: _buildAppDrawer(),
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4Color,
+        backgroundColor: hPi4Global.hpi4AppBarColor,
+        automaticallyImplyLeading: false,
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           mainAxisSize: MainAxisSize.max,
@@ -522,59 +439,32 @@ class _HomePageState extends State<HomePage> {
               fit: BoxFit.fitWidth,
               height: 30,
             ),
-            MaterialButton(
-              child: const Text("Sync", style: hPi4Global.eventsWhite),
-              onPressed: (){
+            IconButton(
+              icon: Icon(
+                Icons.sync,
+                color: hPi4Global.hpi4AppBarIconsColor,
+              ),
+              onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => ScanConnectScreen(pageFlag:true)),
                 );
               },
-              color: hPi4Global.oldHpi4Color,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8.0),
-              ),
             ),
-
           ],
         ),
       ),
       body: ListView(
         children: [
           Center(
-            child: Column(
+            child:
+            Column(
               children: <Widget>[
+                SizedBox(height:20),
                 Container(
                   //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 16, 32, 16),
-                  child: MaterialButton(
-                    minWidth: 80.0,
-                    height: 50.0,
-                    color: Colors.white,
-                    child: Align(
-                      alignment: Alignment.center,
-                      child: Text(
-                        'Fetch ECG Data',
-                        style: new TextStyle(
-                          fontSize: 18.0,
-                          color: Colors.black,
-                        ),
-                      ),
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
-                    onPressed: () async {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => ScanConnectScreen(pageFlag:false)),
-                      );
-                    },
-                  ),
                 ),
               ],
             ),
@@ -585,8 +475,3 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-class ChartData {
-  ChartData(this.x, this.y);
-  final String x;
-  final double y;
-}

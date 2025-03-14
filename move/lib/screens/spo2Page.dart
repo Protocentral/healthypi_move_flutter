@@ -22,22 +22,38 @@ class _SPO2PageState extends State<SPO2Page>
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
+        color: Colors.grey[900],
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
         child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
               Container(
                   child: SfCartesianChart(
+                      plotAreaBorderWidth: 0,
                       primaryXAxis: NumericAxis(
                           minimum: 0,
-                          maximum: 150
+                          maximum: 24,
+                          interval: 8,
+                          majorGridLines: MajorGridLines(width: 0),
+                          labelStyle: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500
+                          )
                       ),
                       primaryYAxis: NumericAxis(
+                          majorGridLines: MajorGridLines(width: 0.05),
                           minimum: 0,
-                          maximum: 100
+                          maximum: 100,
+                          interval: 10,
+                          labelStyle: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500
+                          )
                       ),
                       palette: <Color>[
-                        Color(0xFF125871),
+                        hPi4Global.hpi4Color,
                       ],
                       series: <CartesianSeries>[
                         HiloSeries<ChartData, int>(
@@ -64,15 +80,17 @@ class _SPO2PageState extends State<SPO2Page>
     return DefaultTabController(
       length: 3,
       child: Scaffold(
+        backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
+          backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.black),
+            icon: Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () => Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => HomePage()))
           ),
           title: const Text(
             'SPO2',
-            style: TextStyle(fontSize: 16),
+            style: TextStyle(fontSize: 16, color:Colors.white),
           ),
           centerTitle: true,
           bottom: PreferredSize(
@@ -84,7 +102,7 @@ class _SPO2PageState extends State<SPO2Page>
                 margin: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  color: Colors.grey.shade100,
+                  color: Colors.grey.shade800,
                 ),
                 child: const TabBar(
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -94,7 +112,7 @@ class _SPO2PageState extends State<SPO2Page>
                     borderRadius: BorderRadius.all(Radius.circular(10)),
                   ),
                   labelColor: Colors.white,
-                  unselectedLabelColor: Colors.black54,
+                  unselectedLabelColor: Colors.white,
                   tabs: [
                     Text('Day'),
                     Text('Week'),
@@ -108,7 +126,7 @@ class _SPO2PageState extends State<SPO2Page>
         body: TabBarView(
           children: [
             Card(
-              color: Colors.grey[200],
+              color: Colors.black,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 child: Row(
@@ -118,21 +136,6 @@ class _SPO2PageState extends State<SPO2Page>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          height: SizeConfig.blockSizeVertical * 10,
-                          width: SizeConfig.blockSizeHorizontal * 80,
-                          //color:Colors.white,
-                          child:const Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text("98", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
-                              Text("%", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
-                              Text("AVERAGE", style: TextStyle(fontSize: 12, color: Colors.black),),
-                            ],
-                          ),
-                        ),
-                        SizedBox(height: 30),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
@@ -140,11 +143,12 @@ class _SPO2PageState extends State<SPO2Page>
                             Container(
                               height: SizeConfig.blockSizeVertical * 45,
                               width: SizeConfig.blockSizeHorizontal * 88,
-                              //color:Colors.white,
+                              color:Colors.transparent,
                               child:buildchartBlock(),
                             )
                           ],
                         ),
+                        SizedBox(height:20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
@@ -153,7 +157,7 @@ class _SPO2PageState extends State<SPO2Page>
                               height: SizeConfig.blockSizeVertical * 20,
                               width: SizeConfig.blockSizeHorizontal * 44,
                               child: Card(
-                                // color: Colors.white,
+                                color: Colors.grey[900],
                                 child: Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
@@ -199,7 +203,7 @@ class _SPO2PageState extends State<SPO2Page>
                                     height: SizeConfig.blockSizeVertical * 10,
                                     width: SizeConfig.blockSizeHorizontal * 44,
                                     child: Card(
-                                      //color: Colors.white,
+                                      color: Colors.grey[900],
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Column(
@@ -236,7 +240,7 @@ class _SPO2PageState extends State<SPO2Page>
                                     height: SizeConfig.blockSizeVertical * 10,
                                     width: SizeConfig.blockSizeHorizontal * 44,
                                     child: Card(
-                                      //color: Colors.white,
+                                      color: Colors.grey[900],
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Column(
