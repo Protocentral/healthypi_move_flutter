@@ -32,30 +32,46 @@ class _HRPageState extends State<HRPage>
       padding: const EdgeInsets.all(2.0),
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+        color: Colors.grey[900],
         child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
               Container(
                   child: SfCartesianChart(
+                      plotAreaBorderWidth: 0,
                       primaryXAxis: NumericAxis(
                           minimum: 0,
-                          maximum: 150
+                          maximum: 24,
+                          interval: 8,
+                          majorGridLines: MajorGridLines(width: 0),
+                          labelStyle: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500
+                          )
                       ),
                       primaryYAxis: NumericAxis(
+                          majorGridLines: MajorGridLines(width: 0.05),
                           minimum: 0,
-                          maximum: 200
+                          maximum: 200,
+                          interval: 10,
+                          labelStyle: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500
+                          )
                       ),
                       palette: <Color>[
-                      Color(0xFF125871),
+                        hPi4Global.hpi4Color,
                       ],
                       series: <CartesianSeries>[
                         HiloSeries<ChartData, int>(
                             dataSource: <ChartData>[
-                              ChartData(50, 60, 70),
-                              ChartData(55, 61, 95),
-                              ChartData(60, 62, 71),
-                              ChartData(65, 61, 73),
-                              ChartData(70, 60, 75),
+                              ChartData(10, 60, 70),
+                              ChartData(11, 61, 95),
+                              ChartData(12, 62, 71),
+                              ChartData(13, 61, 73),
+                              ChartData(14, 60, 75),
                             ],
                             xValueMapper: (ChartData data, _) => data.x,
                             lowValueMapper: (ChartData data, _) => data.low,
@@ -76,9 +92,11 @@ class _HRPageState extends State<HRPage>
     return DefaultTabController(
       length: 3,
       child: Scaffold(
+        backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
+          backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: Colors.black),
+              icon: Icon(Icons.arrow_back, color: Colors.white),
               onPressed: () => Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (_) => HomePage()))
           ),
@@ -88,10 +106,10 @@ class _HRPageState extends State<HRPage>
               children: [
                 const Text(
                   'Heart Rate',
-                  style: TextStyle(fontSize: 16),
+                  style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
                 ),
                 SizedBox(width:30.0),
-                IconButton(
+                /*IconButton(
                     icon: Icon(Icons.file_open, color: Colors.black),
                     onPressed: () async{
 
@@ -104,12 +122,9 @@ class _HRPageState extends State<HRPage>
 
                       List<String> HR1 = result.map((f) => f.split(",")[2]).toList();
 
-                      //print(".........time"+timestamp.toString());
-                      //print(".........HR"+HR.toString());
-                      //print(".........HR1"+HR1.toString());
 
                     }
-                ),
+                ),*/
               ]
           ),
           centerTitle: true,
@@ -122,7 +137,8 @@ class _HRPageState extends State<HRPage>
                 margin: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.all(Radius.circular(10)),
-                  color: Colors.grey.shade100,
+                  //color: Colors.grey.shade100,
+                  color: Colors.grey.shade800,
                 ),
                 child: const TabBar(
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -132,7 +148,7 @@ class _HRPageState extends State<HRPage>
                     borderRadius: BorderRadius.all(Radius.circular(10)),
                   ),
                   labelColor: Colors.white,
-                  unselectedLabelColor: Colors.black54,
+                  unselectedLabelColor: Colors.white,
                   tabs: [
                     Text('Day'),
                     Text('Week'),
@@ -146,7 +162,7 @@ class _HRPageState extends State<HRPage>
         body: TabBarView(
           children: [
             Card(
-              color: Colors.grey[200],
+              color: Colors.black,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 child: Row(
@@ -156,7 +172,7 @@ class _HRPageState extends State<HRPage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
+                        /*Container(
                           height: SizeConfig.blockSizeVertical * 10,
                           width: SizeConfig.blockSizeHorizontal * 80,
                           //color:Colors.white,
@@ -164,12 +180,11 @@ class _HRPageState extends State<HRPage>
                             mainAxisAlignment: MainAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text("91", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.black),),
-                              Text("BPM", style: TextStyle(fontSize: 12, color: Colors.black),),
+                              Text("91", style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white),),
+                              Text("BPM", style: TextStyle(fontSize: 12, color: Colors.white),),
                             ],
                           ),
-                        ),
-                        SizedBox(height: 30),
+                        ),*/
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
@@ -177,11 +192,12 @@ class _HRPageState extends State<HRPage>
                             Container(
                               height: SizeConfig.blockSizeVertical * 45,
                               width: SizeConfig.blockSizeHorizontal * 88,
-                              //color:Colors.white,
+                              color:Colors.transparent,
                               child:buildchartBlock(),
                             )
                           ],
                         ),
+                        SizedBox(height:20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           mainAxisSize: MainAxisSize.min,
@@ -190,7 +206,7 @@ class _HRPageState extends State<HRPage>
                               height: SizeConfig.blockSizeVertical * 20,
                               width: SizeConfig.blockSizeHorizontal * 44,
                               child: Card(
-                               // color: Colors.white,
+                                color: Colors.grey[900],
                                 child: Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
@@ -258,7 +274,7 @@ class _HRPageState extends State<HRPage>
                                     height: SizeConfig.blockSizeVertical * 10,
                                     width: SizeConfig.blockSizeHorizontal * 44,
                                     child: Card(
-                                      //color: Colors.white,
+                                      color: Colors.grey[900],
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Column(
@@ -295,7 +311,7 @@ class _HRPageState extends State<HRPage>
                                     height: SizeConfig.blockSizeVertical * 10,
                                     width: SizeConfig.blockSizeHorizontal * 44,
                                     child: Card(
-                                      //color: Colors.white,
+                                      color: Colors.grey[900],
                                       child: Padding(
                                         padding: const EdgeInsets.all(8.0),
                                         child: Column(

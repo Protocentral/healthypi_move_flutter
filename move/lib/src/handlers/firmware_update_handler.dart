@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter_archive/flutter_archive.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/model/manifest.dart';
-import '/src/repository/firmware_image_repository.dart';
 
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart' as path_provider;
@@ -47,13 +46,13 @@ class FirmwareDownloader extends FirmwareUpdateHandler {
 
     final remoteFirmware = multiImageRequest.remoteFirmware!;
 
-    final response = await http.get(Uri.parse(
+    /*final response = await http.get(Uri.parse(
         '${FirmwareImageRepository.baseUrl}${remoteFirmware.firmware.file}'));
     if (response.statusCode == 200) {
       multiImageRequest.zipFile = response.bodyBytes;
     } else {
       throw Exception('Failed to download firmware');
-    }
+    }*/
 
     return await _nextHandler!
         .handleFirmwareUpdate(multiImageRequest, callback);

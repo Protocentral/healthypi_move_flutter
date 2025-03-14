@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import '../../../globals.dart';
 import '/src/model/firmware_update_request.dart';
 import '/src/providers/firmware_update_request_provider.dart';
 import '/src/repository/peripheral_repository.dart';
@@ -12,7 +13,24 @@ class PeripheralList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Peripheral List')),
+      backgroundColor: hPi4Global.appBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: hPi4Global.hpi4AppBarColor,
+        iconTheme: IconThemeData(
+          color: hPi4Global.hpi4AppBarIconsColor, //change your color here
+        ),
+        title: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            //mainAxisSize: MainAxisSize.max,
+            children: [
+              const Text(
+                'Peripheral List',
+                style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
+              ),
+              SizedBox(width:30.0),
+            ]
+        ),
+      ),
       body: _body(),
     );
   }
@@ -77,7 +95,7 @@ class PeripheralList extends StatelessWidget {
       itemCount: peripherals.length,
       itemBuilder: (context, index) {
         return ListTile(
-          title: Text(peripherals[index].device.name),
+          title: Text(peripherals[index].device.name, style: hPi4Global.cardWhiteTextStyle),
           onTap: () {
             ScanResult p = peripherals[index];
 

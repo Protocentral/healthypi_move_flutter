@@ -60,24 +60,39 @@ class hPi4Global {
       TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
 
   static const TextStyle movecardTextStyle =
-  TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black);
+  TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle movecardValueTextStyle =
-  TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.black);
+  TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle moveValueTextStyle =
-  TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black);
+  TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle movecardSubValueTextStyle =
-  TextStyle(fontSize: 12, color: Colors.black);
+  TextStyle(fontSize: 12, color: Colors.white);
+
+  static const TextStyle movecardSubValue1TextStyle =
+  TextStyle(fontSize: 14, color: Colors.white);
+
+  static const TextStyle movecardSubValue2TextStyle =
+  TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
 
   static const TextStyle subValueWhiteTextStyle =
   TextStyle(fontSize: 12, color: Colors.white);
 
-  static const TextStyle cardBlackTextStyle =
-      TextStyle(fontSize: 20, color: Colors.black);
+  static const TextStyle cardBlackTextStyle = TextStyle(fontSize: 20, color: Colors.black);
+
+  static const TextStyle cardWhiteTextStyle = TextStyle(fontSize: 20, color: Colors.white);
 
   static const TextStyle eventsWhite =
       TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
 
-  static const Color hpi4Color = Color(0xFFFFD551);
+ //static const Color hpi4Color = Color(0xFFFFD551);
+
+  static const Color hpi4Color = Color(0xFFFF6D00);
+
+  static const Color hpi4AppBarColor = Colors.black;
+
+  static const Color hpi4AppBarIconsColor = Colors.white;
+
+  static const Color oldHpi4Color = Color(0xFF125871);
 
   static const TextStyle scrHeadStyle = TextStyle(
     fontSize: 24,
