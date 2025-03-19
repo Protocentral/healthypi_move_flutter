@@ -55,6 +55,7 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
     _connectionStateSubscription.cancel();
+    onStopPressed();
     super.dispose();
   }
 

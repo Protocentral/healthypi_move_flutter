@@ -95,7 +95,9 @@ class PeripheralList extends StatelessWidget {
       itemCount: peripherals.length,
       itemBuilder: (context, index) {
         return ListTile(
-          title: Text(peripherals[index].device.name, style: hPi4Global.cardWhiteTextStyle),
+          title: Text(peripherals[index].device.name,
+              style: hPi4Global.eventsWhite),
+          leading: Text(peripherals[index].rssi.toString(),style: hPi4Global.subValueWhiteTextStyle),
           onTap: () {
             ScanResult p = peripherals[index];
 

@@ -81,14 +81,22 @@ class _ScanResultTileState extends State<ScanResultTile> {
   }
 
   Widget _buildConnectButton(BuildContext context) {
-      return ElevatedButton(
+    return IconButton(
+      icon:Column(
+        children: [
+          Text("Connect", style: hPi4Global.subValueWhiteTextStyle)
+        ],
+      ),
+      onPressed: (widget.result.advertisementData.connectable) ? widget.onTap : null,
+    );
+      /*return ElevatedButton(
         child: isConnected ? const Text('OPEN') : const Text('CONNECT'),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
         ),
         onPressed: (widget.result.advertisementData.connectable) ? widget.onTap : null,
-      );
+      );*/
   }
 
   Widget _buildAdvRow(BuildContext context, String title, String value) {

@@ -3,9 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-import '../widgets/service_tile.dart';
-import '../widgets/characteristic_tile.dart';
-import '../widgets/descriptor_tile.dart';
 import '../utils/snackbar.dart';
 import '../utils/extra.dart';
 
@@ -152,7 +149,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
   }
 
-  List<Widget> _buildServiceTiles(BuildContext context, BluetoothDevice d) {
+  /*List<Widget> _buildServiceTiles(BuildContext context, BluetoothDevice d) {
     return _services
         .map(
           (s) => ServiceTile(
@@ -168,7 +165,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
       characteristic: c,
       descriptorTiles: c.descriptors.map((d) => DescriptorTile(descriptor: d)).toList(),
     );
-  }
+  }*/
 
   Widget buildSpinner(BuildContext context) {
     return Padding(
@@ -263,7 +260,7 @@ class _DeviceScreenState extends State<DeviceScreen> {
                 trailing: buildGetServices(context),
               ),
               buildMtuTile(context),
-              ..._buildServiceTiles(context, widget.device),
+             // ..._buildServiceTiles(context, widget.device),
             ],
           ),
         ),

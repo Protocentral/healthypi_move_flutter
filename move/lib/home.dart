@@ -445,10 +445,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: hPi4Global.hpi4AppBarIconsColor,
               ),
               onPressed: () {
-                Navigator.push(
+
+                /*Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => ScanConnectScreen(pageFlag:true)),
-                );
+                );*/
               },
             ),
           ],
