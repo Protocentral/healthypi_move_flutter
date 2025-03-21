@@ -12,8 +12,8 @@ class hPi4Global {
   static const String UUID_CHAR_PPG = "cd5c1525-4448-7db8-ae4c-d1da8cba36d0";
 
   static const String UUID_SERVICE_CMD = "01bf7492-970f-8d96-d44d-9023c47faddc";
-  static const String UUID_CHAR_CMD = "01bf1527-970f-8d96-d44d-9023c47faddc";
-  static const String UUID_CHAR_CMD_DATA = "01bf1528-970f-8d96-d44d-9023c47faddc";
+  static const String UUID_CHAR_CMD = "01bf1528-970f-8d96-d44d-9023c47faddc";
+  static const String UUID_CHAR_CMD_DATA = "01bf1527-970f-8d96-d44d-9023c47faddc";
 
   static const String UUID_ECG_SERVICE = "00001122-0000-1000-8000-00805f9b34fb";
   static const String UUID_ECG_CHAR = "00001424-0000-1000-8000-00805f9b34fb";
@@ -31,10 +31,8 @@ class hPi4Global {
   //static const String UUID_CHAR_HIST = "01bf1525-970f-8d96-d44d-9023c47faddc";
   static const String UUID_CHAR_ACT = "000000a2-0000-1000-8000-00805f9b34fb";
   static const String UUID_CHAR_BATT = "00002a19-0000-1000-8000-00805f9b34fb";
-  static const String UUID_DIS_FW_REVISION =
-      "00002a26-0000-1000-8000-00805f9b34fb";
-  static const String UUID_SERV_HEALTH_THERM =
-      "00001809-0000-1000-8000-00805f9b34fb";
+  static const String UUID_DIS_FW_REVISION = "00002a26-0000-1000-8000-00805f9b34fb";
+  static const String UUID_SERV_HEALTH_THERM = "00001809-0000-1000-8000-00805f9b34fb";
 
   static const String UUID_SERV_SMP = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
   static const String UUID_CHAR_SMP = "da2e7828-fbce-4e01-ae9e-261174997c48";
@@ -45,6 +43,9 @@ class hPi4Global {
   static const List<int> sessionLogWipeAll = [0x53];
   static const List<int> getSessionCount = [0x54];
   static const List<int> getFWVersion = [0x55];
+
+  static const List<int> HrTrend = [0x01];
+  //static const List<int> Spo2Trend = [0x02];
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;
