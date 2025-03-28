@@ -84,6 +84,7 @@ dependencies:
   uuid: ^4.2.1
   simple_html_css: ^5.0.0
   url_launcher: ^6.1.11
+  archive: ^3.3.0
 
 dev_dependencies:
   build_runner: ^2.1.2

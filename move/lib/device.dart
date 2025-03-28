@@ -391,7 +391,7 @@ class _DevicePageState extends State<DevicePage> {
 
     _streamDataSubscription = dataCharacteristic!.lastValueStream.listen((value) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      //logConsole("Data Rx: " + value.toString());
+      logConsole("Data Rx: " + value.toString());
       //logConsole("Data Rx in hex: " +  hex.encode(value).toString());
       int _pktType = bdata.getUint8(0);
 
@@ -413,13 +413,13 @@ class _DevicePageState extends State<DevicePage> {
 
         logConsole("filelength..."+fileLength.toString());
 
-        // Convert ByteData to Uint8List
+       /* // Convert ByteData to Uint8List
         Uint8List uint8List = bdata.buffer.asUint8List(1,16);
 
         // Decode Uint8List to String
         String result = utf8.decode(uint8List);
 
-        logConsole("fileName..."+result);
+        logConsole("fileName..."+result);*/
 
         await _streamDataSubscription.cancel();
 
@@ -468,7 +468,7 @@ class _DevicePageState extends State<DevicePage> {
             //logData.removeRange(expectedLength, currentFileDataCounter);
           }
 
-          await _writeLogDataToFile(logData, sessionID, formattedTime);
+          //await _writeLogDataToFile(logData, sessionID, formattedTime);
 
           //Navigator.pop(context);
 

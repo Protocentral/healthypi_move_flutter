@@ -204,7 +204,6 @@ class _FetchFileDataState extends State<FetchFileData> {
     final String directory = exPath;
 
     File file = File('$directory/$sessionID.csv');
-    ;
     print("Save file");
 
     await file.writeAsString(csv);
