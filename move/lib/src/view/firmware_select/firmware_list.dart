@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,7 @@ import '../../providers/firmware_update_request_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as httpd;
 import 'package:path_provider/path_provider.dart';
+import 'package:version/version.dart';
 
 
 class FirmwareList extends StatefulWidget {
@@ -69,11 +71,62 @@ class _FirmwareListState extends State<FirmwareList> {
     );
   }
 
+  Future<List<String>> fetchTags() async {
+    final url = Uri.parse('https://api.github.com/repos/Protocentral/healthypi-move-fw/tags');
+    final response = await httpd.get(url);
+
+    if (response.statusCode == 200) {
+      // Parse the JSON response
+      List<dynamic> data = json.decode(response.body);
+      // Extract the tag names from the response
+      List<String> tags = data.map((tag) => tag['name'] as String).toList();
+      //print("............."+ tags.toString());
+      return tags;
+    } else {
+      throw Exception('Failed to load tags');
+    }
+  }
+
+  String latestReleasePath = "";
+
+  Future<String> _getLatestVersion() async {
+
+    List<String> tags = await fetchTags();
+    print(tags);
+
+    String _latestFWVersion = "0.9.18";
+
+    List<String> tagsWithoutV = tags.map((tag) => tag.startsWith('v') ? tag.substring(1) : tag).toList();
+
+    // Print the new list
+    print(tagsWithoutV);
+
+    for (int i = 0; i < tagsWithoutV.length; i++) {
+      _latestFWVersion = _getAvailableLatestVersion(_latestFWVersion, tagsWithoutV[i]);
+    }
+
+    return _latestFWVersion;
+  }
+
+  String _getAvailableLatestVersion(String versionCurrent, String versionAvail) {
+    Version availVersion = Version.parse(versionAvail);
+    Version currentVersion = Version.parse(versionCurrent);
+
+    if (availVersion > currentVersion) {
+      //print("...........availble"+versionAvail);
+      return versionAvail;
+    } else {
+      //print("...........current"+versionCurrent);
+      return versionCurrent;
+    }
+  }
+
 
   String _status = 'Click the button to download the ZIP file';
 
   Future<void> downloadFile() async {
     showLoadingIndicator("Downloading dfu file...", context);
+    String fwVesion = await _getLatestVersion();
     Directory  dir = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
@@ -82,11 +135,12 @@ class _FirmwareListState extends State<FirmwareList> {
       dir = await getApplicationDocumentsDirectory();
     }
 
-    final url = 'https://github.com/Protocentral/healthypi-move-fw/releases/latest/download/healthypi_move_update_v0.9.21.zip'; // Replace with your URL
+    final url = 'https://github.com/Protocentral/healthypi-move-fw/releases/latest/download/healthypi_move_update_v$fwVesion.zip'; // Replace with your URL
+    print(url);
     final response = await httpd.get(Uri.parse(url));
 
     if (response.statusCode == 200) {
-      final filePath = '${dir.path}/move_dfu.zip';
+      final filePath = '${dir.path}/$fwVesion.zip';
       final file = File(filePath);
       await file.writeAsBytes(response.bodyBytes);
       setState(() {
@@ -125,7 +179,7 @@ class _FirmwareListState extends State<FirmwareList> {
                             SizeConfig.blockSizeHorizontal * 60, 40),
                       ),
                       onPressed: () async {
-                        //await downloadFile();
+                        await downloadFile();
 
                         FilePickerResult? result = await FilePicker.platform
                             .pickFiles(

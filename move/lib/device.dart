@@ -105,6 +105,24 @@ class _DevicePageState extends State<DevicePage> {
 
   }
 
+  subscribeToChar(BluetoothDevice deviceName) async{
+    List<BluetoothService> services = await deviceName.discoverServices();
+    // Find a service and characteristic by UUID
+    for (BluetoothService service in services) {
+      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
+        commandService = service;
+        for (BluetoothCharacteristic characteristic
+        in service.characteristics) {
+          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
+            dataCharacteristic = characteristic;
+            await dataCharacteristic?.setNotifyValue(true);
+    break;
+    }
+    }
+    }
+  }
+  }
+
   @override
   Future<void> dispose() async {
     _scanResultsSubscription.cancel();
@@ -256,6 +274,7 @@ class _DevicePageState extends State<DevicePage> {
         //await device.disconnect();
         /*Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => HomePage()));*/
+        subscribeToChar(device);
          Future.delayed(Duration(seconds: 2), () async {
            _fetchLogCount(context, device);
         });
@@ -287,15 +306,9 @@ class _DevicePageState extends State<DevicePage> {
       } else {
         //device.disconnect();
       }
-      /*if (mounted) {
-        setState(() {
 
-        });
-
-      }*/
     });
   }
-
 
   Future<void> _writeLogDataToFile(
       List<int> mData,
@@ -373,7 +386,7 @@ class _DevicePageState extends State<DevicePage> {
 
     logConsole("Started listening....");
 
-    List<BluetoothService> services = await deviceName.discoverServices();
+    /*List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
@@ -387,7 +400,7 @@ class _DevicePageState extends State<DevicePage> {
           }
         }
       }
-    }
+    }*/
 
     _streamDataSubscription = dataCharacteristic!.lastValueStream.listen((value) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
@@ -413,13 +426,13 @@ class _DevicePageState extends State<DevicePage> {
 
         logConsole("filelength..."+fileLength.toString());
 
-       /* // Convert ByteData to Uint8List
+       // Convert ByteData to Uint8List
         Uint8List uint8List = bdata.buffer.asUint8List(1,16);
 
         // Decode Uint8List to String
         String result = utf8.decode(uint8List);
 
-        logConsole("fileName..."+result);*/
+        logConsole("fileName..."+result);
 
         await _streamDataSubscription.cancel();
 
