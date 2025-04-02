@@ -108,22 +108,22 @@ class _HRPageState extends State<HRPage>
                   style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
                 ),
                 SizedBox(width:30.0),
-                /*IconButton(
+                IconButton(
                     icon: Icon(Icons.file_open, color: Colors.black),
                     onPressed: () async{
 
-                      String myData = await rootBundle.loadString("assets/test.txt");
+                      /*String myData = await rootBundle.loadString("assets/test.txt");
                       List<String> result = myData.split('\n');
                       print(result);
                       List<String> timestamp = result.map((f) => f.split(",")[0]).toList();
 
                       List<String> HR = result.map((f) => f.split(",")[1]).toList();
 
-                      List<String> HR1 = result.map((f) => f.split(",")[2]).toList();
+                      List<String> HR1 = result.map((f) => f.split(",")[2]).toList();*/
 
 
                     }
-                ),*/
+                ),
               ]
           ),
           centerTitle: true,
