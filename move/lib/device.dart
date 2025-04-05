@@ -414,9 +414,8 @@ class _DevicePageState extends State<DevicePage> {
         }*/
 
         int logFileID = bdata.getInt64(1, Endian.little);
-        logConsole("Log file ID: $logFileID");
-        int sessionLength = bdata.getInt16(10, Endian.little);
-        logConsole("Session length: $sessionLength");
+         int sessionLength = bdata.getInt16(9, Endian.little);
+        logConsole("Log file ID: $logFileID | Length: $sessionLength");
 
         LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
 
@@ -594,9 +593,7 @@ class _DevicePageState extends State<DevicePage> {
     List<int> commandList,
     BluetoothDevice deviceName,
   ) async {
-    logConsole(
-      "Tx CMD " + commandList.toString() + " 0x" + hex.encode(commandList),
-    );
+    logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
@@ -720,10 +717,16 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   void logConsole(String logString) async {
-    print("debug - " + logString);
+    print("debug - $logString");
     setState(() {
       debugText += logString;
       debugText += "\n";
+    });
+  }
+
+  void resetLogConsole() async {
+    setState(() {
+      debugText = "";
     });
   }
 
@@ -733,13 +736,18 @@ class _DevicePageState extends State<DevicePage> {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: SingleChildScrollView(
-        child: Text(
-          debugText,
-          style: TextStyle(
-            fontSize: 12,
-            color: hPi4Global.hpi4AppBarIconsColor,
+        child: SizedBox(
+          height: 150, // 8 lines of text approximately
+          width: SizeConfig.blockSizeHorizontal * 88,
+          child: SingleChildScrollView(
+            child: Text(
+              debugText,
+              style: TextStyle(
+                fontSize: 12,
+                color: hPi4Global.hpi4AppBarIconsColor,
+              ),
+            ),
           ),
-          maxLines: 100,
         ),
       ),
     );
@@ -1082,6 +1090,45 @@ class _DevicePageState extends State<DevicePage> {
                                         mainAxisSize: MainAxisSize.max,
                                         children: <Widget>[
                                           _buildDebugConsole(),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  hPi4Global
+                                                      .hpi4Color, // background color
+                                              foregroundColor:
+                                                  Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(20),
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              resetLogConsole();
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Icons.clear,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    'Clear Console ',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
