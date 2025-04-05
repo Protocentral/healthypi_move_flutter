@@ -130,20 +130,6 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   Future<void> _sendCurrentDateTime(BluetoothDevice deviceName) async {
-    /* Send current DataTime to wiser device - Bluetooth Packet format
-
-     | Byte  | Value
-     ----------------
-     | 0 | WISER_CMD_SET_DEVICE_TIME (0x41)
-     | 1 | sec
-     | 2 | min
-     | 3 | hour
-     | 4 | mday(day of the month)
-     | 5 | month
-     | 6 | year
-
-     */
-
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -351,7 +337,7 @@ class _DevicePageState extends State<DevicePage> {
 
     final String directory = exPath;
 
-    File file = File('$directory/$sessionID.csv');
+    File file = File('$directory/hr_$sessionID.csv');
     ;
     print("Save file");
 
