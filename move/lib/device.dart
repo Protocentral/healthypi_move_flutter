@@ -431,12 +431,12 @@ class _DevicePageState extends State<DevicePage> {
 
           for (int i = 0; i <= logHeaderList.length; i++) {
             Future.delayed(Duration(seconds: 2), () async {
-              _fetchLogFile(
+              /*_fetchLogFile(
                 deviceName,
                 logHeaderList[i].logFileID,
                 logHeaderList[i].sessionLength,
                 "",
-              );
+              );*/
             });
           }
 
