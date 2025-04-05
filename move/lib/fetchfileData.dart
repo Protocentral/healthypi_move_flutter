@@ -227,14 +227,15 @@ class _FetchFileDataState extends State<FetchFileData> {
       await dataCharacteristic?.setNotifyValue(true);
     });*/
 
-    List<BluetoothService> services = await widget.connectedDevice.discoverServices();
+    List<BluetoothService> services =
+        await widget.connectedDevice.discoverServices();
 
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             await dataCharacteristic?.setNotifyValue(true);

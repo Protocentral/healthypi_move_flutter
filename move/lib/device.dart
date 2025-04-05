@@ -1,8 +1,9 @@
 import 'dart:convert';
+//import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:async';
+//import 'dart:nativewrappers/_internal/vm/lib/ffi_native_type_patch.dart';
 import 'dart:typed_data';
-import 'dart:ui';
 import 'package:convert/convert.dart';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
@@ -25,11 +26,7 @@ import 'package:flutter/cupertino.dart';
 
 import 'home.dart';
 
-typedef LogHeader =
-    ({
-      String logFileID,
-      int sessionLength,
-    });
+typedef LogHeader = ({int logFileID, int sessionLength});
 
 class DevicePage extends StatefulWidget {
   DevicePage({Key? key}) : super(key: key);
@@ -94,26 +91,24 @@ class _DevicePageState extends State<DevicePage> {
     _isScanningSubscription = FlutterBluePlus.isScanning.listen((state) {
       _isScanning = state;
     });
-
-
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async{
+  subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             await dataCharacteristic?.setNotifyValue(true);
-    break;
+            break;
+          }
+        }
+      }
     }
-    }
-    }
-  }
   }
 
   @override
@@ -244,8 +239,8 @@ class _DevicePageState extends State<DevicePage> {
       device.cancelWhenDisconnected(subscription);
 
       // You can also manually change the mtu yourself.
-      if (!kIsWeb && Platform.isAndroid){
-       device.requestMtu(512);
+      if (!kIsWeb && Platform.isAndroid) {
+        device.requestMtu(512);
       }
 
       if (_connectionState == BluetoothConnectionState.connected &&
@@ -254,13 +249,12 @@ class _DevicePageState extends State<DevicePage> {
         /*Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => HomePage()));*/
         await subscribeToChar(device);
-         Future.delayed(Duration(seconds: 2), () async {
+        Future.delayed(Duration(seconds: 2), () async {
           await _fetchLogCount(context, device);
         });
-         Future.delayed(Duration(seconds: 3), () async {
+        Future.delayed(Duration(seconds: 3), () async {
           await _fetchLogIndex(context, device);
-         });
-
+        });
       } else if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "fetchLogs") {
         Navigator.of(context).pushReplacement(
@@ -282,15 +276,14 @@ class _DevicePageState extends State<DevicePage> {
       } else {
         //device.disconnect();
       }
-
     });
   }
 
   Future<void> _writeLogDataToFile(
-      List<int> mData,
-      int sessionID,
-      String formattedTime,
-      ) async {
+    List<int> mData,
+    int sessionID,
+    String formattedTime,
+  ) async {
     logConsole("Log data size: " + mData.length.toString());
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
@@ -353,145 +346,158 @@ class _DevicePageState extends State<DevicePage> {
   bool isFetchIconTap = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
-  Future<void> _startListeningData(
+  Future<void> listenForIndex(
     BluetoothDevice deviceName,
     int expectedLength,
     String sessionID,
     String formattedTime,
   ) async {
+    logConsole("Started listening for index....");
 
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen(
+      (value) async {},
+    );
+  }
+
+  Future<void> _startListeningData(
+    BluetoothDevice deviceName,
+    int expectedLength,
+    int sessionID,
+    String formattedTime,
+  ) async {
     List<int> buffer = [];
     String fileName = "";
 
     logConsole("Started listening....");
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((value) async {
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
+      value,
+    ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      logConsole("Data Rx: " + value.toString());
+      logConsole("Data Rx: $value");
       //logConsole("Data Rx in hex: " +  hex.encode(value).toString());
-      int _pktType = bdata.getUint8(0);
-      if (_pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
+      int pktType = bdata.getUint8(0);
+
+      /**** Packet type Command Response ***/
+      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
         setState(() {
           totalSessionCount = bdata.getUint16(2, Endian.little);
         });
-        logConsole("Data Rx count: " + totalSessionCount.toString());
+        logConsole("Data Rx count: $totalSessionCount");
 
         await _streamDataSubscription.cancel();
+      }
+      /*****  Packet type Log Index ***/
+      else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
+        logConsole("Data Rx Index len: ${value.length}");
 
-      } else if (_pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        logConsole("Data Rx length: " + value.length.toString());
+        logConsole(
+          "Data Index session start: ${bdata.getInt64(1, Endian.little)}",
+        );
 
         buffer.addAll(value);
 
-        if (buffer.length >= 21) {
+        /*if (buffer.length >= 21) {
           try {
             int fileLength = ByteData.sublistView(Uint8List.fromList(buffer))
                 .getUint32(17, Endian.little);
             logConsole("fileLength... " + fileLength.toString());
 
-            List<int> fileNameBytes = buffer.sublist(1, 16); // Example: extract the first 16 bytes for fileName
-            fileName = String.fromCharCodes(fileNameBytes); // Decode as UTF-8 string
-            logConsole("fileName... " + fileName);
+            //List<int> fileNameBytes = buffer. .sublist(1, 16); // Example: extract the first 16 bytes for fileName
+            //fileName = String.fromCharCodes(fileNameBytes); // Decode as UTF-8 string
+            //logConsole("fileName... " + fileName);
           } catch (e) {
             logConsole("Error processing the packet: $e");
           }
 
           // After processing, clear the buffer if needed
           buffer.clear();
+        }*/
+
+        int logFileID = bdata.getInt64(1, Endian.little);
+        logConsole("Log file ID: $logFileID");
+        int sessionLength = bdata.getInt16(10, Endian.little);
+        logConsole("Session length: $sessionLength");
+
+        LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
+
+        logHeaderList.add(mLog);
+
+        if (logHeaderList.length == totalSessionCount) {
+          setState(() {
+            logIndexReceived = true;
+          });
+
+          logConsole("All logs received. Cancel subscription");
+          logConsole("All logs Header.......$logHeaderList");
+
+          for (int i = 0; i <= logHeaderList.length; i++) {
+            Future.delayed(Duration(seconds: 2), () async {
+              _fetchLogFile(
+                deviceName,
+                logHeaderList[i].logFileID,
+                logHeaderList[i].sessionLength,
+                "",
+              );
+            });
+          }
+
+          await _streamDataSubscription.cancel();
         }
-
-        LogHeader _mLog = (
-            logFileID: fileName,
-            sessionLength: bdata.getUint32(17, Endian.little)
-      ,);
-
-      logHeaderList.add(_mLog);
-
-      if (logHeaderList.length == totalSessionCount) {
-      setState(() {
-      logIndexReceived = true;
-      });
-
-      logConsole("All logs received. Cancel subscription");
-      logConsole("All logs Header......."+logHeaderList.toString());
-
-       for(int i=0; i<=logHeaderList.length; i++){
-      Future.delayed(Duration(seconds: 2), () async {
-      _fetchLogFile(deviceName, logHeaderList[i].logFileID, logHeaderList[i].sessionLength, "");
-      });
       }
+      /***** Packet type Log Data ***/
+      else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
+        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
 
-      await _streamDataSubscription.cancel();
+        logConsole(
+          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
+        );
+        currentFileDataCounter += pktPayloadSize;
+        _globalReceivedData += pktPayloadSize;
+        logData.addAll(value.sublist(1, value.length));
 
+        setState(() {
+          displayPercent =
+              globalDisplayPercentOffset +
+              (_globalReceivedData / _globalExpectedLength) * 100.truncate();
+          if (displayPercent > 100) {
+            displayPercent = 100;
+          }
+        });
+
+        logConsole(
+          "File data counter: $currentFileDataCounter | Received: $displayPercent%",
+        );
+
+        if (currentFileDataCounter >= (expectedLength)) {
+          logConsole("All data $currentFileDataCounter received");
+
+          if (currentFileDataCounter > expectedLength) {
+            int diffData = currentFileDataCounter - expectedLength;
+            logConsole("Data received more than expected by: $diffData bytes");
+          }
+
+          //await _writeLogDataToFile(logData, sessionID, formattedTime);
+
+          //Navigator.pop(context);
+
+          setState(() {
+            isTransfering = false;
+            isFetchIconTap = false;
+          });
+
+          // Reset all fetch variables
+          displayPercent = 0;
+          globalDisplayPercentOffset = 0;
+          currentFileDataCounter = 0;
+          _globalReceivedData = 0;
+          logData.clear();
+        }
       }
-    }else if (_pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-      int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
-
-      logConsole(
-      "Data Rx length: " +
-      value.length.toString() +
-      " | Actual Payload: " +
-      pktPayloadSize.toString(),
-      );
-      currentFileDataCounter += pktPayloadSize;
-      _globalReceivedData += pktPayloadSize;
-      logData.addAll(value.sublist(1, value.length));
-
-      setState(() {
-      displayPercent =
-      globalDisplayPercentOffset +
-      (_globalReceivedData / _globalExpectedLength) * 100.truncate();
-      if (displayPercent > 100) {
-      displayPercent = 100;
-      }
-      });
-
-      logConsole(
-      "File data counter: " +
-      currentFileDataCounter.toString() +
-      " | Received: " +
-      displayPercent.toString() +
-      "%",
-      );
-
-      if (currentFileDataCounter >= (expectedLength)) {
-      logConsole(
-      "All data " + currentFileDataCounter.toString() + " received",
-      );
-
-      if (currentFileDataCounter > expectedLength) {
-      int diffData = currentFileDataCounter - expectedLength;
-      logConsole(
-      "Data received more than expected by: " +
-      diffData.toString() +
-      " bytes",
-      );
-      }
-
-      //await _writeLogDataToFile(logData, sessionID, formattedTime);
-
-      //Navigator.pop(context);
-
-      setState(() {
-      isTransfering = false;
-      isFetchIconTap = false;
-      });
-
-      // Reset all fetch variables
-      displayPercent = 0;
-      globalDisplayPercentOffset = 0;
-      currentFileDataCounter = 0;
-      _globalReceivedData = 0;
-      logData.clear();
-      }
-      }
-
     });
 
     // cleanup: cancel subscription when disconnected
     deviceName.cancelWhenDisconnected(_streamDataSubscription);
-
   }
-
 
   Future<void> _fetchLogCount(
     BuildContext context,
@@ -500,7 +506,7 @@ class _DevicePageState extends State<DevicePage> {
     logConsole("Fetch log count initiated");
     //showLoadingIndicator("Fetching logs count...", context);
     //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName, 0, "0", "0");
+    await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
@@ -511,28 +517,32 @@ class _DevicePageState extends State<DevicePage> {
     //Navigator.pop(context);
   }
 
-  Future<void> _fetchLogIndex(BuildContext context, BluetoothDevice deviceName,) async {
-    logConsole("Fetch logs initiated");
+  Future<void> _fetchLogIndex(
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
+    logConsole("Fetch log index initiated");
     //showLoadingIndicator("Fetching logs...", context);
     //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName,0, "0", "0");
+    await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.sessionLogIndex);
       commandPacket.addAll(hPi4Global.HrTrend);
       await _sendCommand(commandPacket, deviceName);
-
     });
     //Navigator.pop(context);
   }
 
   Future<void> _fetchLogFile(
-      BluetoothDevice deviceName,
-      String sessionID,
-      int sessionSize,
-      String formattedTime,
-      ) async {
-    logConsole("Fetch logs file initiated");
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    String formattedTime,
+  ) async {
+    logConsole(
+      "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
+    );
     isTransfering = true;
     //await _startListeningCommand(deviceID);
     // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
@@ -546,10 +556,10 @@ class _DevicePageState extends State<DevicePage> {
     //logData.clear();
 
     await Future.delayed(Duration(seconds: 2), () async {
-      List<int> uint8Data = utf8.encode(sessionID);
-      print(uint8Data);
+      //List<int> uint8Data = utf8.encode(sessionID);
+      //print(uint8Data);
 
-      ByteData sessionIDLength = new ByteData(16);
+      /*ByteData sessionIDLength = new ByteData(16);
 
       sessionIDLength.setUint8(0, uint8Data[0]);
       sessionIDLength.setUint8(1, uint8Data[1]);
@@ -570,12 +580,13 @@ class _DevicePageState extends State<DevicePage> {
 
       Uint8List cmdByteList = sessionIDLength.buffer.asUint8List(0, 15);
 
-      logConsole("Sending file name: " + cmdByteList.toString());
+      logConsole("Sending file name: $cmdByteList");
 
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(cmdByteList);
-      await _sendCommand(commandFetchLogFile, deviceName);
+      */
+      //await _sendCommand(commandFetchLogFile, deviceName);
     });
   }
 
@@ -722,7 +733,7 @@ class _DevicePageState extends State<DevicePage> {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: SingleChildScrollView(
-        child:Text(
+        child: Text(
           debugText,
           style: TextStyle(
             fontSize: 12,
@@ -1092,4 +1103,3 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 }
-
