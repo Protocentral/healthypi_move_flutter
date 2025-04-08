@@ -2,7 +2,6 @@ import 'dart:convert';
 //import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:async';
-//import 'dart:nativewrappers/_internal/vm/lib/ffi_native_type_patch.dart';
 import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:csv/csv.dart';
@@ -57,6 +56,7 @@ class _DevicePageState extends State<DevicePage> {
   int _globalReceivedData = 0;
   int _globalExpectedLength = 1;
   int tappedIndex = 0;
+  int checkNoOfWrites = 0;
 
   List<int> currentFileData = [];
   List<int> logData = [];
@@ -271,13 +271,15 @@ class _DevicePageState extends State<DevicePage> {
         _sendCurrentDateTime(device);
       } else if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "readDevice") {
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "eraseAll") {
+      } else if (_connectionState == BluetoothConnectionState.connected && selectedOption == "eraseAll") {
+        _eraseAllLogs(context, device);
       } else {
         //device.disconnect();
       }
     });
   }
+
+  static const int FILE_HEADER_LEN = 8;
 
   Future<void> _writeLogDataToFile(
     List<int> mData,
@@ -288,7 +290,7 @@ class _DevicePageState extends State<DevicePage> {
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
-    int logNumberPoints = ((mData.length - 1) ~/ 16);
+    int logNumberPoints = ((mData.length-1) ~/ 16);
 
     //List<String> data1 = ['1', 'Bilal Saeed', '1374934', '912839812'];
     List<List<String>> dataList = []; //Outter List which contains the data List
@@ -346,35 +348,20 @@ class _DevicePageState extends State<DevicePage> {
   bool isFetchIconTap = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
-  Future<void> listenForIndex(
-    BluetoothDevice deviceName,
-    int expectedLength,
-    String sessionID,
-    String formattedTime,
-  ) async {
-    logConsole("Started listening for index....");
-
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen(
-      (value) async {},
-    );
-  }
-
   Future<void> _startListeningData(
     BluetoothDevice deviceName,
     int expectedLength,
     int sessionID,
     String formattedTime,
   ) async {
-    List<int> buffer = [];
-    String fileName = "";
 
     logConsole("Started listening....");
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
       value,
     ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      logConsole("Data Rx: $value");
-      //logConsole("Data Rx in hex: " +  hex.encode(value).toString());
+      //logConsole("Data Rx: $value");
+      logConsole("Data Rx in hex: " +  hex.encode(value).toString());
       int pktType = bdata.getUint8(0);
 
       /**** Packet type Command Response ***/
@@ -394,25 +381,6 @@ class _DevicePageState extends State<DevicePage> {
           "Data Index session start: ${bdata.getInt64(1, Endian.little)}",
         );
 
-        buffer.addAll(value);
-
-        /*if (buffer.length >= 21) {
-          try {
-            int fileLength = ByteData.sublistView(Uint8List.fromList(buffer))
-                .getUint32(17, Endian.little);
-            logConsole("fileLength... " + fileLength.toString());
-
-            //List<int> fileNameBytes = buffer. .sublist(1, 16); // Example: extract the first 16 bytes for fileName
-            //fileName = String.fromCharCodes(fileNameBytes); // Decode as UTF-8 string
-            //logConsole("fileName... " + fileName);
-          } catch (e) {
-            logConsole("Error processing the packet: $e");
-          }
-
-          // After processing, clear the buffer if needed
-          buffer.clear();
-        }*/
-
         int logFileID = bdata.getInt64(1, Endian.little);
          int sessionLength = bdata.getInt16(9, Endian.little);
         logConsole("Log file ID: $logFileID | Length: $sessionLength");
@@ -426,19 +394,25 @@ class _DevicePageState extends State<DevicePage> {
             logIndexReceived = true;
           });
 
-          logConsole("All logs received. Cancel subscription");
           logConsole("All logs Header.......$logHeaderList");
 
-          for (int i = 0; i <= logHeaderList.length; i++) {
+          /*for (int i = 0; i <= logHeaderList.length; i++) {
             Future.delayed(Duration(seconds: 2), () async {
-              /*_fetchLogFile(
-                deviceName,
+              _fetchLogFile(deviceName,
                 logHeaderList[i].logFileID,
                 logHeaderList[i].sessionLength,
                 "",
-              );*/
+              );
             });
-          }
+          }*/
+
+          Future.delayed(Duration(seconds: 2), () async {
+            _fetchLogFile(deviceName,
+              logHeaderList[0].logFileID,
+              logHeaderList[0].sessionLength,
+              "",
+            );
+          });
 
           await _streamDataSubscription.cancel();
         }
@@ -447,32 +421,33 @@ class _DevicePageState extends State<DevicePage> {
       else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
         int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
 
-        logConsole(
-          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
+        logConsole("Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
         );
         currentFileDataCounter += pktPayloadSize;
         _globalReceivedData += pktPayloadSize;
+        checkNoOfWrites += 1;
+
+        logConsole("No of writes $checkNoOfWrites");
+        logConsole("Data Counter $currentFileDataCounter");
+
         logData.addAll(value.sublist(1, value.length));
 
-        setState(() {
-          displayPercent =
-              globalDisplayPercentOffset +
+        /*setState(() {
+          displayPercent = globalDisplayPercentOffset +
               (_globalReceivedData / _globalExpectedLength) * 100.truncate();
           if (displayPercent > 100) {
             displayPercent = 100;
           }
-        });
+        });*/
 
-        logConsole(
-          "File data counter: $currentFileDataCounter | Received: $displayPercent%",
-        );
+        //logConsole("File data counter: $currentFileDataCounter | Received: $displayPercent%",);
 
-        if (currentFileDataCounter >= (expectedLength)) {
+       /* if (currentFileDataCounter >= (expectedLength)) {
           logConsole("All data $currentFileDataCounter received");
 
           if (currentFileDataCounter > expectedLength) {
             int diffData = currentFileDataCounter - expectedLength;
-            logConsole("Data received more than expected by: $diffData bytes");
+            //logConsole("Data received more than expected by: $diffData bytes");
           }
 
           //await _writeLogDataToFile(logData, sessionID, formattedTime);
@@ -489,8 +464,9 @@ class _DevicePageState extends State<DevicePage> {
           globalDisplayPercentOffset = 0;
           currentFileDataCounter = 0;
           _globalReceivedData = 0;
+          checkNoOfWrites = 0;
           logData.clear();
-        }
+        }*/
       }
     });
 
@@ -555,39 +531,31 @@ class _DevicePageState extends State<DevicePage> {
     //logData.clear();
 
     await Future.delayed(Duration(seconds: 2), () async {
-      //List<int> uint8Data = utf8.encode(sessionID);
-      //print(uint8Data);
-
-      /*ByteData sessionIDLength = new ByteData(16);
-
-      sessionIDLength.setUint8(0, uint8Data[0]);
-      sessionIDLength.setUint8(1, uint8Data[1]);
-      sessionIDLength.setUint8(2, uint8Data[2]);
-      sessionIDLength.setUint8(3, uint8Data[3]);
-      sessionIDLength.setUint8(4, uint8Data[4]);
-      sessionIDLength.setUint8(5, uint8Data[5]);
-      sessionIDLength.setUint8(6, uint8Data[6]);
-      sessionIDLength.setUint8(7, uint8Data[7]);
-      sessionIDLength.setUint8(8, uint8Data[8]);
-      sessionIDLength.setUint8(9, uint8Data[9]);
-      sessionIDLength.setUint8(10, uint8Data[10]);
-      sessionIDLength.setUint8(11, uint8Data[11]);
-      sessionIDLength.setUint8(12, uint8Data[12]);
-      sessionIDLength.setUint8(13, uint8Data[13]);
-      sessionIDLength.setUint8(14, uint8Data[14]);
-      sessionIDLength.setUint8(15, uint8Data[15]);
-
-      Uint8List cmdByteList = sessionIDLength.buffer.asUint8List(0, 15);
-
-      logConsole("Sending file name: $cmdByteList");
-
+      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize",);
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
-      commandFetchLogFile.addAll(cmdByteList);
-      */
-      //await _sendCommand(commandFetchLogFile, deviceName);
+     // commandFetchLogFile.addAll(hPi4Global.HrTrend);
+      for (int shift = 0; shift <= 56; shift += 8) {
+        commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+      }
+      await _sendCommand(commandFetchLogFile, deviceName);
     });
   }
+
+  Future<void> _eraseAllLogs(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Erase All initiated");
+    //showLoadingIndicator("Erasing logs...", context);
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogWipeAll);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    //Navigator.pop(context);
+  }
+
 
   Future<void> _sendCommand(
     List<int> commandList,
@@ -620,6 +588,7 @@ class _DevicePageState extends State<DevicePage> {
 
   Future onRefresh() {
     if (_isScanning == false) {
+
       FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
     }
 
@@ -635,6 +604,8 @@ class _DevicePageState extends State<DevicePage> {
         minimumSize: Size(SizeConfig.blockSizeHorizontal * 40, 40),
       ),
       onPressed: () {
+
+        onRefresh();
         onScanPressed();
       },
       child: Padding(
@@ -1005,6 +976,54 @@ class _DevicePageState extends State<DevicePage> {
                                                   ),
                                                   const Text(
                                                     ' Fetch Logs ',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                              hPi4Global
+                                                  .hpi4Color, // background color
+                                              foregroundColor:
+                                              Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(20),
+                                              ),
+                                              minimumSize: Size(
+                                                SizeConfig.blockSizeHorizontal *
+                                                    100,
+                                                40,
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              setState(() {
+                                                selectedOption = "eraseAll";
+                                              });
+                                              showScanDialog();
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Icons.delete,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    ' Erase Logs ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,

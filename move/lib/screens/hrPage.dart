@@ -182,7 +182,7 @@ class _HRPageState extends State<HRPage>
           timestamps.add(timestamp);
           String timestamp1 = timestamp.split(",")[0];
           String fileName1 = p.basename(file.path);
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp1));
+          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp1*1000));
           DateTime now = DateTime.now();
           String todayStr = _formatDate(now);
           if (timestampDateTime != null && _formatDate(timestampDateTime) == todayStr) {
