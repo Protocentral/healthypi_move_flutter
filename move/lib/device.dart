@@ -58,6 +58,8 @@ class _DevicePageState extends State<DevicePage> {
   int tappedIndex = 0;
   int checkNoOfWrites = 0;
 
+  int noOfFiles = 0;
+
   List<int> currentFileData = [];
   List<int> logData = [];
 
@@ -281,6 +283,12 @@ class _DevicePageState extends State<DevicePage> {
 
   static const int FILE_HEADER_LEN = 8;
 
+// Function for converting little-endian bytes to integer
+  int convertLittleEndianToInteger(List<int> bytes) {
+    List<int> reversedBytes = bytes.reversed.toList();
+    return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
+  }
+
   Future<void> _writeLogDataToFile(
     List<int> mData,
     int sessionID,
@@ -290,27 +298,43 @@ class _DevicePageState extends State<DevicePage> {
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
+    //logConsole("writing to file - hex: " +  hex.encode(mData));
+
     int logNumberPoints = ((mData.length-1) ~/ 16);
 
-    //List<String> data1 = ['1', 'Bilal Saeed', '1374934', '912839812'];
+    //logConsole("log no of point: " +  logNumberPoints.toString());
+
     List<List<String>> dataList = []; //Outter List which contains the data List
 
     List<String> header = [];
 
     header.add("Timestamp");
-    header.add("Min");
     header.add("Max");
+    header.add("Min");
     header.add("avg");
     header.add("latest");
     dataList.add(header);
 
     for (int i = 0; i < logNumberPoints; i++) {
+      // Extracting 16 bytes of data for the current row
+      List<int> bytes = bdata.buffer.asUint8List(i * 16, 16);
+
+      // Convert the first 8 bytes (timestamp) from little-endian to integer
+      int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
+
+      // Extract other data values (2 bytes each) and convert them
+      int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
+      int value2 = convertLittleEndianToInteger(bytes.sublist(10, 12));
+      int value3 = convertLittleEndianToInteger(bytes.sublist(12, 14));
+      int value4 = convertLittleEndianToInteger(bytes.sublist(14, 16));
+
+      // Construct the row data
       List<String> dataRow = [
-        bdata.getUint64((i * 16), Endian.little).toString(),
-        bdata.getInt16((i * 16) + 8, Endian.little).toString(),
-        bdata.getInt16((i * 16) + 10, Endian.little).toString(),
-        bdata.getInt16((i * 16) + 12, Endian.little).toString(),
-        bdata.getInt16((i * 16) + 14, Endian.little).toString(),
+        timestamp.toString(),
+        value1.toString(),
+        value2.toString(),
+        value3.toString(),
+        value4.toString(),
       ];
       dataList.add(dataRow);
     }
@@ -348,17 +372,19 @@ class _DevicePageState extends State<DevicePage> {
   bool isFetchIconTap = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
+  int currentFileIndex = 0; // Track the current file being fetched
+
   Future<void> _startListeningData(
-    BluetoothDevice deviceName,
-    int expectedLength,
-    int sessionID,
-    String formattedTime,
-  ) async {
+      BluetoothDevice deviceName,
+      int expectedLength,
+      int sessionID,
+      String formattedTime,
+      ) async {
 
     logConsole("Started listening....");
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-      value,
-    ) async {
+        value,
+        ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       //logConsole("Data Rx: $value");
       logConsole("Data Rx in hex: " +  hex.encode(value).toString());
@@ -382,12 +408,16 @@ class _DevicePageState extends State<DevicePage> {
         );
 
         int logFileID = bdata.getInt64(1, Endian.little);
-         int sessionLength = bdata.getInt16(9, Endian.little);
+        int sessionLength = bdata.getInt16(9, Endian.little);
         logConsole("Log file ID: $logFileID | Length: $sessionLength");
 
         LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
 
-        logHeaderList.add(mLog);
+        setState(() {
+          logHeaderList.add(mLog);
+        });
+
+        //logHeaderList.add(mLog);
 
         if (logHeaderList.length == totalSessionCount) {
           setState(() {
@@ -396,25 +426,15 @@ class _DevicePageState extends State<DevicePage> {
 
           logConsole("All logs Header.......$logHeaderList");
 
-          /*for (int i = 0; i <= logHeaderList.length; i++) {
-            Future.delayed(Duration(seconds: 2), () async {
-              _fetchLogFile(deviceName,
-                logHeaderList[i].logFileID,
-                logHeaderList[i].sessionLength,
-                "",
-              );
-            });
-          }*/
-
-          Future.delayed(Duration(seconds: 2), () async {
-            _fetchLogFile(deviceName,
-              logHeaderList[0].logFileID,
-              logHeaderList[0].sessionLength,
-              "",
-            );
-          });
-
-          await _streamDataSubscription.cancel();
+          /*_fetchLogFile(deviceName,
+            logHeaderList[0].logFileID,
+            logHeaderList[0].sessionLength,
+            "",
+          );*/
+          // Start fetching the first log file
+          _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
+              logHeaderList[currentFileIndex].sessionLength, "");
+          //await _streamDataSubscription.cancel();
         }
       }
       /***** Packet type Log Data ***/
@@ -432,25 +452,19 @@ class _DevicePageState extends State<DevicePage> {
 
         logData.addAll(value.sublist(1, value.length));
 
-        /*setState(() {
-          displayPercent = globalDisplayPercentOffset +
-              (_globalReceivedData / _globalExpectedLength) * 100.truncate();
-          if (displayPercent > 100) {
-            displayPercent = 100;
-          }
-        });*/
-
-        //logConsole("File data counter: $currentFileDataCounter | Received: $displayPercent%",);
-
-       /* if (currentFileDataCounter >= (expectedLength)) {
+        if (currentFileDataCounter >=
+            (logHeaderList[currentFileIndex].sessionLength)) {
           logConsole("All data $currentFileDataCounter received");
 
-          if (currentFileDataCounter > expectedLength) {
-            int diffData = currentFileDataCounter - expectedLength;
-            //logConsole("Data received more than expected by: $diffData bytes");
+          if (currentFileDataCounter >
+              logHeaderList[currentFileIndex].sessionLength) {
+            int diffData = currentFileDataCounter -
+                logHeaderList[currentFileIndex].sessionLength;
           }
 
-          //await _writeLogDataToFile(logData, sessionID, formattedTime);
+          await _writeLogDataToFile(
+              logData, logHeaderList[currentFileIndex].logFileID, formattedTime);
+
 
           //Navigator.pop(context);
 
@@ -466,7 +480,20 @@ class _DevicePageState extends State<DevicePage> {
           _globalReceivedData = 0;
           checkNoOfWrites = 0;
           logData.clear();
-        }*/
+
+          // Move to the next file
+          currentFileIndex++;
+          if (currentFileIndex < logHeaderList.length) {
+            // Fetch the next log file
+            _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
+                logHeaderList[currentFileIndex].sessionLength, "");
+          } else {
+            logConsole("All files have been fetched.");
+            await _streamDataSubscription.cancel();
+          }
+
+        }
+
       }
     });
 
@@ -521,7 +548,7 @@ class _DevicePageState extends State<DevicePage> {
     isTransfering = true;
     //await _startListeningCommand(deviceID);
     // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
-    await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
+    //await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
 
     // Reset all fetch variables
     currentFileDataCounter = 0;
@@ -534,7 +561,7 @@ class _DevicePageState extends State<DevicePage> {
       logConsole("Fetch logs file entered: $sessionID, size: $sessionSize",);
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
-     // commandFetchLogFile.addAll(hPi4Global.HrTrend);
+      commandFetchLogFile.addAll(hPi4Global.HrTrend);
       for (int shift = 0; shift <= 56; shift += 8) {
         commandFetchLogFile.add((sessionID >> shift) & 0xFF);
       }

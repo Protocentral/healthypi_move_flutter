@@ -29,11 +29,13 @@ class _HRPageState extends State<HRPage>
   List<String> timestamp = [];
   List<String> minHR = [];
   List<String> maxHR =[];
+  List<String> avgHR =[];
+  List<String> latestHR =[];
 
-  int avgHR = 0;
   int restingHR = 0;
   int rangeMinHR = 0;
   int rangeMaxHR = 0;
+  int averageHR = 0;
 
   List<HRTrends> hrTrendsData = [];
 
@@ -175,21 +177,29 @@ class _HRPageState extends State<HRPage>
         List<String> fileNames = csvFiles.map((file) => p.basename(file.path)).toList();
         print("......"+fileNames.toString());
 
-        List<String> timestamps = [];
+        //List<String> timestamps = [];
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
-          timestamps.add(timestamp);
+          //timestamps.add(timestamp);
           String timestamp1 = timestamp.split(",")[0];
+          int timestamp2 = int.parse(timestamp1);
+          int updatedTimestamp = timestamp2*1000;
+          print("......"+timestamp.toString());
+          print("......"+timestamp1.toString());
+          print("......"+ updatedTimestamp.toString());
           String fileName1 = p.basename(file.path);
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(int.parse(timestamp1*1000));
+
+          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+          print("......"+timestampDateTime.toString());
           DateTime now = DateTime.now();
+          print("......"+now.toString());
           String todayStr = _formatDate(now);
-          if (timestampDateTime != null && _formatDate(timestampDateTime) == todayStr) {
+          if (_formatDate(timestampDateTime) == todayStr) {
             getFileData(fileName1);
-            //print("same..........");
+            print("same..........");
           }else{
-            //print("different........");
+            print("different........");
           }
 
         }
@@ -254,25 +264,35 @@ class _HRPageState extends State<HRPage>
 
     maxHR = result.map((f) => f.split(",")[2]).toList();
 
+    avgHR = result.map((f) => f.split(",")[3]).toList();
+
+    latestHR = result.map((f) => f.split(",")[4]).toList();
+
     //print(".............Timestamp"+ timestamp.toString());
     //print(".............min"+minHR.toString());
     //print(".............max"+maxHR.toString());
 
     for(int i = 1; i< timestamp.length; i++){
       int tempTimeStamp = 0;
+      int tempTimeStamp1 = 0;
       int tempMinHR = 0;
       int tempMaxHR = 0;
+      int tempAvgHR = 0;
+      int tempLatestHR = 0;
 
       tempTimeStamp = int.parse(timestamp[i]);
+      tempTimeStamp1 = tempTimeStamp*1000;
       tempMinHR = int.parse(minHR[i]);
       tempMaxHR = int.parse(maxHR[i]);
+      tempAvgHR = int.parse(avgHR[i]);
+      tempLatestHR = int.parse(latestHR[i]);
 
       setState((){
-        hrTrendsData.add(HRTrends(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp),
+        hrTrendsData.add(HRTrends(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1),
             tempMinHR, tempMaxHR));
         if( i == timestamp.length-1){
-          avgHR = tempMinHR;
-          restingHR = tempMinHR;
+          averageHR = tempAvgHR;
+          restingHR = tempLatestHR;
           rangeMinHR = tempMinHR;
           rangeMaxHR = tempMaxHR;
         }
@@ -395,7 +415,7 @@ class _HRPageState extends State<HRPage>
                                           SizedBox(
                                             width: 10.0,
                                           ),
-                                          Text(avgHR.toString(),
+                                          Text(averageHR.toString(),
                                               style: hPi4Global.moveValueTextStyle),
                                           SizedBox(
                                             width: 15.0,
@@ -445,7 +465,7 @@ class _HRPageState extends State<HRPage>
                                           SizedBox(
                                             width: 10.0,
                                           ),
-                                          Text('RESTING',
+                                          Text('Latest',
                                               style: hPi4Global.movecardSubValueTextStyle),
                                         ],
                                       ),
