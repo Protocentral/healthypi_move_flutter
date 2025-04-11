@@ -40,6 +40,9 @@ PODS:
   - flutter_blue_plus_darwin (0.0.2):
     - Flutter
     - FlutterMacOS
+  - geolocator_apple (1.2.0):
+    - Flutter
+    - FlutterMacOS
   - iOSMcuManagerLibrary (1.6):
     - SwiftCBOR (= 0.4.4)
   - mcumgr_flutter (0.0.2):
@@ -71,6 +74,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_archive (from `.symlinks/plugins/flutter_archive/ios`)
   - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
+  - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
@@ -98,6 +102,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_archive/ios"
   flutter_blue_plus_darwin:
     :path: ".symlinks/plugins/flutter_blue_plus_darwin/darwin"
+  geolocator_apple:
+    :path: ".symlinks/plugins/geolocator_apple/darwin"
   mcumgr_flutter:
     :path: ".symlinks/plugins/mcumgr_flutter/ios"
   package_info_plus:
@@ -118,6 +124,7 @@ SPEC CHECKSUMS:
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_archive: cb3e0219e555897ba4b36f166baa1eca394890b9
   flutter_blue_plus_darwin: 3ea4ec9133b377febcc8a70b28cd2d2dc9242bd9
+  geolocator_apple: 66b711889fd333205763b83c9dcf0a57a28c7afd
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
   mcumgr_flutter: 097e59bec5917b527ba6d095da57bdaed2de1fa2
   package_info_plus: 115f4ad11e0698c8c1c5d8a689390df880f47e85

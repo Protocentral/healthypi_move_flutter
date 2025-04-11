@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dfu.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -74,7 +75,9 @@ class _DevicePageState extends State<DevicePage> {
   @override
   void initState() {
     super.initState();
-
+    /*if (Platform.isAndroid) {
+      requestPermissions();
+    }*/
     if (_isScanning == false) {
       FlutterBluePlus.startScan(
         withNames: ['healthypi move'],
@@ -95,6 +98,17 @@ class _DevicePageState extends State<DevicePage> {
     });
   }
 
+
+  @override
+  Future<void> dispose() async {
+    _scanResultsSubscription.cancel();
+    _isScanningSubscription.cancel();
+    _connectionStateSubscription.cancel();
+    onStopPressed();
+    super.dispose();
+  }
+
+
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
@@ -113,20 +127,12 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
-  @override
-  Future<void> dispose() async {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    _connectionStateSubscription.cancel();
-    onStopPressed();
-    super.dispose();
-  }
 
   void setStateIfMounted(f) {
     if (mounted) setState(f);
   }
 
-  Future<void> _sendCurrentDateTime(BluetoothDevice deviceName) async {
+  Future<void> _sendCurrentDateTime(BluetoothDevice deviceName, String selectedOption) async {
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -184,7 +190,13 @@ class _DevicePageState extends State<DevicePage> {
       logConsole('Data written: $commandDateTimePacket');
     }
 
-    await deviceName.disconnect();
+    if(selectedOption == "Set Time"){
+      await deviceName.disconnect();
+    }else{
+      /// Do Nothing;
+    }
+
+
   }
 
   Future onScanPressed() async {
@@ -218,6 +230,18 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
+  Future<void> requestPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.manageExternalStorage,
+      Permission.storage,
+    ].request();
+
+    if (statuses.containsValue(PermissionStatus.denied)) {
+      print("permission denied");
+    }else{
+    }
+  }
+
   void onConnectPressed(BluetoothDevice device) {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
@@ -228,6 +252,7 @@ class _DevicePageState extends State<DevicePage> {
     });
 
     Navigator.pop(context);
+
 
     _connectionStateSubscription = device.connectionState.listen((state) async {
       _connectionState = state;
@@ -250,7 +275,10 @@ class _DevicePageState extends State<DevicePage> {
         //await device.disconnect();
         /*Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => HomePage()));*/
+        showLoadingIndicator("Connected. Syncing the data...", context);
         await subscribeToChar(device);
+        _sendCurrentDateTime(device, "Sync");
+        Navigator.pop(context);
         Future.delayed(Duration(seconds: 2), () async {
           await _fetchLogCount(context, device);
         });
@@ -270,7 +298,7 @@ class _DevicePageState extends State<DevicePage> {
         );
       } else if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "setTime") {
-        _sendCurrentDateTime(device);
+        _sendCurrentDateTime(device, "Set Time");
       } else if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "readDevice") {
       } else if (_connectionState == BluetoothConnectionState.connected && selectedOption == "eraseAll") {
@@ -347,9 +375,11 @@ class _DevicePageState extends State<DevicePage> {
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
       _directory = Directory("/storage/emulated/0/Download");
+      //_directory = await getApplicationDocumentsDirectory();
     } else {
       _directory = await getApplicationDocumentsDirectory();
     }
+
     final exPath = _directory.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
@@ -357,14 +387,13 @@ class _DevicePageState extends State<DevicePage> {
     final String directory = exPath;
 
     File file = File('$directory/hr_$sessionID.csv');
-    ;
     print("Save file");
 
     await file.writeAsString(csv);
 
     logConsole("File exported successfully!");
 
-    //await _showDownloadSuccessDialog();
+   // await _showDownloadSuccessDialog();
   }
 
   bool logIndexReceived = false;
@@ -426,14 +455,10 @@ class _DevicePageState extends State<DevicePage> {
 
           logConsole("All logs Header.......$logHeaderList");
 
-          /*_fetchLogFile(deviceName,
-            logHeaderList[0].logFileID,
-            logHeaderList[0].sessionLength,
-            "",
-          );*/
           // Start fetching the first log file
-          _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
-              logHeaderList[currentFileIndex].sessionLength, "");
+         /* _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
+              logHeaderList[currentFileIndex].sessionLength, "");*/
+          _fetchNextLogFile(deviceName);
           //await _streamDataSubscription.cancel();
         }
       }
@@ -452,18 +477,16 @@ class _DevicePageState extends State<DevicePage> {
 
         logData.addAll(value.sublist(1, value.length));
 
-        if (currentFileDataCounter >=
-            (logHeaderList[currentFileIndex].sessionLength)) {
+        if (currentFileDataCounter >= (logHeaderList[currentFileIndex-1].sessionLength)) {
           logConsole("All data $currentFileDataCounter received");
 
           if (currentFileDataCounter >
-              logHeaderList[currentFileIndex].sessionLength) {
+              logHeaderList[currentFileIndex-1].sessionLength) {
             int diffData = currentFileDataCounter -
-                logHeaderList[currentFileIndex].sessionLength;
+                logHeaderList[currentFileIndex-1].sessionLength;
           }
 
-          await _writeLogDataToFile(
-              logData, logHeaderList[currentFileIndex].logFileID, formattedTime);
+          await _writeLogDataToFile(logData, logHeaderList[currentFileIndex-1].logFileID, formattedTime);
 
 
           //Navigator.pop(context);
@@ -485,8 +508,9 @@ class _DevicePageState extends State<DevicePage> {
           currentFileIndex++;
           if (currentFileIndex < logHeaderList.length) {
             // Fetch the next log file
-            _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
-                logHeaderList[currentFileIndex].sessionLength, "");
+            /*_fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
+                logHeaderList[currentFileIndex].sessionLength, "");*/
+            _fetchNextLogFile(deviceName);
           } else {
             logConsole("All files have been fetched.");
             await _streamDataSubscription.cancel();
@@ -498,7 +522,67 @@ class _DevicePageState extends State<DevicePage> {
     });
 
     // cleanup: cancel subscription when disconnected
+
     deviceName.cancelWhenDisconnected(_streamDataSubscription);
+  }
+
+  Future<void> _fetchNextLogFile(BluetoothDevice deviceName) async {
+    // Get today's date in the same format as `formattedTime`
+    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    while (currentFileIndex < logHeaderList.length) {
+      int logFileID = logHeaderList[currentFileIndex].logFileID;
+      int updatedTimestamp =logFileID*1000;
+
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
+
+      if (fileDate == todayDate) {
+        logConsole("Today's file detected with ID $logFileID. Always downloading...");
+        _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
+        currentFileIndex++;
+        continue;
+      }
+
+      // Check if the file exists
+      bool fileExists = await _doesFileExist(logFileID);
+
+      if (fileExists) {
+        logConsole("File with ID $logFileID already exists. Skipping...");
+        currentFileIndex++;
+      } else {
+        logConsole("Fetching file with ID $logFileID...");
+        _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
+        break; // Exit the loop to fetch the current file
+      }
+    }
+
+    if (currentFileIndex >= logHeaderList.length) {
+      logConsole("All files have been processed.");
+    }
+  }
+
+  Future<bool> _doesFileExist(int logFileID) async {
+    // Construct the file path
+    String filePath = await _getLogFilePath(logFileID);
+
+    // Check if the file exists
+    return await File(filePath).exists();
+  }
+
+  Future<String> _getLogFilePath(int logFileID) async {
+    // Define the file path logic here
+    String directoryPath;
+    if (Platform.isAndroid) {
+      // Redirects it to download folder in android
+      //_directory = Directory("/storage/emulated/0/Download");
+       directoryPath = (await Directory("/storage/emulated/0/Download")).path;
+      //_directory = await getApplicationDocumentsDirectory();
+    } else {
+     // _directory = await getApplicationDocumentsDirectory();
+      directoryPath = (await getApplicationDocumentsDirectory()).path;
+    }
+    return "$directoryPath/hr_$logFileID.csv";
   }
 
   Future<void> _fetchLogCount(
@@ -506,7 +590,7 @@ class _DevicePageState extends State<DevicePage> {
     BluetoothDevice deviceName,
   ) async {
     logConsole("Fetch log count initiated");
-    //showLoadingIndicator("Fetching logs count...", context);
+    showLoadingIndicator("Fetching logs count...", context);
     //await _startListeningCommand(deviceID);
     await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
@@ -516,7 +600,7 @@ class _DevicePageState extends State<DevicePage> {
 
       await _sendCommand(commandPacket, deviceName);
     });
-    //Navigator.pop(context);
+    Navigator.pop(context);
   }
 
   Future<void> _fetchLogIndex(
@@ -524,7 +608,7 @@ class _DevicePageState extends State<DevicePage> {
     BluetoothDevice deviceName,
   ) async {
     logConsole("Fetch log index initiated");
-    //showLoadingIndicator("Fetching logs...", context);
+    showLoadingIndicator("Fetching logs index...", context);
     //await _startListeningCommand(deviceID);
     await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
@@ -533,7 +617,7 @@ class _DevicePageState extends State<DevicePage> {
       commandPacket.addAll(hPi4Global.HrTrend);
       await _sendCommand(commandPacket, deviceName);
     });
-    //Navigator.pop(context);
+    Navigator.pop(context);
   }
 
   Future<void> _fetchLogFile(
@@ -546,6 +630,7 @@ class _DevicePageState extends State<DevicePage> {
       "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
     );
     isTransfering = true;
+    showLoadingIndicator("Fetching file $sessionID...", context);
     //await _startListeningCommand(deviceID);
     // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
     //await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
@@ -567,6 +652,7 @@ class _DevicePageState extends State<DevicePage> {
       }
       await _sendCommand(commandFetchLogFile, deviceName);
     });
+    Navigator.pop(context);
   }
 
   Future<void> _eraseAllLogs(
@@ -710,6 +796,55 @@ class _DevicePageState extends State<DevicePage> {
             );
           },
         );
+      },
+    );
+  }
+
+  Future<void> _showDownloadSuccessDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // user must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Downloaded'),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Icon(Icons.check_circle, color: Colors.green, size: 72),
+                Center(
+                  child: Text(
+                    'File downloaded successfully!.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Close'),
+              onPressed: () {
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showLoadingIndicator(String text, BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+            onWillPop: () async => false,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(8.0))),
+              backgroundColor: Colors.black87,
+              content: LoadingIndicator(text: text),
+            ));
       },
     );
   }

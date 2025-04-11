@@ -111,14 +111,6 @@ class DeviceManagementState extends State<DeviceManagement> {
         return Row(
           children: [
             ElevatedButton(
-              /*style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4AppBarIconsColor, // background color
-                foregroundColor: hPi4Global.hpi4AppBarColor, // text color
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                minimumSize: Size(SizeConfig.blockSizeHorizontal*20, 20),
-              ),*/
               onPressed: details.onStepContinue,
               child: Text('Next',style: new TextStyle(fontSize: 12, color: hPi4Global.hpi4AppBarColor)),
             ),
@@ -135,14 +127,6 @@ class DeviceManagementState extends State<DeviceManagement> {
               child: Text('Back',style: new TextStyle(fontSize: 12, color: hPi4Global.hpi4AppBarIconsColor)),
             ),
             ElevatedButton(
-              /*style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4AppBarIconsColor, // background color
-                foregroundColor: hPi4Global.hpi4AppBarColor, // text color
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                minimumSize: Size(SizeConfig.blockSizeHorizontal*20, 20),
-              ),*/
               onPressed: details.onStepContinue,
               child: Text('Next',style: new TextStyle(fontSize: 12, color: hPi4Global.hpi4AppBarColor)),
             ),
