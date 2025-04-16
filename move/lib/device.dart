@@ -1,5 +1,3 @@
-import 'dart:convert';
-//import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
@@ -272,9 +270,6 @@ class _DevicePageState extends State<DevicePage> {
 
       if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "sync") {
-        //await device.disconnect();
-        /*Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => HomePage()));*/
         showLoadingIndicator("Connected. Syncing the data...", context);
         await subscribeToChar(device);
         _sendCurrentDateTime(device, "Sync");
@@ -374,8 +369,8 @@ class _DevicePageState extends State<DevicePage> {
     Directory _directory = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
-      _directory = Directory("/storage/emulated/0/Download");
-      //_directory = await getApplicationDocumentsDirectory();
+      //_directory = Directory("/storage/emulated/0/Download");
+      _directory = await getApplicationDocumentsDirectory();
     } else {
       _directory = await getApplicationDocumentsDirectory();
     }
@@ -446,8 +441,6 @@ class _DevicePageState extends State<DevicePage> {
           logHeaderList.add(mLog);
         });
 
-        //logHeaderList.add(mLog);
-
         if (logHeaderList.length == totalSessionCount) {
           setState(() {
             logIndexReceived = true;
@@ -455,9 +448,6 @@ class _DevicePageState extends State<DevicePage> {
 
           logConsole("All logs Header.......$logHeaderList");
 
-          // Start fetching the first log file
-         /* _fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
-              logHeaderList[currentFileIndex].sessionLength, "");*/
           _fetchNextLogFile(deviceName);
           //await _streamDataSubscription.cancel();
         }
@@ -474,20 +464,14 @@ class _DevicePageState extends State<DevicePage> {
 
         logConsole("No of writes $checkNoOfWrites");
         logConsole("Data Counter $currentFileDataCounter");
+        logConsole(logHeaderList[currentFileIndex].sessionLength.toString());
 
         logData.addAll(value.sublist(1, value.length));
 
-        if (currentFileDataCounter >= (logHeaderList[currentFileIndex-1].sessionLength)) {
+        if (currentFileDataCounter >= logHeaderList[currentFileIndex].sessionLength-1) {
           logConsole("All data $currentFileDataCounter received");
 
-          if (currentFileDataCounter >
-              logHeaderList[currentFileIndex-1].sessionLength) {
-            int diffData = currentFileDataCounter -
-                logHeaderList[currentFileIndex-1].sessionLength;
-          }
-
-          await _writeLogDataToFile(logData, logHeaderList[currentFileIndex-1].logFileID, formattedTime);
-
+          await _writeLogDataToFile(logData, logHeaderList[currentFileIndex].logFileID, formattedTime);
 
           //Navigator.pop(context);
 
@@ -505,17 +489,22 @@ class _DevicePageState extends State<DevicePage> {
           logData.clear();
 
           // Move to the next file
-          currentFileIndex++;
-          if (currentFileIndex < logHeaderList.length) {
+          if (currentFileIndex + 1 < logHeaderList.length) {
+            currentFileIndex++; // Increment safely
             // Fetch the next log file
-            /*_fetchLogFile(deviceName, logHeaderList[currentFileIndex].logFileID,
-                logHeaderList[currentFileIndex].sessionLength, "");*/
             _fetchNextLogFile(deviceName);
           } else {
-            logConsole("All files have been fetched.");
-            await _streamDataSubscription.cancel();
+            logConsole("All HR files have been fetched. Starting SpO2 file fetching...");
+            /*Future.delayed(Duration(seconds: 2), () async {
+              await _fetchSpo2LogCount(context, deviceName);
+            });
+            Future.delayed(Duration(seconds: 2), () async {
+              await _fetchSpo2LogIndex(context, deviceName);
+            });*/
           }
 
+        }else{
+          logConsole("Invalid index or condition not met: currentFileIndex=$currentFileIndex");
         }
 
       }
@@ -526,39 +515,38 @@ class _DevicePageState extends State<DevicePage> {
     deviceName.cancelWhenDisconnected(_streamDataSubscription);
   }
 
+
   Future<void> _fetchNextLogFile(BluetoothDevice deviceName) async {
-    // Get today's date in the same format as `formattedTime`
     String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     while (currentFileIndex < logHeaderList.length) {
       int logFileID = logHeaderList[currentFileIndex].logFileID;
-      int updatedTimestamp =logFileID*1000;
+      int updatedTimestamp = logFileID * 1000;
 
       DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
         logConsole("Today's file detected with ID $logFileID. Always downloading...");
-        _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
-        currentFileIndex++;
-        continue;
-      }
-
-      // Check if the file exists
-      bool fileExists = await _doesFileExist(logFileID);
-
-      if (fileExists) {
-        logConsole("File with ID $logFileID already exists. Skipping...");
-        currentFileIndex++;
+        await _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
       } else {
-        logConsole("Fetching file with ID $logFileID...");
-        _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
-        break; // Exit the loop to fetch the current file
+        bool fileExists = await _doesFileExist(logFileID);
+
+        if (fileExists) {
+          logConsole("File with ID $logFileID already exists. Skipping...");
+        } else {
+          logConsole("Fetching file with ID $logFileID...");
+          await _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
+          break; // Exit the loop to fetch the current file
+        }
       }
+
+      currentFileIndex++;// Increment after processing
     }
 
-    if (currentFileIndex >= logHeaderList.length) {
+    if (currentFileIndex == logHeaderList.length) {
       logConsole("All files have been processed.");
+      currentFileIndex--;
     }
   }
 
@@ -576,7 +564,8 @@ class _DevicePageState extends State<DevicePage> {
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
       //_directory = Directory("/storage/emulated/0/Download");
-       directoryPath = (await Directory("/storage/emulated/0/Download")).path;
+       //directoryPath = (await Directory("/storage/emulated/0/Download")).path;
+       directoryPath = (await getApplicationDocumentsDirectory()).path;
       //_directory = await getApplicationDocumentsDirectory();
     } else {
      // _directory = await getApplicationDocumentsDirectory();
@@ -597,11 +586,46 @@ class _DevicePageState extends State<DevicePage> {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
       commandPacket.addAll(hPi4Global.HrTrend);
-
       await _sendCommand(commandPacket, deviceName);
     });
     Navigator.pop(context);
   }
+
+  Future<void> _fetchSpo2LogCount(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Fetch spo2 log count initiated");
+    showLoadingIndicator("Fetching spo2 logs count...", context);
+    //await _startListeningCommand(deviceID);
+    await _startListeningData(deviceName, 0, 0, "0");
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.getSessionCount);
+      commandPacket.addAll(hPi4Global.Spo2Trend);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+  Future<void> _fetchSpo2LogIndex(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Fetch spo2 log index initiated");
+    showLoadingIndicator("Fetching spo2 logs index...", context);
+    //await _startListeningCommand(deviceID);
+    await _startListeningData(deviceName, 0, 0, "0");
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogIndex);
+      commandPacket.addAll(hPi4Global.Spo2Trend);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+
 
   Future<void> _fetchLogIndex(
     BuildContext context,
@@ -952,7 +976,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ],
                                           ),
                                           SizedBox(height: 10.0),
-                                          ElevatedButton(
+                                          /*ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -1052,7 +1076,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),
-                                          SizedBox(height: 10.0),
+                                          SizedBox(height: 10.0),*/
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -1101,6 +1125,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
+                                         /* SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -1148,7 +1173,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),
-                                          SizedBox(height: 10.0),
+                                          SizedBox(height: 10.0),*/
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -1196,7 +1221,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),
-                                          SizedBox(height: 10.0),
+                                          /*SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -1243,7 +1268,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),
+                                          ),*/
                                           SizedBox(height: 10.0),
                                         ],
                                       ),
