@@ -292,7 +292,7 @@ class _HRPageState extends State<HRPage>
 
       setState((){
         //print(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toString());
-        hrTrendsData.add(HRTrends(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1, isUtc: false),
+        hrTrendsData.add(HRTrends(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1),
             tempMinHR, tempMaxHR));
         if( i == timestamp.length-1){
           averageHR = tempAvgHR;
@@ -309,7 +309,7 @@ class _HRPageState extends State<HRPage>
   // Save a value
   _saveValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestHR', restingHR.toString());
+    await prefs.setString('latestHR', averageHR.toString());
   }
 
   Widget displayCard(String tab){
@@ -365,7 +365,7 @@ class _HRPageState extends State<HRPage>
                                   ],
                                 ),
                                 SizedBox(
-                                  height: 50.0,
+                                  height: 20.0,
                                 ),
                                 Row(
                                   children: <Widget>[

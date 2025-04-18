@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dfu.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -21,8 +22,6 @@ import '../utils/extra.dart';
 
 import 'globals.dart';
 import 'package:flutter/cupertino.dart';
-
-import 'home.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
@@ -52,8 +51,6 @@ class _DevicePageState extends State<DevicePage> {
   int globalTotalFiles = 0;
   int currentFileNumber = 0;
   int currentFileDataCounter = 0;
-  int _globalReceivedData = 0;
-  int _globalExpectedLength = 1;
   int tappedIndex = 0;
   int checkNoOfWrites = 0;
 
@@ -73,9 +70,6 @@ class _DevicePageState extends State<DevicePage> {
   @override
   void initState() {
     super.initState();
-    /*if (Platform.isAndroid) {
-      requestPermissions();
-    }*/
     if (_isScanning == false) {
       FlutterBluePlus.startScan(
         withNames: ['healthypi move'],
@@ -228,18 +222,6 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
-  Future<void> requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.manageExternalStorage,
-      Permission.storage,
-    ].request();
-
-    if (statuses.containsValue(PermissionStatus.denied)) {
-      print("permission denied");
-    }else{
-    }
-  }
-
   void onConnectPressed(BluetoothDevice device) {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
@@ -250,7 +232,6 @@ class _DevicePageState extends State<DevicePage> {
     });
 
     Navigator.pop(context);
-
 
     _connectionStateSubscription = device.connectionState.listen((state) async {
       _connectionState = state;
@@ -299,9 +280,20 @@ class _DevicePageState extends State<DevicePage> {
       } else if (_connectionState == BluetoothConnectionState.connected && selectedOption == "eraseAll") {
         _eraseAllLogs(context, device);
       } else {
-        //device.disconnect();
       }
     });
+  }
+
+  Future<void> disconnectDevice(BluetoothDevice device) async {
+    try {
+      // Disconnect from the given Bluetooth device
+      Future.delayed(Duration(seconds: 2), () async {
+        await device.disconnect();
+      });
+      print('Device disconnected successfully');
+    } catch (e) {
+      print('Error disconnecting from device: $e');
+    }
   }
 
   static const int FILE_HEADER_LEN = 8;
@@ -321,14 +313,8 @@ class _DevicePageState extends State<DevicePage> {
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
-    //logConsole("writing to file - hex: " +  hex.encode(mData));
-
     int logNumberPoints = ((mData.length-1) ~/ 16);
-
-    //logConsole("log no of point: " +  logNumberPoints.toString());
-
     List<List<String>> dataList = []; //Outter List which contains the data List
-
     List<String> header = [];
 
     header.add("Timestamp");
@@ -344,7 +330,6 @@ class _DevicePageState extends State<DevicePage> {
 
       // Convert the first 8 bytes (timestamp) from little-endian to integer
       int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
-
       // Extract other data values (2 bytes each) and convert them
       int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
       int value2 = convertLittleEndianToInteger(bytes.sublist(10, 12));
@@ -363,13 +348,10 @@ class _DevicePageState extends State<DevicePage> {
     }
 
     // Code to convert logData to CSV file
-
     String csv = const ListToCsvConverter().convert(dataList);
 
     Directory _directory = Directory("");
     if (Platform.isAndroid) {
-      // Redirects it to download folder in android
-      //_directory = Directory("/storage/emulated/0/Download");
       _directory = await getApplicationDocumentsDirectory();
     } else {
       _directory = await getApplicationDocumentsDirectory();
@@ -380,23 +362,93 @@ class _DevicePageState extends State<DevicePage> {
     await Directory(exPath).create(recursive: true);
 
     final String directory = exPath;
+    File file;
+    if (isFetchingTemp) {
+      file = File('$directory/temp_$sessionID.csv');
+      print("Save file");
+    }else{
+      file = File('$directory/hr_$sessionID.csv');
+      print("Save file");
+    }
 
-    File file = File('$directory/hr_$sessionID.csv');
+    await file.writeAsString(csv);
+
+    logConsole("File exported successfully!");
+  }
+
+  Future<void> _writeSpo2LogDataToFile(
+      List<int> mData,
+      int sessionID,
+      String formattedTime,
+      ) async {
+    logConsole("Log data size: " + mData.length.toString());
+
+    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
+
+    int logNumberPoints = ((mData.length) ~/ 16);
+
+    List<List<String>> dataList = []; //Outter List which contains the data List
+    List<String> header = [];
+
+    header.add("Timestamp");
+    header.add("SPO2");
+    dataList.add(header);
+
+    for (int i = 0; i < logNumberPoints; i++) {
+      // Extracting 16 bytes of data for the current row
+      List<int> bytes = bdata.buffer.asUint8List(i * 16, 16);
+
+      // Convert the first 8 bytes (timestamp) from little-endian to integer
+      int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
+
+      // Extract other data values (2 bytes each) and convert them
+      int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
+
+      logConsole("Spo2 timestamp: " +timestamp.toString());
+      logConsole("spo2 value: " + value1.toString());
+
+      // Construct the row data
+      List<String> dataRow = [
+        timestamp.toString(),
+        value1.toString(),
+      ];
+      dataList.add(dataRow);
+    }
+
+    // Code to convert logData to CSV file
+
+    String csv = const ListToCsvConverter().convert(dataList);
+
+    Directory _directory = Directory("");
+    if (Platform.isAndroid) {
+      _directory = await getApplicationDocumentsDirectory();
+    } else {
+      _directory = await getApplicationDocumentsDirectory();
+    }
+
+    final exPath = _directory.path;
+    print("Saved Path: $exPath");
+    await Directory(exPath).create(recursive: true);
+
+    final String directory = exPath;
+    File file;
+    file = File('$directory/spo2_$sessionID.csv');
     print("Save file");
 
     await file.writeAsString(csv);
 
     logConsole("File exported successfully!");
-
-   // await _showDownloadSuccessDialog();
   }
 
-  bool logIndexReceived = false;
-  bool isTransfering = false;
-  bool isFetchIconTap = false;
+  bool isFetchingTemp = false;
+  bool isFetchingSpo2 = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
+  List<LogHeader> logTempHeaderList = List.empty(growable: true);
+  List<LogHeader> logSpo2HeaderList = List.empty(growable: true);
 
   int currentFileIndex = 0; // Track the current file being fetched
+  int currentTempFileIndex = 0; // Track the current SpO2 file being fetched
+  int currentSpo2FileIndex = 0; // Track the current SpO2 file being fetched
 
   Future<void> _startListeningData(
       BluetoothDevice deviceName,
@@ -431,83 +483,175 @@ class _DevicePageState extends State<DevicePage> {
           "Data Index session start: ${bdata.getInt64(1, Endian.little)}",
         );
 
-        int logFileID = bdata.getInt64(1, Endian.little);
-        int sessionLength = bdata.getInt16(9, Endian.little);
-        logConsole("Log file ID: $logFileID | Length: $sessionLength");
+        if (isFetchingTemp) {
+          int logFileID = bdata.getInt64(1, Endian.little);
+          int sessionLength = bdata.getInt16(9, Endian.little);
+          logConsole("Temp Log file ID: $logFileID | Length: $sessionLength");
 
-        LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
+          LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
 
-        setState(() {
-          logHeaderList.add(mLog);
-        });
-
-        if (logHeaderList.length == totalSessionCount) {
           setState(() {
-            logIndexReceived = true;
+            logTempHeaderList.add(mLog);
           });
 
-          logConsole("All logs Header.......$logHeaderList");
+          if (logTempHeaderList.length == totalSessionCount) {
+            logConsole("All Temp logs Header.......$logTempHeaderList");
+            _fetchNextTempLogFile(deviceName);
+          }
+        }else if(isFetchingSpo2) {
+          int logFileID = bdata.getInt64(1, Endian.little);
+          int sessionLength = bdata.getInt16(9, Endian.little);
+          logConsole("Spo2 Log file ID: $logFileID | Length: $sessionLength");
 
-          _fetchNextLogFile(deviceName);
-          //await _streamDataSubscription.cancel();
+          LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
+
+          setState(() {
+            logSpo2HeaderList.add(mLog);
+          });
+
+          if (logSpo2HeaderList.length == totalSessionCount) {
+            logConsole("All Spo2 logs Header.......$logSpo2HeaderList");
+            _fetchNextSpo2LogFile(deviceName);
+          }
+        }else {
+            int logFileID = bdata.getInt64(1, Endian.little);
+            int sessionLength = bdata.getInt16(9, Endian.little);
+            logConsole("HR Log file ID: $logFileID | Length: $sessionLength");
+
+            LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
+
+            setState(() {
+              logHeaderList.add(mLog);
+            });
+
+            if (logHeaderList.length == totalSessionCount) {
+              logConsole("All HR logs Header.......$logHeaderList");
+              _fetchNextLogFile(deviceName);
+            }
+
+            //await _streamDataSubscription.cancel();
+          }
         }
-      }
-      /***** Packet type Log Data ***/
-      else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
+        /***** Packet type Log Data ***/
+        else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
+          int pktPayloadSize = value.length -
+              1; //((value[1] << 8) + value[2]);
 
-        logConsole("Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
-        );
-        currentFileDataCounter += pktPayloadSize;
-        _globalReceivedData += pktPayloadSize;
-        checkNoOfWrites += 1;
+          logConsole("Data Rx length: ${value
+              .length} | Actual Payload: $pktPayloadSize",
+          );
+          currentFileDataCounter += pktPayloadSize;
+          checkNoOfWrites += 1;
 
-        logConsole("No of writes $checkNoOfWrites");
-        logConsole("Data Counter $currentFileDataCounter");
-        logConsole(logHeaderList[currentFileIndex].sessionLength.toString());
+          logConsole("No of writes $checkNoOfWrites");
+          logConsole("Data Counter $currentFileDataCounter");
 
-        logData.addAll(value.sublist(1, value.length));
+          logData.addAll(value.sublist(1, value.length));
 
-        if (currentFileDataCounter >= logHeaderList[currentFileIndex].sessionLength-1) {
           logConsole("All data $currentFileDataCounter received");
 
-          await _writeLogDataToFile(logData, logHeaderList[currentFileIndex].logFileID, formattedTime);
+          if (isFetchingTemp) {
+            if (currentFileDataCounter >= logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
+              await _writeLogDataToFile(
+                logData, logTempHeaderList[currentTempFileIndex].logFileID,
+                formattedTime,
+              );
 
-          //Navigator.pop(context);
+              // Reset all fetch variables
+              displayPercent = 0;
+              globalDisplayPercentOffset = 0;
+              currentFileDataCounter = 0;
+              checkNoOfWrites = 0;
+              logData.clear();
 
-          setState(() {
-            isTransfering = false;
-            isFetchIconTap = false;
-          });
+              if (currentTempFileIndex + 1 < logTempHeaderList.length) {
+                currentTempFileIndex++;
+                _fetchNextTempLogFile(deviceName);
+              } else {
+                logConsole("All temp files have been fetched.");
+                setState(() {
+                  isFetchingSpo2 = true;
+                  isFetchingTemp = false;
+                });
+                Future.delayed(Duration(seconds: 2), () async {
+                  await _fetchSpo2LogCount(context, deviceName);
+                });
+                Future.delayed(Duration(seconds: 2), () async {
+                  await _fetchSpo2LogIndex(context, deviceName);
+                });
+              }
 
-          // Reset all fetch variables
-          displayPercent = 0;
-          globalDisplayPercentOffset = 0;
-          currentFileDataCounter = 0;
-          _globalReceivedData = 0;
-          checkNoOfWrites = 0;
-          logData.clear();
+            } else {
+              logConsole("Invalid index or condition not met: currentFileIndex=$currentTempFileIndex");
+            }
 
-          // Move to the next file
-          if (currentFileIndex + 1 < logHeaderList.length) {
-            currentFileIndex++; // Increment safely
-            // Fetch the next log file
-            _fetchNextLogFile(deviceName);
-          } else {
-            logConsole("All HR files have been fetched. Starting SpO2 file fetching...");
-            /*Future.delayed(Duration(seconds: 2), () async {
-              await _fetchSpo2LogCount(context, deviceName);
-            });
-            Future.delayed(Duration(seconds: 2), () async {
-              await _fetchSpo2LogIndex(context, deviceName);
-            });*/
+          }else if (isFetchingSpo2) {
+            if (currentFileDataCounter >= logSpo2HeaderList[currentSpo2FileIndex].sessionLength - 1) {
+              await _writeSpo2LogDataToFile(logData, logSpo2HeaderList[currentSpo2FileIndex].logFileID,
+                formattedTime,
+              );
+
+              // Reset all fetch variables
+              displayPercent = 0;
+              globalDisplayPercentOffset = 0;
+              currentFileDataCounter = 0;
+              checkNoOfWrites = 0;
+              logData.clear();
+
+              if (currentSpo2FileIndex + 1 < logSpo2HeaderList.length) {
+                currentSpo2FileIndex++;
+                _fetchNextSpo2LogFile(deviceName);
+              } else {
+                logConsole("All Spo2 files have been fetched.");
+                setState(() {
+                  isFetchingSpo2 = false;
+                  isFetchingTemp = false;
+                });
+              }
+
+            } else {
+              logConsole("Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex");
+            }
+
           }
+          else {
+            if (currentFileDataCounter >= logHeaderList[currentFileIndex].sessionLength - 1) {
+              await _writeLogDataToFile(
+                logData,
+                logHeaderList[currentFileIndex].logFileID,
+                formattedTime,
+              );
 
-        }else{
-          logConsole("Invalid index or condition not met: currentFileIndex=$currentFileIndex");
+              // Reset all fetch variables
+              displayPercent = 0;
+              globalDisplayPercentOffset = 0;
+              currentFileDataCounter = 0;
+              checkNoOfWrites = 0;
+              logData.clear();
+
+              if (currentFileIndex + 1 < logHeaderList.length) {
+                currentFileIndex++;
+                _fetchNextLogFile(deviceName);
+              } else {
+                logConsole(
+                    "All HR files have been fetched. Starting Temp file fetching...");
+                setState(() {
+                  isFetchingTemp = true;
+                });
+
+                Future.delayed(Duration(seconds: 2), () async {
+                  await _fetchTempLogCount(context, deviceName);
+                });
+                Future.delayed(Duration(seconds: 2), () async {
+                  await _fetchTempLogIndex(context, deviceName);
+                });
+              }
+            } else {
+              logConsole(
+                  "Invalid index or condition not met: currentFileIndex=$currentFileIndex");
+            }
+          }
         }
-
-      }
     });
 
     // cleanup: cancel subscription when disconnected
@@ -550,45 +694,256 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
-  Future<bool> _doesFileExist(int logFileID) async {
+    Future<bool> _doesFileExist(int logFileID) async {
+      String filePath = await _getLogFilePath(logFileID);
+      return await File(filePath).exists();
+    }
+
+    Future<String> _getLogFilePath(int logFileID) async {
+      // Define the file path logic here
+      String directoryPath;
+      if (Platform.isAndroid) {
+        directoryPath = (await getApplicationDocumentsDirectory()).path;
+        //_directory = await getApplicationDocumentsDirectory();
+      } else {
+        // _directory = await getApplicationDocumentsDirectory();
+        directoryPath = (await getApplicationDocumentsDirectory()).path;
+      }
+      return "$directoryPath/hr_$logFileID.csv";
+    }
+
+    Future<void> _fetchLogCount(
+        BuildContext context,
+        BluetoothDevice deviceName,
+        ) async {
+      logConsole("Fetch log count initiated");
+      showLoadingIndicator("Fetching logs count...", context);
+      //await _startListeningCommand(deviceID);
+      await _startListeningData(deviceName, 0, 0, "0");
+      await Future.delayed(Duration(seconds: 2), () async {
+        List<int> commandPacket = [];
+        commandPacket.addAll(hPi4Global.getSessionCount);
+        commandPacket.addAll(hPi4Global.HrTrend);
+        await _sendCommand(commandPacket, deviceName);
+      });
+      Navigator.pop(context);
+    }
+
+
+  Future<void> _fetchLogIndex(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Fetch log index initiated");
+    showLoadingIndicator("Fetching logs index...", context);
+    //await _startListeningCommand(deviceID);
+    await _startListeningData(deviceName, 0, 0, "0");
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogIndex);
+      commandPacket.addAll(hPi4Global.HrTrend);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+  Future<void> _fetchLogFile(
+      BluetoothDevice deviceName,
+      int sessionID,
+      int sessionSize,
+      String formattedTime,
+      ) async {
+    logConsole(
+      "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
+    );
+
+    showLoadingIndicator("Fetching file $sessionID...", context);
+    //await _startListeningCommand(deviceID);
+    // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
+    //await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
+
+    // Reset all fetch variables
+    currentFileDataCounter = 0;
+    //currentFileReceivedComplete = false;
+    //logData.clear();
+
+    await Future.delayed(Duration(seconds: 2), () async {
+      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize",);
+      List<int> commandFetchLogFile = [];
+      commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
+      commandFetchLogFile.addAll(hPi4Global.HrTrend);
+      for (int shift = 0; shift <= 56; shift += 8) {
+        commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+      }
+      await _sendCommand(commandFetchLogFile, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+
+
+  Future<void> _fetchNextTempLogFile(BluetoothDevice deviceName) async {
+    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    while (currentTempFileIndex < logTempHeaderList.length) {
+      int logFileID = logTempHeaderList[currentTempFileIndex].logFileID;
+      int updatedTimestamp = logFileID * 1000;
+
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
+
+      if (fileDate == todayDate) {
+        logConsole("Today's Temp file detected with ID $logFileID. Always downloading...");
+        await _fetchTempLogFile(deviceName, logFileID, logTempHeaderList[currentTempFileIndex].sessionLength, "");
+      } else {
+        bool fileExists = await _doesTempFileExist(logFileID);
+
+        if (fileExists) {
+          logConsole("temp file with ID $logFileID already exists. Skipping...");
+        } else {
+          logConsole("Fetching temp file with ID $logFileID...");
+          await _fetchTempLogFile(deviceName, logFileID, logTempHeaderList[currentTempFileIndex].sessionLength, "");
+          break; // Exit the loop to fetch the current file
+        }
+      }
+
+      currentTempFileIndex++; // Increment after processing
+    }
+
+    if (currentTempFileIndex == logTempHeaderList.length) {
+      logConsole("All Temperature files have been processed.");
+      currentTempFileIndex--;
+    }
+  }
+
+  Future<String> _getTempLogFilePath(int logFileID) async {
+    String directoryPath;
+    if (Platform.isAndroid) {
+      directoryPath = (await getApplicationDocumentsDirectory()).path;
+    } else {
+      directoryPath = (await getApplicationDocumentsDirectory()).path;
+    }
+    return "$directoryPath/temp_$logFileID.csv";
+  }
+
+  Future<bool> _doesTempFileExist(int logFileID) async {
     // Construct the file path
-    String filePath = await _getLogFilePath(logFileID);
+    String filePath = await _getTempLogFilePath(logFileID);
 
     // Check if the file exists
     return await File(filePath).exists();
   }
 
-  Future<String> _getLogFilePath(int logFileID) async {
-    // Define the file path logic here
-    String directoryPath;
-    if (Platform.isAndroid) {
-      // Redirects it to download folder in android
-      //_directory = Directory("/storage/emulated/0/Download");
-       //directoryPath = (await Directory("/storage/emulated/0/Download")).path;
-       directoryPath = (await getApplicationDocumentsDirectory()).path;
-      //_directory = await getApplicationDocumentsDirectory();
-    } else {
-     // _directory = await getApplicationDocumentsDirectory();
-      directoryPath = (await getApplicationDocumentsDirectory()).path;
-    }
-    return "$directoryPath/hr_$logFileID.csv";
-  }
-
-  Future<void> _fetchLogCount(
-    BuildContext context,
-    BluetoothDevice deviceName,
-  ) async {
-    logConsole("Fetch log count initiated");
-    showLoadingIndicator("Fetching logs count...", context);
+  Future<void> _fetchTempLogCount(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Fetch temperature log count initiated");
+    showLoadingIndicator("Fetching temperature logs count...", context);
     //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName, 0, 0, "0");
+    //await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
-      commandPacket.addAll(hPi4Global.HrTrend);
+      commandPacket.addAll(hPi4Global.tempTrend);
       await _sendCommand(commandPacket, deviceName);
     });
     Navigator.pop(context);
+  }
+
+  Future<void> _fetchTempLogIndex(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Fetch temperature log index initiated");
+    showLoadingIndicator("Fetching temperature logs index...", context);
+    //await _startListeningCommand(deviceID);
+    //await _startListeningData(deviceName, 0, 0, "0");
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogIndex);
+      commandPacket.addAll(hPi4Global.tempTrend);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+  Future<void> _fetchTempLogFile(
+      BluetoothDevice deviceName,
+      int sessionID,
+      int sessionSize,
+      String formattedTime,
+      ) async {
+    logConsole(
+      "Fetch temperature logs file initiated for session: $sessionID, size: $sessionSize",
+    );
+    showLoadingIndicator("Fetching temperature file $sessionID...", context);
+
+    currentFileDataCounter = 0;
+
+    await Future.delayed(Duration(seconds: 2), () async {
+      logConsole("Fetch temperature logs file entered: $sessionID, size: $sessionSize");
+      List<int> commandFetchLogFile = [];
+      commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
+      commandFetchLogFile.addAll(hPi4Global.tempTrend);
+      for (int shift = 0; shift <= 56; shift += 8) {
+        commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+      }
+      await _sendCommand(commandFetchLogFile, deviceName);
+    });
+    Navigator.pop(context);
+  }
+
+
+  Future<void> _fetchNextSpo2LogFile(BluetoothDevice deviceName) async {
+    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    while (currentSpo2FileIndex < logSpo2HeaderList.length) {
+      int logFileID = logSpo2HeaderList[currentSpo2FileIndex].logFileID;
+      int updatedTimestamp = logFileID * 1000;
+
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
+
+      if (fileDate == todayDate) {
+        logConsole("Today's Spo2 file detected with ID $logFileID. Always downloading...");
+        await _fetchSpo2LogFile(deviceName, logFileID, logSpo2HeaderList[currentSpo2FileIndex].sessionLength, "");
+      } else {
+        bool fileExists = await _doesSpo2FileExist(logFileID);
+
+        if (fileExists) {
+          logConsole("spo2 file with ID $logFileID already exists. Skipping...");
+        } else {
+          logConsole("Fetching spo2 file with ID $logFileID...");
+          await _fetchSpo2LogFile(deviceName, logFileID, logSpo2HeaderList[currentSpo2FileIndex].sessionLength, "");
+          break; // Exit the loop to fetch the current file
+        }
+      }
+
+      currentSpo2FileIndex++; // Increment after processing
+    }
+
+    if (currentSpo2FileIndex == logSpo2HeaderList.length) {
+      logConsole("All spo2 files have been processed.");
+      currentSpo2FileIndex--;
+    }
+  }
+
+  Future<String> _getSpo2LogFilePath(int logFileID) async {
+    String directoryPath;
+    if (Platform.isAndroid) {
+      directoryPath = (await getApplicationDocumentsDirectory()).path;
+    } else {
+      directoryPath = (await getApplicationDocumentsDirectory()).path;
+    }
+    return "$directoryPath/spo2_$logFileID.csv";
+  }
+
+  Future<bool> _doesSpo2FileExist(int logFileID) async {
+    // Construct the file path
+    String filePath = await _getSpo2LogFilePath(logFileID);
+    // Check if the file exists
+    return await File(filePath).exists();
   }
 
   Future<void> _fetchSpo2LogCount(
@@ -597,8 +952,6 @@ class _DevicePageState extends State<DevicePage> {
       ) async {
     logConsole("Fetch spo2 log count initiated");
     showLoadingIndicator("Fetching spo2 logs count...", context);
-    //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
@@ -614,8 +967,6 @@ class _DevicePageState extends State<DevicePage> {
       ) async {
     logConsole("Fetch spo2 log index initiated");
     showLoadingIndicator("Fetching spo2 logs index...", context);
-    //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.sessionLogIndex);
@@ -625,52 +976,24 @@ class _DevicePageState extends State<DevicePage> {
     Navigator.pop(context);
   }
 
-
-
-  Future<void> _fetchLogIndex(
-    BuildContext context,
-    BluetoothDevice deviceName,
-  ) async {
-    logConsole("Fetch log index initiated");
-    showLoadingIndicator("Fetching logs index...", context);
-    //await _startListeningCommand(deviceID);
-    await _startListeningData(deviceName, 0, 0, "0");
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandPacket = [];
-      commandPacket.addAll(hPi4Global.sessionLogIndex);
-      commandPacket.addAll(hPi4Global.HrTrend);
-      await _sendCommand(commandPacket, deviceName);
-    });
-    Navigator.pop(context);
-  }
-
-  Future<void> _fetchLogFile(
-    BluetoothDevice deviceName,
-    int sessionID,
-    int sessionSize,
-    String formattedTime,
-  ) async {
+  Future<void> _fetchSpo2LogFile(
+      BluetoothDevice deviceName,
+      int sessionID,
+      int sessionSize,
+      String formattedTime,
+      ) async {
     logConsole(
-      "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
+      "Fetch spo2 logs file initiated for session: $sessionID, size: $sessionSize",
     );
-    isTransfering = true;
-    showLoadingIndicator("Fetching file $sessionID...", context);
-    //await _startListeningCommand(deviceID);
-    // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
-    //await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
+    showLoadingIndicator("Fetching spo2 file $sessionID...", context);
 
-    // Reset all fetch variables
     currentFileDataCounter = 0;
-    //currentFileReceivedComplete = false;
-
-    _globalExpectedLength = sessionSize;
-    //logData.clear();
 
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize",);
+      logConsole("Fetch spo2 logs file entered: $sessionID, size: $sessionSize");
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
-      commandFetchLogFile.addAll(hPi4Global.HrTrend);
+      commandFetchLogFile.addAll(hPi4Global.Spo2Trend);
       for (int shift = 0; shift <= 56; shift += 8) {
         commandFetchLogFile.add((sessionID >> shift) & 0xFF);
       }
@@ -819,38 +1142,6 @@ class _DevicePageState extends State<DevicePage> {
               ],
             );
           },
-        );
-      },
-    );
-  }
-
-  Future<void> _showDownloadSuccessDialog() async {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false, // user must tap button!
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Downloaded'),
-          content: SingleChildScrollView(
-            child: ListBody(
-              children: <Widget>[
-                Icon(Icons.check_circle, color: Colors.green, size: 72),
-                Center(
-                  child: Text(
-                    'File downloaded successfully!.',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: Text('Close'),
-              onPressed: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
         );
       },
     );
@@ -1270,6 +1561,121 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),*/
                                           SizedBox(height: 10.0),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 20),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  //height: SizeConfig.blockSizeVertical * 20,
+                                  width: SizeConfig.blockSizeHorizontal * 88,
+                                  child: Card(
+                                    color: Colors.grey[900],
+                                    elevation: 2,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.max,
+                                        children: <Widget>[
+                                          SizedBox(height: 10),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: hPi4Global.hpi4Color.withOpacity(0.5), // background color
+                                              foregroundColor:
+                                              Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(20),
+                                              ),
+                                              minimumSize: Size(
+                                                SizeConfig.blockSizeHorizontal *
+                                                    100,
+                                                40,
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              /*Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (context) =>
+                                                      DeviceManagement(),
+                                                ),
+                                              );*/
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                //mainAxisSize: MainAxisSize.min,
+                                                mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Icons.system_update,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    ' Update Firmware ',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 10),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: <Widget>[
+                                              Expanded(
+                                                child: Text(
+                                                  " Firmware Update through this app is still not available. Please use the nrfConnect App to update your firmware. "
+                                                      "For more details details, ",
+                                                  style:hPi4Global.movecardSubValue1TextStyle,
+                                                  textAlign: TextAlign.justify,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: <Widget>[
+                                          GestureDetector(
+                                            onTap: () async {
+                                              const url =
+                                                  'https://move.protocentral.com/updating_move/01-updating_with_nRF_connect/';
+                                              if (await canLaunchUrl(Uri.parse(url))) {
+                                                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+                                              } else {
+                                                throw 'Could not launch $url';
+                                              }
+                                            },
+                                            child: Text(
+                                              'check our docs',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.blue,
+                                                decoration: TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ]),
+
+                                          SizedBox(height: 10),
                                         ],
                                       ),
                                     ),
