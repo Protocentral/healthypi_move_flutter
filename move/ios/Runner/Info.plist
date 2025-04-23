@@ -14,8 +14,6 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-    <string>This app needs Bluetooth to function</string>
 	<key>CFBundleName</key>
 	<string>move</string>
 	<key>CFBundlePackageType</key>
@@ -26,8 +24,18 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>ITSEncryptionExportComplianceCode</key>
+	<string>Yes</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>HealthyPi Move App need the Bluetooth permission to scan for and connect to Move devices</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>HealthyPi Move needs the Location Permission to scan and connect to nearby HealthyPi Move devices</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>HealthyPi Move needs this permission to upload and download files to your HealthyPi Move.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -47,11 +55,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HealthyPi Move needs this permission to upload and download files to your HealthyPi Move.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>ITSEncryptionExportComplianceCode</key>
-	<string>Yes</string>
 </dict>
 </plist>
