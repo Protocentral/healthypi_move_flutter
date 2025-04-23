@@ -47,6 +47,7 @@ class hPi4Global {
   static const List<int> HrTrend = [0x01];
   static const List<int> Spo2Trend = [0x02];
   static const List<int> tempTrend = [0x03];
+  static const List<int> ActivityTrend = [0x04];
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;

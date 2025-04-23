@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../home.dart';
 import '../sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:syncfusion_flutter_sliders/sliders.dart'as rs;
 
 import '../globals.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +21,21 @@ class HRPage extends StatefulWidget {
 }
 class _HRPageState extends State<HRPage>
     with SingleTickerProviderStateMixin {
+  rs.SfRangeValues _values = rs.SfRangeValues(
+    DateTime.now().subtract(Duration(hours: 4)), // Default start value
+    DateTime.now(), // Default end value
+  );
+
+  rs.SfRangeValues _values1 = rs.SfRangeValues(
+    DateTime.now().subtract(Duration(hours: 4)), // Default start value
+    DateTime.now(), // Default end value
+  );
+
+  rs.SfRangeValues _values2 = rs.SfRangeValues(
+    DateTime.now().subtract(Duration(hours: 24)), // Default start value
+    DateTime.now(), // Default end value
+  );
+
 
   late TabController _tabController;
 
@@ -33,6 +49,7 @@ class _HRPageState extends State<HRPage>
   int rangeMinHR = 0;
   int rangeMaxHR = 0;
   int averageHR = 0;
+  late DateTime lastUpdatedTime;
 
   List<HRTrends> hrTrendsData = [];
 
@@ -54,104 +71,274 @@ class _HRPageState extends State<HRPage>
   void _handleTabChange() {
     setState(() {
       _listCSVFiles();
-      // Rebuild the widget when the tab index changes
-      //buildchartBlock();
     });
   }
 
-  displayDateAxis(){
-  if(_tabController.index == 0){
-      return  DateTimeAxis(
-        // Minimum value set to 00:00 of the current day
-        minimum: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 0, 0, 0),
-
-        // Maximum value set to 00:00 of the next day
-        maximum: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59),
-        interval: 1,
-        intervalType: DateTimeIntervalType.hours,
-        dateFormat: DateFormat.Hm(),
-        majorGridLines: MajorGridLines(width: 0),
-        labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    }else if(_tabController.index == 1){
-      return DateTimeAxis(
-        // Minimum value set to 7 days before the current date
-        //minimum: DateTime.now().subtract(Duration(days: 7)),
-        // Maximum value set to the current date and time
-        //maximum: DateTime.now(),
-        minimum: DateTime.now().subtract(Duration(days: 6, hours: DateTime.now().hour, minutes: DateTime.now().minute, seconds: DateTime.now().second)),
-        // Maximum value set to the end of today (23:59:59)
-        maximum: DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59),
-        interval: 1,
-        intervalType: DateTimeIntervalType.days, // Interval type set to days
-        dateFormat: DateFormat('dd'),
-        majorGridLines: MajorGridLines(width: 0),
-        labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    }else{
-      return DateTimeAxis(
-        minimum: DateTime(DateTime.now().year, DateTime.now().month - 1, DateTime.now().day),
-        // Maximum value set to the current date and time
-        maximum: DateTime.now(),
-        interval: 4,
-        intervalType: DateTimeIntervalType.days, // Interval type set to days
-        dateFormat: DateFormat('dd'), //
-        majorGridLines: MajorGridLines(width: 0),
-        labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-    }
+  Widget buildChartBlock() {
+    return Padding(
+        padding: const EdgeInsets.all(2.0),
+        child: Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+          color: Colors.grey[900],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: SfCartesianChart(
+                  plotAreaBorderWidth: 0,
+                  primaryXAxis: DateTimeAxis(
+                    // Display a 6-hour range dynamically based on slider values
+                    minimum: _values.start, // Start value of the range slider
+                    maximum: _values.end, // End value of the range slider
+                    interval: 1,
+                    intervalType: DateTimeIntervalType.hours,
+                    dateFormat: DateFormat.Hm(),
+                    majorGridLines: MajorGridLines(width: 0),
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  primaryYAxis: NumericAxis(
+                    majorGridLines: MajorGridLines(width: 0.05),
+                    minimum: 0,
+                    maximum: 200,
+                    interval: 10,
+                    anchorRangeToVisiblePoints: false,
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  palette: <Color>[
+                    hPi4Global.hpi4Color,
+                  ],
+                  series: <CartesianSeries>[
+                    HiloSeries<HRTrends, DateTime>(
+                      dataSource: hrTrendsData,
+                      xValueMapper: (HRTrends data, _) => data.date,
+                      lowValueMapper: (HRTrends data, _) => data.minHR,
+                      highValueMapper: (HRTrends data, _) => data.maxHR,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                flex: 0,
+                child: rs.SfRangeSlider(
+                  min: DateTime(
+                    DateTime.now().year,
+                    DateTime.now().month,
+                    DateTime.now().day,
+                    0,
+                    0,
+                    0,
+                  ), // Start of the current day
+                  max: DateTime(
+                    DateTime.now().year,
+                    DateTime.now().month,
+                    DateTime.now().day,
+                    23,
+                    59,
+                    59,
+                  ), // End of the current day
+                  values: _values,
+                  interval: 4, // Interval of 6 hours
+                  dateIntervalType: rs.DateIntervalType.hours,
+                  //showLabels: true,
+                  //showTicks: true,
+                  activeColor: hPi4Global.hpi4Color, // Set the active track color
+                  inactiveColor: Colors.grey, // Set the inactive track color
+                  dateFormat: DateFormat.Hm(),
+                  labelFormatterCallback: (dynamic actualValue, String formattedText) {
+                    return formattedText; // Customize the labels if needed
+                  },
+                  onChanged: (rs.SfRangeValues newValues) {
+                    setState(() {
+                      _values = newValues; // Update the range slider values
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ));
   }
 
-  Widget buildchartBlock() {
+  Widget buildWeekChartBlock() {
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
         color: Colors.grey[900],
         child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              Container(
-                  child: SfCartesianChart(
-                      plotAreaBorderWidth: 0,
-                      primaryXAxis: displayDateAxis(),
-                      primaryYAxis: NumericAxis(
-                          majorGridLines: MajorGridLines(width: 0.05),
-                          minimum: 0,
-                          maximum: 200,
-                          interval: 10,
-                          labelStyle: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500
-                          )
-                      ),
-                      palette: <Color>[
-                        hPi4Global.hpi4Color,
-                      ],
-                      series: <CartesianSeries>[
-                        HiloSeries<HRTrends, DateTime>(
-                            dataSource: hrTrendsData,
-                            xValueMapper: (HRTrends data, _) => data.date,
-                            lowValueMapper: (HRTrends data, _) => data.minHR,
-                            highValueMapper: (HRTrends data, _) => data.maxHR
-                        ),
-                      ]
-                  )
-              )
-            ]),
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: SfCartesianChart(
+                plotAreaBorderWidth: 0,
+                primaryXAxis: DateTimeAxis(
+                  // Display a 6-hour interval dynamically based on slider values
+                  minimum: _values1.start, // Start value of the range slider
+                  maximum: _values1.end, // End value of the range slider
+                  interval: 4, // 6-hour intervals
+                  intervalType: DateTimeIntervalType.hours,
+                  dateFormat: DateFormat('EEE, HH:mm'), // Show day and hour
+                  majorGridLines: MajorGridLines(width: 0),
+                  labelStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                primaryYAxis: NumericAxis(
+                  majorGridLines: MajorGridLines(width: 0.05),
+                  minimum: 0,
+                  maximum: 200,
+                  interval: 10,
+                  anchorRangeToVisiblePoints: false,
+                  labelStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                palette: <Color>[
+                  hPi4Global.hpi4Color,
+                ],
+                series: <CartesianSeries>[
+                  HiloSeries<HRTrends, DateTime>(
+                    dataSource: hrTrendsData,
+                    xValueMapper: (HRTrends data, _) => data.date,
+                    lowValueMapper: (HRTrends data, _) => data.minHR,
+                    highValueMapper: (HRTrends data, _) => data.maxHR,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: rs.SfRangeSlider(
+                min: DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                ).subtract(Duration(days: 7)), // Start of the range (7 days before)
+                max: DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                ).add(Duration(days: 7)), // End of the range (7 days ahead)
+                values: _values1,
+                interval: 6, // Interval of 6 hours
+                dateIntervalType: rs.DateIntervalType.hours, // Set interval to 6 hours
+                //showLabels: true,
+                //showTicks: true,
+                activeColor: hPi4Global.hpi4Color, // Set the active track color
+                inactiveColor: Colors.grey, // Set the inactive track color
+                dateFormat: DateFormat('EEE, HH:mm'), // Format labels as day and hours
+                labelFormatterCallback: (dynamic actualValue, String formattedText) {
+                  return formattedText; // Customize the labels if needed
+                },
+                onChanged: (rs.SfRangeValues newValues) {
+                  setState(() {
+                    _values1 = newValues; // Update the range slider values
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildMonthChartBlock() {
+    return Padding(
+      padding: const EdgeInsets.all(2.0),
+      child: Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+        color: Colors.grey[900],
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: <Widget>[
+            Expanded(
+              child: SfCartesianChart(
+                plotAreaBorderWidth: 0,
+                primaryXAxis: DateTimeAxis(
+                  // Display a month-long range dynamically based on slider values
+                  minimum: _values2.start, // Start value of the range slider
+                  maximum: _values2.end, // End value of the range slider
+                  interval: 6, // 6-hour intervals
+                  intervalType: DateTimeIntervalType.hours,
+                  dateFormat: DateFormat('dd MMM, HH:mm'), // Show day, month, and hour
+                  majorGridLines: MajorGridLines(width: 0),
+                  labelStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                primaryYAxis: NumericAxis(
+                  majorGridLines: MajorGridLines(width: 0.05),
+                  minimum: 0,
+                  maximum: 200,
+                  interval: 10,
+                  anchorRangeToVisiblePoints: false,
+                  labelStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                palette: <Color>[
+                  hPi4Global.hpi4Color,
+                ],
+                series: <CartesianSeries>[
+                  HiloSeries<HRTrends, DateTime>(
+                    dataSource: hrTrendsData,
+                    xValueMapper: (HRTrends data, _) => data.date,
+                    lowValueMapper: (HRTrends data, _) => data.minHR,
+                    highValueMapper: (HRTrends data, _) => data.maxHR,
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 0,
+              child: rs.SfRangeSlider(
+                min: DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                ).subtract(Duration(days: 30)), // Start of the range (30 days before today)
+                max: DateTime(
+                  DateTime.now().year,
+                  DateTime.now().month,
+                  DateTime.now().day,
+                ).add(Duration(days: 30)), // End of the range (30 days after today)
+                values: _values2,
+                interval: 6, // Interval of 6 hours
+                dateIntervalType: rs.DateIntervalType.hours, // Set interval to 6 hours
+                //showLabels: true,
+                //showTicks: true,
+                activeColor: hPi4Global.hpi4Color, // Set the active track color
+                inactiveColor: Colors.grey, // Set the inactive track color
+                dateFormat: DateFormat('dd MMM, HH:mm'), // Format labels as day, month, and hour
+                labelFormatterCallback: (dynamic actualValue, String formattedText) {
+                  return formattedText; // Customize the labels if needed
+                },
+                onChanged: (rs.SfRangeValues newValues) {
+                  setState(() {
+                    _values2 = newValues; // Update the range slider values
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -191,7 +378,7 @@ class _HRPageState extends State<HRPage>
           int updatedTimestamp = timestamp2*1000;
           String fileName1 = p.basename(file.path);
 
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp, isUtc: true);
           //print("......"+timestampDateTime.toString());
           DateTime now = DateTime.now();
          // print("......"+now.toString());
@@ -290,11 +477,19 @@ class _HRPageState extends State<HRPage>
       tempAvgHR = int.parse(avgHR[i]);
       tempLatestHR = int.parse(latestHR[i]);
 
+      //DateTime getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
+      var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
+      // Format the DateTime to remove the 'Z' and make it human-readable
+      String formattedDate = DateFormat("yyyy-MM-dd HH:mm:ss").format(getUTCTime);
+      // Parse the formatted date string back into a DateTime object
+      DateTime formattedDateTime = DateTime.parse(formattedDate);
+
       setState((){
         //print(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toString());
-        hrTrendsData.add(HRTrends(DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1),
+        hrTrendsData.add(HRTrends(formattedDateTime,
             tempMinHR, tempMaxHR));
         if( i == timestamp.length-1){
+          lastUpdatedTime = formattedDateTime;
           averageHR = tempAvgHR;
           restingHR = tempLatestHR;
           rangeMinHR = tempMinHR;
@@ -308,191 +503,264 @@ class _HRPageState extends State<HRPage>
 
   // Save a value
   _saveValue() async {
+    String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('latestHR', averageHR.toString());
+    await prefs.setString('lastUpdatedHR', lastDateTime.toString());
+  }
+
+  Widget displayValues(){
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: SizeConfig.blockSizeVertical * 20,
+          width: SizeConfig.blockSizeHorizontal * 44,
+          child: Card(
+            color: Colors.grey[900],
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text('RANGE',
+                            style: hPi4Global.movecardSubValueTextStyle),
+                        SizedBox(
+                          width: 15.0,
+                        ),
+                        //Icon(Icons.favorite_border, color: Colors.black),
+                      ],
+                    ),
+                    SizedBox(
+                      height: 20.0,
+                    ),
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text(rangeMinHR.toString(),
+                            style: hPi4Global.moveValueTextStyle),
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text('-',
+                            style: hPi4Global.moveValueTextStyle),
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text(rangeMaxHR.toString(),
+                            style: hPi4Global.moveValueTextStyle),
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text('BPM',
+                            style: hPi4Global.movecardSubValueTextStyle),
+                        SizedBox(
+                          width: 15.0,
+                        ),
+                        //Icon(Icons.favorite_border, color: Colors.black),
+                      ],
+                    ),
+                  ]),
+            ),
+          ),
+        ),
+        Column(
+          //mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              Container(
+                height: SizeConfig.blockSizeVertical * 10,
+                width: SizeConfig.blockSizeHorizontal * 44,
+                child: Card(
+                  color: Colors.grey[900],
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              SizedBox(
+                                width: 10.0,
+                              ),
+                              Text(averageHR.toString(),
+                                  style: hPi4Global.moveValueTextStyle),
+                              SizedBox(
+                                width: 15.0,
+                              ),
+                              //Icon(Icons.favorite_border, color: Colors.black),
+                            ],
+                          ),
+                          Row(
+                            children: <Widget>[
+                              SizedBox(
+                                width: 10.0,
+                              ),
+                              Text('AVERAGE',
+                                  style: hPi4Global.movecardSubValueTextStyle),
+                            ],
+                          ),
+
+                        ]),
+                  ),
+                ),
+              ),
+              Container(
+                height: SizeConfig.blockSizeVertical * 10,
+                width: SizeConfig.blockSizeHorizontal * 44,
+                child: Card(
+                  color: Colors.grey[900],
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: <Widget>[
+                          Row(
+                            children: <Widget>[
+                              SizedBox(
+                                width: 10.0,
+                              ),
+                              Text(restingHR.toString(),
+                                  style: hPi4Global.moveValueTextStyle),
+                              SizedBox(
+                                width: 15.0,
+                              ),
+                              //Icon(Icons.favorite_border, color: Colors.black),
+                            ],
+                          ),
+                          Row(
+                            children: <Widget>[
+                              SizedBox(
+                                width: 10.0,
+                              ),
+                              Text('Latest',
+                                  style: hPi4Global.movecardSubValueTextStyle),
+                            ],
+                          ),
+
+                        ]),
+                  ),
+                ),
+              )
+            ]
+        ),
+      ],
+    );
   }
 
   Widget displayCard(String tab){
-    return Card(
-      color: Colors.black,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: SizeConfig.blockSizeVertical * 45,
-                      width: SizeConfig.blockSizeHorizontal * 88,
-                      color:Colors.transparent,
-                      child:buildchartBlock(),
-                    )
-                  ],
-                ),
-                SizedBox(height:20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: SizeConfig.blockSizeVertical * 20,
-                      width: SizeConfig.blockSizeHorizontal * 44,
-                      child: Card(
-                        color: Colors.grey[900],
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Column(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: <Widget>[
-                                Row(
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text('RANGE',
-                                        style: hPi4Global.movecardSubValueTextStyle),
-                                    SizedBox(
-                                      width: 15.0,
-                                    ),
-                                    //Icon(Icons.favorite_border, color: Colors.black),
-                                  ],
-                                ),
-                                SizedBox(
-                                  height: 20.0,
-                                ),
-                                Row(
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text(rangeMinHR.toString(),
-                                        style: hPi4Global.moveValueTextStyle),
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text('-',
-                                        style: hPi4Global.moveValueTextStyle),
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text(rangeMaxHR.toString(),
-                                        style: hPi4Global.moveValueTextStyle),
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                  ],
-                                ),
-                                Row(
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: 10.0,
-                                    ),
-                                    Text('BPM',
-                                        style: hPi4Global.movecardSubValueTextStyle),
-                                    SizedBox(
-                                      width: 15.0,
-                                    ),
-                                    //Icon(Icons.favorite_border, color: Colors.black),
-                                  ],
-                                ),
-                              ]),
-                        ),
-                      ),
-                    ),
-                    Column(
-                      //mainAxisAlignment: MainAxisAlignment.start,
-                        children: <Widget>[
-                          Container(
-                            height: SizeConfig.blockSizeVertical * 10,
-                            width: SizeConfig.blockSizeHorizontal * 44,
-                            child: Card(
-                              color: Colors.grey[900],
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: <Widget>[
-                                      Row(
-                                        children: <Widget>[
-                                          SizedBox(
-                                            width: 10.0,
-                                          ),
-                                          Text(averageHR.toString(),
-                                              style: hPi4Global.moveValueTextStyle),
-                                          SizedBox(
-                                            width: 15.0,
-                                          ),
-                                          //Icon(Icons.favorite_border, color: Colors.black),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: <Widget>[
-                                          SizedBox(
-                                            width: 10.0,
-                                          ),
-                                          Text('AVERAGE',
-                                              style: hPi4Global.movecardSubValueTextStyle),
-                                        ],
-                                      ),
-
-                                    ]),
-                              ),
-                            ),
-                          ),
-                          Container(
-                            height: SizeConfig.blockSizeVertical * 10,
-                            width: SizeConfig.blockSizeHorizontal * 44,
-                            child: Card(
-                              color: Colors.grey[900],
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    children: <Widget>[
-                                      Row(
-                                        children: <Widget>[
-                                          SizedBox(
-                                            width: 10.0,
-                                          ),
-                                          Text(restingHR.toString(),
-                                              style: hPi4Global.moveValueTextStyle),
-                                          SizedBox(
-                                            width: 15.0,
-                                          ),
-                                          //Icon(Icons.favorite_border, color: Colors.black),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: <Widget>[
-                                          SizedBox(
-                                            width: 10.0,
-                                          ),
-                                          Text('Latest',
-                                              style: hPi4Global.movecardSubValueTextStyle),
-                                        ],
-                                      ),
-
-                                    ]),
-                              ),
-                            ),
-                          )
-                        ]
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
+    if(tab == "Day"){
+      return Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 45,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color:Colors.transparent,
+                        child:buildChartBlock(),
+                      )
+                    ],
+                  ),
+                  SizedBox(height:20),
+                  displayValues(),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }else if(tab == "Week"){
+      return Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 45,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color:Colors.transparent,
+                        child:buildWeekChartBlock(),
+                      )
+                    ],
+                  ),
+                  SizedBox(height:20),
+                  displayValues(),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }else{
+      return Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 45,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color:Colors.transparent,
+                        child:buildMonthChartBlock(),
+                      )
+                    ],
+                  ),
+                  SizedBox(height:20),
+                  displayValues(),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
   }
 
 

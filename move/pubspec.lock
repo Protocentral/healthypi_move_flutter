@@ -1058,6 +1058,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "28.2.12"
+  syncfusion_flutter_sliders:
+    dependency: "direct main"
+    description:
+      name: syncfusion_flutter_sliders
+      sha256: "3738ffe56256ddf0d588a31f1e65d714ffd45970eafe00bb6e93f17b21003ded"
+      url: "https://pub.dev"
+    source: hosted
+    version: "28.2.12"
   tap_debouncer:
     dependency: "direct main"
     description:

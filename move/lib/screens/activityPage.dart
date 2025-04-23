@@ -13,12 +13,12 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 
-class SPO2Page extends StatefulWidget {
-  const SPO2Page({Key? key}) : super(key: key);
+class ActivityPage extends StatefulWidget {
+  const ActivityPage({Key? key}) : super(key: key);
   @override
-  State<SPO2Page> createState() => _SPO2PageState();
+  State<ActivityPage> createState() => _ActivityPageState();
 }
-class _SPO2PageState extends State<SPO2Page>
+class _ActivityPageState extends State<ActivityPage>
     with SingleTickerProviderStateMixin {
   rs.SfRangeValues _values = rs.SfRangeValues(
     DateTime.now().subtract(Duration(hours: 4)), // Default start value
@@ -38,18 +38,16 @@ class _SPO2PageState extends State<SPO2Page>
   late TabController _tabController;
 
   List<String> timestamp = [];
-  List<String> minSpo2 = [];
-  List<String> maxSpo2 =[];
-  List<String> avgSpo2 =[];
-  List<String> latestSpo2 =[];
+  List<String> minActivity = [];
+  List<String> maxActivity =[];
+  List<String> avgActivity =[];
+  List<String> latestActivity =[];
 
-  int restingSpo2 = 0;
-  int rangeMinSpo2 = 0;
-  int rangeMaxSpo2 = 0;
-  int averageSpo2 = 0;
+
+  int totalCount = 0;
   late DateTime lastUpdatedTime;
 
-  List<Spo2Trends> Spo2TrendsData = [];
+  List<ActivityTrends> ActivityTrendsData = [];
 
   @override
   void initState() {
@@ -61,7 +59,7 @@ class _SPO2PageState extends State<SPO2Page>
 
   @override
   void dispose() {
-    Spo2TrendsData = [];
+    ActivityTrendsData = [];
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
@@ -86,44 +84,43 @@ class _SPO2PageState extends State<SPO2Page>
             children: <Widget>[
               Expanded(
                 child: SfCartesianChart(
-                    plotAreaBorderWidth: 0,
-                    primaryXAxis: DateTimeAxis(
-                      // Display a 6-hour range dynamically based on slider values
-                      minimum: _values.start, // Start value of the range slider
-                      maximum: _values.end, // End value of the range slider
-                      interval: 1,
-                      intervalType: DateTimeIntervalType.hours,
-                      dateFormat: DateFormat.Hm(),
-                      majorGridLines: MajorGridLines(width: 0),
-                      labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  plotAreaBorderWidth: 0,
+                  primaryXAxis: DateTimeAxis(
+                    minimum: _values.start, // Start value of the range slider
+                    maximum: _values.end, // End value of the range slider
+                    interval: 1,
+                    intervalType: DateTimeIntervalType.hours,
+                    dateFormat: DateFormat.Hm(),
+                    majorGridLines: MajorGridLines(width: 0),
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    primaryYAxis: NumericAxis(
-                      majorGridLines: MajorGridLines(width: 0.05),
-                      minimum: 0,
-                      maximum: 200,
-                      interval: 10,
-                      anchorRangeToVisiblePoints: false,
-                      labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  ),
+                  primaryYAxis: NumericAxis(
+                    majorGridLines: MajorGridLines(width: 0.05),
+                    minimum: 0,
+                    maximum: 10000,
+                    interval: 1000,
+                    anchorRangeToVisiblePoints: false,
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    palette: <Color>[
-                      hPi4Global.hpi4Color,
-                    ],
-                    series: <CartesianSeries>[
-                      HiloSeries<Spo2Trends, DateTime>(
-                          dataSource: Spo2TrendsData,
-                          xValueMapper: (Spo2Trends data, _) => data.date,
-                          lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                          highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                      ),
-                    ],
+                  ),
+                  palette: <Color>[
+                    hPi4Global.hpi4Color,
+                  ],
+                  series: <CartesianSeries>[
+                    ColumnSeries<ActivityTrends, DateTime>(
+                      dataSource: ActivityTrendsData,
+                      xValueMapper: (ActivityTrends data, _) => data.date,
+                      yValueMapper: (ActivityTrends data, _) => data.count,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                  ],
                 ),
               ),
               Expanded(
@@ -148,8 +145,6 @@ class _SPO2PageState extends State<SPO2Page>
                   values: _values,
                   interval: 4, // Interval of 6 hours
                   dateIntervalType: rs.DateIntervalType.hours,
-                  //showLabels: true,
-                  //showTicks: true,
                   activeColor: hPi4Global.hpi4Color, // Set the active track color
                   inactiveColor: Colors.grey, // Set the inactive track color
                   dateFormat: DateFormat.Hm(),
@@ -181,7 +176,6 @@ class _SPO2PageState extends State<SPO2Page>
               child: SfCartesianChart(
                 plotAreaBorderWidth: 0,
                 primaryXAxis: DateTimeAxis(
-                  // Display a 6-hour interval dynamically based on slider values
                   minimum: _values1.start, // Start value of the range slider
                   maximum: _values1.end, // End value of the range slider
                   interval: 4, // 6-hour intervals
@@ -197,8 +191,8 @@ class _SPO2PageState extends State<SPO2Page>
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
                   minimum: 0,
-                  maximum: 200,
-                  interval: 10,
+                  maximum: 10000,
+                  interval: 1000,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
                     color: Colors.white,
@@ -209,14 +203,14 @@ class _SPO2PageState extends State<SPO2Page>
                 palette: <Color>[
                   hPi4Global.hpi4Color,
                 ],
-                  series: <CartesianSeries>[
-                    HiloSeries<Spo2Trends, DateTime>(
-                        dataSource: Spo2TrendsData,
-                        xValueMapper: (Spo2Trends data, _) => data.date,
-                        lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                        highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                    ),
-                  ],
+                series: <CartesianSeries>[
+                  ColumnSeries<ActivityTrends, DateTime>(
+                    dataSource: ActivityTrendsData,
+                    xValueMapper: (ActivityTrends data, _) => data.date,
+                    yValueMapper: (ActivityTrends data, _) => data.count,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -235,8 +229,6 @@ class _SPO2PageState extends State<SPO2Page>
                 values: _values1,
                 interval: 6, // Interval of 6 hours
                 dateIntervalType: rs.DateIntervalType.hours, // Set interval to 6 hours
-                //showLabels: true,
-                //showTicks: true,
                 activeColor: hPi4Global.hpi4Color, // Set the active track color
                 inactiveColor: Colors.grey, // Set the inactive track color
                 dateFormat: DateFormat('EEE, HH:mm'), // Format labels as day and hours
@@ -285,8 +277,8 @@ class _SPO2PageState extends State<SPO2Page>
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
                   minimum: 0,
-                  maximum: 200,
-                  interval: 10,
+                  maximum: 10000,
+                  interval: 1000,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
                     color: Colors.white,
@@ -297,14 +289,14 @@ class _SPO2PageState extends State<SPO2Page>
                 palette: <Color>[
                   hPi4Global.hpi4Color,
                 ],
-                  series: <CartesianSeries>[
-                    HiloSeries<Spo2Trends, DateTime>(
-                        dataSource: Spo2TrendsData,
-                        xValueMapper: (Spo2Trends data, _) => data.date,
-                        lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                        highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                    ),
-                  ],
+                series: <CartesianSeries>[
+                  ColumnSeries<ActivityTrends, DateTime>(
+                    dataSource: ActivityTrendsData,
+                    xValueMapper: (ActivityTrends data, _) => data.date,
+                    yValueMapper: (ActivityTrends data, _) => data.count,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -345,6 +337,7 @@ class _SPO2PageState extends State<SPO2Page>
   }
 
 
+
   String _formatDate(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
@@ -366,7 +359,7 @@ class _SPO2PageState extends State<SPO2Page>
         List<File> csvFiles = files
             .where((file) => file is File && file.path.endsWith('.csv'))
             .map((file) => file as File)
-            .where((file) => p.basename(file.path).startsWith("spo2_")) // Filter by prefix
+            .where((file) => p.basename(file.path).startsWith("activity_")) // Filter by prefix
             .toList();
 
         List<String> fileNames = csvFiles.map((file) => p.basename(file.path)).toList();
@@ -451,29 +444,24 @@ class _SPO2PageState extends State<SPO2Page>
       }
     }
 
-    CalculateLasthourMinMax(myData);
-
     //String myData = await rootBundle.loadString("assets/Temp_data.csv");
     List<String> result = myData.split('\n');
     //print(result);
     timestamp = result.map((f) => f.split(",")[0]).toList();
 
-    avgSpo2 = result.map((f) => f.split(",")[1]).toList();
+    avgActivity = result.map((f) => f.split(",")[1]).toList();
 
     for(int i = 1; i< timestamp.length; i++){
       int tempTimeStamp = 0;
       int tempTimeStamp1 = 0;
-      int tempAvgSpo2 = 0;
-      int tempMinSpo2 = 95;
-      int tempMaxSpo2 = 99;
-
+      int tempAvgActivity = 0;
 
       tempTimeStamp = int.parse(timestamp[i]);
       tempTimeStamp1 = tempTimeStamp*1000;
-      tempAvgSpo2 = int.parse(avgSpo2[i]);
+      tempAvgActivity = int.parse(avgActivity[i]);
 
       //DateTime getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
-     var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
+      var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
       // Format the DateTime to remove the 'Z' and make it human-readable
       String formattedDate = DateFormat("yyyy-MM-dd HH:mm:ss").format(getUTCTime);
       // Parse the formatted date string back into a DateTime object
@@ -481,15 +469,11 @@ class _SPO2PageState extends State<SPO2Page>
 
 
       setState((){
-        //print(DateTime.fromMillisecondsSinceEpoch(Spo2TimeStamp1).toString());
-        Spo2TrendsData.add(Spo2Trends(formattedDateTime,
-            tempAvgSpo2-1, tempAvgSpo2));
+        //print(DateTime.fromMillisecondsSinceEpoch(ActivityTimeStamp1).toString());
+        ActivityTrendsData.add(ActivityTrends(formattedDateTime, tempAvgActivity-1));
         if( i == timestamp.length-1){
           lastUpdatedTime = formattedDateTime;
-          averageSpo2 = tempAvgSpo2;
-          rangeMinSpo2 = tempMinSpo2;
-          rangeMaxSpo2 = tempMaxSpo2;
-
+          totalCount = tempAvgActivity;
         }
       });
     }
@@ -500,55 +484,8 @@ class _SPO2PageState extends State<SPO2Page>
   _saveValue() async {
     String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestSpo2', averageSpo2.toString());
-    await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());
-  }
-
-  void CalculateLasthourMinMax(String fileContent) {
-    // Split file content into rows
-    List<String> rows = fileContent.split('\n');
-    List<int> timestamps = [];
-    List<int> values = [];
-
-    // Parse the rows into timestamps and values
-    for (String row in rows) {
-      if (row.trim().isNotEmpty) {
-        try {
-          List<String> parts = row.split(',');
-          if (parts.length == 2) {
-            int timestamp = int.parse(parts[0].trim()); // Trim whitespace
-            int value = int.parse(parts[1].trim());    // Trim whitespace
-            timestamps.add(timestamp);
-            values.add(value);
-          }
-        } catch (e) {
-          print('Skipping invalid row: $row. Error: $e');
-        }
-      }
-    }
-
-    // Get current timestamp and calculate one hour ago
-    int currentTime = DateTime.now().millisecondsSinceEpoch;
-    int oneHourAgo = currentTime - (60 * 60 * 1000);
-
-    // Filter the data for the last one hour
-    List<int> lastHourValues = [];
-    for (int i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] >= oneHourAgo) {
-        lastHourValues.add(values[i]);
-      }
-    }
-
-    // Calculate the minimum and maximum values
-    if (lastHourValues.isNotEmpty) {
-      int minValue = lastHourValues.reduce((a, b) => a < b ? a : b);
-      int maxValue = lastHourValues.reduce((a, b) => a > b ? a : b);
-
-      print('Minimum SpO2 in the last one hour: $minValue');
-      print('Maximum SpO2 in the last one hour: $maxValue');
-    } else {
-      print('No data available for the last one hour.');
-    }
+    await prefs.setString('latestActivity', totalCount.toString());
+    await prefs.setString('lastUpdatedActivity', lastDateTime.toString());
   }
 
   Widget displayValue(){
@@ -557,8 +494,8 @@ class _SPO2PageState extends State<SPO2Page>
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          height: SizeConfig.blockSizeVertical * 20,
-          width: SizeConfig.blockSizeHorizontal * 44,
+          height: SizeConfig.blockSizeVertical * 18,
+          width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
             child: Padding(
@@ -571,7 +508,7 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text('RANGE',
+                        Text('Total',
                             style: hPi4Global.movecardSubValueTextStyle),
                         SizedBox(
                           width: 15.0,
@@ -587,18 +524,11 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text(rangeMinSpo2.toString(),
+                        Text(totalCount.toString(),
                             style: hPi4Global.moveValueTextStyle),
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text('-',
-                            style: hPi4Global.moveValueTextStyle),
-                        SizedBox(
-                          width: 10.0,
-                        ),
-                        Text(rangeMaxSpo2.toString(),
-                            style: hPi4Global.moveValueTextStyle),
                         SizedBox(
                           width: 10.0,
                         ),
@@ -609,7 +539,7 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text("%",
+                        Text("steps",
                             style: hPi4Global.movecardSubValueTextStyle),
                         SizedBox(
                           width: 15.0,
@@ -620,48 +550,6 @@ class _SPO2PageState extends State<SPO2Page>
                   ]),
             ),
           ),
-        ),
-        Column(
-          //mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              Container(
-                height: SizeConfig.blockSizeVertical * 20,
-                width: SizeConfig.blockSizeHorizontal * 44,
-                child: Card(
-                  color: Colors.grey[900],
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              SizedBox(
-                                width: 10.0,
-                              ),
-                              Text(averageSpo2.toString(),
-                                  style: hPi4Global.moveValueTextStyle),
-                              SizedBox(
-                                width: 15.0,
-                              ),
-                              //Icon(Icons.favorite_border, color: Colors.black),
-                            ],
-                          ),
-                          Row(
-                            children: <Widget>[
-                              SizedBox(
-                                width: 10.0,
-                              ),
-                              Text('AVERAGE',
-                                  style: hPi4Global.movecardSubValueTextStyle),
-                            ],
-                          ),
-
-                        ]),
-                  ),
-                ),
-              ),
-            ]
         ),
       ],
     );
@@ -788,7 +676,7 @@ class _SPO2PageState extends State<SPO2Page>
             //mainAxisSize: MainAxisSize.max,
             children: [
               const Text(
-                'Spo2',
+                'Activity',
                 style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
               ),
               SizedBox(width:30.0),
@@ -842,9 +730,8 @@ class _SPO2PageState extends State<SPO2Page>
 }
 
 
-class Spo2Trends {
-  Spo2Trends(this.date, this.maxSpo2, this.minSpo2);
+class ActivityTrends {
+  ActivityTrends(this.date, this.count);
   final DateTime date;
-  final int maxSpo2;
-  final int minSpo2;
+  final int count;
 }
