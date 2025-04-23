@@ -34,6 +34,8 @@
 	<string>HealthyPi Move App need the Bluetooth permission to scan for and connect to Move devices</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>HealthyPi Move needs the Location Permission to scan and connect to nearby HealthyPi Move devices</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>HealthyPi Move needs the Location Permission to scan and connect to nearby HealthyPi Move devices</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>HealthyPi Move needs this permission to upload and download files to your HealthyPi Move.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
