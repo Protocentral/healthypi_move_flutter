@@ -14,8 +14,6 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-    <string>This app needs Bluetooth to function</string>
 	<key>CFBundleName</key>
 	<string>move</string>
 	<key>CFBundlePackageType</key>
@@ -26,12 +24,24 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>ITSEncryptionExportComplianceCode</key>
+	<string>Yes</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+     <key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app requires Bluetooth access to connect and interact with Move devices for tracking and performance monitoring.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app needs location access to discover and connect the near by Move devices.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>This app uses location services to scan and connect to nearby Move devices for a seamless experience.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app needs this permission to upload and download files from the Move device.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
+     <string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>UISupportedInterfaceOrientations</key>
@@ -47,11 +57,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HealthyPi Move needs this permission to upload and download files to your HealthyPi Move.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>ITSEncryptionExportComplianceCode</key>
-	<string>Yes</string>
 </dict>
 </plist>
