@@ -20,20 +20,6 @@ class SPO2Page extends StatefulWidget {
 }
 class _SPO2PageState extends State<SPO2Page>
     with SingleTickerProviderStateMixin {
-  rs.SfRangeValues _values = rs.SfRangeValues(
-    DateTime.now().subtract(Duration(hours: 4)), // Default start value
-    DateTime.now(), // Default end value
-  );
-
-  rs.SfRangeValues _values1 = rs.SfRangeValues(
-    DateTime.now().subtract(Duration(hours: 4)), // Default start value
-    DateTime.now(), // Default end value
-  );
-
-  rs.SfRangeValues _values2 = rs.SfRangeValues(
-    DateTime.now().subtract(Duration(hours: 24)), // Default start value
-    DateTime.now(), // Default end value
-  );
 
   late TabController _tabController;
 
@@ -70,9 +56,71 @@ class _SPO2PageState extends State<SPO2Page>
   void _handleTabChange() {
     setState(() {
       _listCSVFiles();
-      // Rebuild the widget when the tab index changes
-      //buildchartBlock();
     });
+  }
+
+  dateTimeAxis() {
+    if (_tabController.index == 0) {
+      return DateTimeAxis(
+        // Display a 6-hour range dynamically based on slider values
+        minimum: DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+          0,
+          0,
+          0,
+        ), // Start value of the range slider
+        maximum: DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+          23,
+          59,
+          59,
+        ),
+        //DateTime.now(), // End value of the range slider
+        interval: 1,
+        intervalType: DateTimeIntervalType.hours,
+        dateFormat: DateFormat.Hm(),
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    } else if (_tabController.index == 1) {
+      return DateTimeAxis(
+        // Display a 6-hour interval dynamically based on slider values
+        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        maximum: DateTime.now(),
+        interval: 1, // 6-hour intervals
+        intervalType: DateTimeIntervalType.days,
+        dateFormat: DateFormat('EEE'), // Show day and hour
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    } else {
+      return DateTimeAxis(
+        // Display a month-long range dynamically based on slider values
+        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
+        maximum: DateTime.now(), // Today
+        interval: 1, // 6-hour intervals
+        intervalType: DateTimeIntervalType.days,
+        dateFormat: DateFormat('dd MMM'), // Show day, month, and hour
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
   }
 
   Widget buildChartBlock() {
@@ -87,20 +135,7 @@ class _SPO2PageState extends State<SPO2Page>
               Expanded(
                 child: SfCartesianChart(
                     plotAreaBorderWidth: 0,
-                    primaryXAxis: DateTimeAxis(
-                      // Display a 6-hour range dynamically based on slider values
-                      minimum: _values.start, // Start value of the range slider
-                      maximum: _values.end, // End value of the range slider
-                      interval: 1,
-                      intervalType: DateTimeIntervalType.hours,
-                      dateFormat: DateFormat.Hm(),
-                      majorGridLines: MajorGridLines(width: 0),
-                      labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    primaryXAxis: dateTimeAxis(),
                     primaryYAxis: NumericAxis(
                       majorGridLines: MajorGridLines(width: 0.05),
                       minimum: 0,
@@ -124,226 +159,13 @@ class _SPO2PageState extends State<SPO2Page>
                           highValueMapper: (Spo2Trends data, _) => data.maxSpo2
                       ),
                     ],
-                ),
-              ),
-              Expanded(
-                flex: 0,
-                child: rs.SfRangeSlider(
-                  min: DateTime(
-                    DateTime.now().year,
-                    DateTime.now().month,
-                    DateTime.now().day,
-                    0,
-                    0,
-                    0,
-                  ), // Start of the current day
-                  max: DateTime(
-                    DateTime.now().year,
-                    DateTime.now().month,
-                    DateTime.now().day,
-                    23,
-                    59,
-                    59,
-                  ), // End of the current day
-                  values: _values,
-                  interval: 4, // Interval of 6 hours
-                  dateIntervalType: rs.DateIntervalType.hours,
-                  //showLabels: true,
-                  //showTicks: true,
-                  activeColor: hPi4Global.hpi4Color, // Set the active track color
-                  inactiveColor: Colors.grey, // Set the inactive track color
-                  dateFormat: DateFormat.Hm(),
-                  labelFormatterCallback: (dynamic actualValue, String formattedText) {
-                    return formattedText; // Customize the labels if needed
-                  },
-                  onChanged: (rs.SfRangeValues newValues) {
-                    setState(() {
-                      _values = newValues; // Update the range slider values
-                    });
-                  },
+
                 ),
               ),
             ],
           ),
         ));
   }
-
-  Widget buildWeekChartBlock() {
-    return Padding(
-      padding: const EdgeInsets.all(2.0),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        color: Colors.grey[900],
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: DateTimeAxis(
-                  // Display a 6-hour interval dynamically based on slider values
-                  minimum: _values1.start, // Start value of the range slider
-                  maximum: _values1.end, // End value of the range slider
-                  interval: 4, // 6-hour intervals
-                  intervalType: DateTimeIntervalType.hours,
-                  dateFormat: DateFormat('EEE, HH:mm'), // Show day and hour
-                  majorGridLines: MajorGridLines(width: 0),
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  minimum: 0,
-                  maximum: 200,
-                  interval: 10,
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                palette: <Color>[
-                  hPi4Global.hpi4Color,
-                ],
-                  series: <CartesianSeries>[
-                    HiloSeries<Spo2Trends, DateTime>(
-                        dataSource: Spo2TrendsData,
-                        xValueMapper: (Spo2Trends data, _) => data.date,
-                        lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                        highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                    ),
-                  ],
-              ),
-            ),
-            Expanded(
-              flex: 0,
-              child: rs.SfRangeSlider(
-                min: DateTime(
-                  DateTime.now().year,
-                  DateTime.now().month,
-                  DateTime.now().day,
-                ).subtract(Duration(days: 7)), // Start of the range (7 days before)
-                max: DateTime(
-                  DateTime.now().year,
-                  DateTime.now().month,
-                  DateTime.now().day,
-                ).add(Duration(days: 7)), // End of the range (7 days ahead)
-                values: _values1,
-                interval: 6, // Interval of 6 hours
-                dateIntervalType: rs.DateIntervalType.hours, // Set interval to 6 hours
-                //showLabels: true,
-                //showTicks: true,
-                activeColor: hPi4Global.hpi4Color, // Set the active track color
-                inactiveColor: Colors.grey, // Set the inactive track color
-                dateFormat: DateFormat('EEE, HH:mm'), // Format labels as day and hours
-                labelFormatterCallback: (dynamic actualValue, String formattedText) {
-                  return formattedText; // Customize the labels if needed
-                },
-                onChanged: (rs.SfRangeValues newValues) {
-                  setState(() {
-                    _values1 = newValues; // Update the range slider values
-                  });
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget buildMonthChartBlock() {
-    return Padding(
-      padding: const EdgeInsets.all(2.0),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        color: Colors.grey[900],
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: DateTimeAxis(
-                  // Display a month-long range dynamically based on slider values
-                  minimum: _values2.start, // Start value of the range slider
-                  maximum: _values2.end, // End value of the range slider
-                  interval: 6, // 6-hour intervals
-                  intervalType: DateTimeIntervalType.hours,
-                  dateFormat: DateFormat('dd MMM, HH:mm'), // Show day, month, and hour
-                  majorGridLines: MajorGridLines(width: 0),
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  minimum: 0,
-                  maximum: 200,
-                  interval: 10,
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                palette: <Color>[
-                  hPi4Global.hpi4Color,
-                ],
-                  series: <CartesianSeries>[
-                    HiloSeries<Spo2Trends, DateTime>(
-                        dataSource: Spo2TrendsData,
-                        xValueMapper: (Spo2Trends data, _) => data.date,
-                        lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                        highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                    ),
-                  ],
-              ),
-            ),
-            Expanded(
-              flex: 0,
-              child: rs.SfRangeSlider(
-                min: DateTime(
-                  DateTime.now().year,
-                  DateTime.now().month,
-                  DateTime.now().day,
-                ).subtract(Duration(days: 30)), // Start of the range (30 days before today)
-                max: DateTime(
-                  DateTime.now().year,
-                  DateTime.now().month,
-                  DateTime.now().day,
-                ).add(Duration(days: 30)), // End of the range (30 days after today)
-                values: _values2,
-                interval: 6, // Interval of 6 hours
-                dateIntervalType: rs.DateIntervalType.hours, // Set interval to 6 hours
-                //showLabels: true,
-                //showTicks: true,
-                activeColor: hPi4Global.hpi4Color, // Set the active track color
-                inactiveColor: Colors.grey, // Set the inactive track color
-                dateFormat: DateFormat('dd MMM, HH:mm'), // Format labels as day, month, and hour
-                labelFormatterCallback: (dynamic actualValue, String formattedText) {
-                  return formattedText; // Customize the labels if needed
-                },
-                onChanged: (rs.SfRangeValues newValues) {
-                  setState(() {
-                    _values2 = newValues; // Update the range slider values
-                  });
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
 
   String _formatDate(DateTime date) {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
@@ -668,103 +490,37 @@ class _SPO2PageState extends State<SPO2Page>
   }
 
   Widget displayCard(String tab){
-    if(tab == "Day"){
-      return Card(
-        color: Colors.black,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        height: SizeConfig.blockSizeVertical * 45,
-                        width: SizeConfig.blockSizeHorizontal * 88,
-                        color:Colors.transparent,
-                        child:buildChartBlock(),
-                      )
-                    ],
-                  ),
-                  SizedBox(height:20),
-                  displayValue(),
-                ],
-              ),
-            ],
-          ),
+    return Card(
+      color: Colors.black,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      height: SizeConfig.blockSizeVertical * 45,
+                      width: SizeConfig.blockSizeHorizontal * 88,
+                      color:Colors.transparent,
+                      child:buildChartBlock(),
+                    )
+                  ],
+                ),
+                SizedBox(height:20),
+                displayValue(),
+              ],
+            ),
+          ],
         ),
-      );
-    }else if(tab == "Week"){
-      return Card(
-        color: Colors.black,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        height: SizeConfig.blockSizeVertical * 45,
-                        width: SizeConfig.blockSizeHorizontal * 88,
-                        color:Colors.transparent,
-                        child:buildWeekChartBlock(),
-                      )
-                    ],
-                  ),
-                  SizedBox(height:20),
-                  displayValue(),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }else{
-      return Card(
-        color: Colors.black,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        height: SizeConfig.blockSizeVertical * 45,
-                        width: SizeConfig.blockSizeHorizontal * 88,
-                        color:Colors.transparent,
-                        child:buildMonthChartBlock(),
-                      )
-                    ],
-                  ),
-                  SizedBox(height:20),
-                  displayValue(),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+      ),
+    );
   }
 
 
@@ -829,6 +585,7 @@ class _SPO2PageState extends State<SPO2Page>
       ),
       body: TabBarView(
         controller: _tabController,
+        physics: NeverScrollableScrollPhysics(),
         children: [
           displayCard("Day"),
           displayCard("Week"),

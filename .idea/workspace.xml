@@ -5,11 +5,15 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="965b8f54-58b7-4a2e-9110-24ed4bc56744" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/move/android/settings.gradle.kts" beforeDir="false" afterPath="$PROJECT_DIR$/move/android/settings.gradle.kts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/move/lib/src/repository/firmware_image_repository.dart" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/move/lib/src/view/firmware_select/firmware_list.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/src/view/firmware_select/firmware_list.dart" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/move/pubspec.lock" beforeDir="false" afterPath="$PROJECT_DIR$/move/pubspec.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/move/pubspec.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/move/pubspec.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/ios/Runner.xcodeproj/project.pbxproj" beforeDir="false" afterPath="$PROJECT_DIR$/move/ios/Runner.xcodeproj/project.pbxproj" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/device.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/device.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/dfu.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/dfu.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/home.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/home.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/screens/activityPage.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/screens/activityPage.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/screens/hrPage.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/screens/hrPage.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/screens/skinTempPage.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/screens/skinTempPage.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/screens/spo2Page.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/screens/spo2Page.dart" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/move/lib/src/view/stepper_view/update_view.dart" beforeDir="false" afterPath="$PROJECT_DIR$/move/lib/src/view/stepper_view/update_view.dart" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

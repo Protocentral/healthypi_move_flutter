@@ -44,7 +44,6 @@ class _SettingsPageState extends State<SettingsPage> {
     return ListTile(
       title: Column(
         children: [
-
           Padding(
             padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
             child: ElevatedButton(

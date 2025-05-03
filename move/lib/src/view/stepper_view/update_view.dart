@@ -30,7 +30,7 @@ class UpdateStepView extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
+                   // minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
                   ),
                   onPressed: () {
                     context.read<UpdateBloc>().add(BeginUpdateProcess());
@@ -64,7 +64,7 @@ class UpdateStepView extends StatelessWidget {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
+                       // minimumSize: Size(SizeConfig.blockSizeHorizontal*100, 30),
                       ),
                       onPressed: () {
                         Navigator.push(

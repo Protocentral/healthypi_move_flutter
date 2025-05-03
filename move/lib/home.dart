@@ -161,11 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _initPackageInfo();
     _loadStoredValue();
     if (_isScanning == false) {
-      FlutterBluePlus.startScan(
-        withNames: ['healthypi move'],
-        //timeout: const Duration(seconds: 15),
-
-      );
+      startScan();
     }
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
           (results) {
@@ -201,7 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
     //_connectionStateSubscription.cancel();
-    onStopPressed();
     FlutterBluePlus.stopScan();
     super.dispose();
   }
@@ -214,10 +209,11 @@ class _HomeScreenState extends State<HomeScreen> {
       lastestHR = prefs.getString('latestHR') ?? '0';
       lastestTemp = prefs.getString('latestTemp') ?? '0';
       lastestSpo2 = prefs.getString('latestSpo2') ?? '0';
+      lastestActivity = prefs.getString('latestActivityCount') ?? '0';
       lastUpdatedHR = prefs.getString('lastUpdatedHR') ?? '0';
       lastUpdatedTemp = prefs.getString('lastUpdatedTemp') ?? '0';
       lastUpdatedSpo2 = prefs.getString('lastUpdatedSpo2') ?? '0';
-      //lastUpdatedActivity = prefs.getString('lasUpdatedActivity') ?? '0';
+      lastUpdatedActivity = prefs.getString('lastUpdatedActivity') ?? '0';
     });
   }
 
@@ -310,30 +306,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   }
 
+  Future<void> startScan() async {
+    // enable bluetooth on Android
+    if (Platform.isAndroid) {
+      await FlutterBluePlus.turnOn();
+    }
+
+    if (await FlutterBluePlus.isSupported == false) {
+      print("Bluetooth not supported by this device");
+      return;
+    }
+
+    FlutterBluePlus.setLogLevel(LogLevel.verbose);
+    FlutterBluePlus.adapterState.listen((event) {
+      print(event);
+    });
+
+    await FlutterBluePlus.adapterState
+        .where((BluetoothAdapterState state) => state == BluetoothAdapterState.on)
+        .first;
+
+    await FlutterBluePlus.startScan(
+      withNames: ['healthypi move'],
+    );
+  }
+
+  Future<void> stopScan() async {
+    await FlutterBluePlus.stopScan();
+  }
+
   Future onScanPressed() async {
     try {
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 15),
-        withNames: ['healthypi move'],
-      );
+      startScan();
     } catch (e, backtrace) {
       Snackbar.show(
         ABC.b,
         prettyException("Start Scan Error:", e),
-        success: false,
-      );
-      print(e);
-      print("backtrace: $backtrace");
-    }
-  }
-
-  Future onStopPressed() async {
-    try {
-      FlutterBluePlus.stopScan();
-    } catch (e, backtrace) {
-      Snackbar.show(
-        ABC.b,
-        prettyException("Stop Scan Error:", e),
         success: false,
       );
       print(e);
@@ -550,7 +558,6 @@ class _HomeScreenState extends State<HomeScreen> {
           totalSessionCount = bdata.getUint16(2, Endian.little);
         });
         logConsole("Data Rx count: $totalSessionCount");
-
         await _streamDataSubscription.cancel();
       }
       /*****  Packet type Log Index ***/
@@ -663,8 +670,8 @@ class _HomeScreenState extends State<HomeScreen> {
             } else {
               logConsole("All temp files have been fetched.");
               setState(() {
-                isFetchingSpo2 = true;
                 isFetchingTemp = false;
+                isFetchingSpo2 = true;
                 isFetchingActivity = false;
               });
               Future.delayed(Duration(seconds: 2), () async {
@@ -805,7 +812,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (fileDate == todayDate) {
         logConsole("Today's file detected with ID $logFileID. Always downloading...");
         await _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
-      } else {
+      }
+      else {
         bool fileExists = await _doesFileExist(logFileID);
 
         if (fileExists) {
@@ -851,7 +859,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ) async {
     logConsole("Fetch log count initiated");
     showLoadingIndicator("Fetching logs count...", context);
-    //await _startListeningCommand(deviceID);
     await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
@@ -869,7 +876,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ) async {
     logConsole("Fetch log index initiated");
     showLoadingIndicator("Fetching logs index...", context);
-    //await _startListeningCommand(deviceID);
     await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
@@ -891,10 +897,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     showLoadingIndicator("Fetching file $sessionID...", context);
-    //await _startListeningCommand(deviceID);
-    // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
-    //await _startListeningData(deviceName, ((sessionSize * 6)), sessionID, "0");
-
     // Reset all fetch variables
     currentFileDataCounter = 0;
     //currentFileReceivedComplete = false;
@@ -973,8 +975,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ) async {
     logConsole("Fetch temperature log count initiated");
     showLoadingIndicator("Fetching temperature logs count...", context);
-    //await _startListeningCommand(deviceID);
-    //await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
@@ -990,8 +990,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ) async {
     logConsole("Fetch temperature log index initiated");
     showLoadingIndicator("Fetching temperature logs index...", context);
-    //await _startListeningCommand(deviceID);
-    //await _startListeningData(deviceName, 0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.sessionLogIndex);
@@ -1275,6 +1273,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "sync") {
         showLoadingIndicator("Connected. Syncing the data...", context);
+        await FlutterBluePlus.stopScan();
         await subscribeToChar(device);
         _sendCurrentDateTime(device, "Sync");
         _saveValue();
@@ -1322,7 +1321,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future onRefresh() {
     if (_isScanning == false) {
-
       FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
     }
 
@@ -1636,7 +1634,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text("0 ", style: hPi4Global.movecardValueTextStyle),
+                      Text(lastestActivity.toString(), style: hPi4Global.movecardValueTextStyle),
                       SizedBox(width: 5.0),
                       Text("Steps", style: hPi4Global.movecardSubValueTextStyle),
                       SizedBox(width: 5.0),
