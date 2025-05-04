@@ -28,10 +28,10 @@ typedef LogHeader =
 
 class FetchFileData extends StatefulWidget {
   const FetchFileData({
-    Key? key,
+    super.key,
     required this.connectionState,
     required this.connectedDevice,
-  }) : super(key: key);
+  });
 
   final BluetoothConnectionState connectionState;
   final BluetoothDevice connectedDevice;
@@ -45,7 +45,7 @@ class _FetchFileDataState extends State<FetchFileData> {
   bool currentFileReceivedComplete = false;
   bool fetchingFile = false;
   bool listeningDataStream = false;
-  bool _listeningCommandStream = false;
+  final bool _listeningCommandStream = false;
 
   late StreamSubscription _streamCommandSubscription;
   late StreamSubscription _streamDataSubscription;
@@ -95,13 +95,13 @@ class _FetchFileDataState extends State<FetchFileData> {
 
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
-  Future waitWhile(bool test(), [Duration pollInterval = Duration.zero]) {
-    var completer = new Completer();
+  Future waitWhile(bool Function() test, [Duration pollInterval = Duration.zero]) {
+    var completer = Completer();
     check() {
       if (!test()) {
         completer.complete();
       } else {
-        new Timer(pollInterval, check);
+        Timer(pollInterval, check);
       }
     }
 
@@ -113,7 +113,7 @@ class _FetchFileDataState extends State<FetchFileData> {
   bool isFetchIconTap = false;
 
   void logConsole(String logString) async {
-    print("AKW - " + logString);
+    print("AKW - $logString");
     debugText += logString;
     debugText += "\n";
   }
@@ -158,7 +158,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     int sessionID,
     String formattedTime,
   ) async {
-    logConsole("Log data size: " + mData.length.toString());
+    logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(
       mData,
@@ -190,14 +190,14 @@ class _FetchFileDataState extends State<FetchFileData> {
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory _directory = Directory("");
+    Directory directory0 = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
-      _directory = Directory("/storage/emulated/0/Download");
+      directory0 = Directory("/storage/emulated/0/Download");
     } else {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     }
-    final exPath = _directory.path;
+    final exPath = directory0.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
 
@@ -247,23 +247,23 @@ class _FetchFileDataState extends State<FetchFileData> {
 
     dataCharacteristic?.onValueReceived.listen((value) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      logConsole("Data Rx: " + value.toString());
-      int _pktType = bdata.getUint8(0);
+      logConsole("Data Rx: $value");
+      int pktType = bdata.getUint8(0);
 
-      if (_pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
+      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
         //int _cmdType = bdata.getUint8(1);
         //if (_cmdType == 84) {
         setState(() {
           totalSessionCount = bdata.getUint16(2, Endian.little);
         });
-        logConsole("Data Rx count: " + totalSessionCount.toString());
+        logConsole("Data Rx count: $totalSessionCount");
 
         //}
-      } else if (_pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
+      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
         //print("Data Rx: " + value.toString());
-        logConsole("Data Rx length: " + value.length.toString());
+        logConsole("Data Rx length: ${value.length}");
 
-        LogHeader _mLog = (
+        LogHeader mLog = (
           logFileID: bdata.getUint16(1, Endian.little),
           sessionID: bdata.getUint8(1), // same as log file id
           sessionLength: bdata.getUint16(3, Endian.little),
@@ -275,9 +275,9 @@ class _FetchFileDataState extends State<FetchFileData> {
           tmSec: bdata.getUint8(10),
         );
 
-        logConsole("Log: " + _mLog.toString());
+        logConsole("Log: " + mLog.toString());
 
-        logHeaderList.add(_mLog);
+        logHeaderList.add(mLog);
 
         if (logHeaderList.length == totalSessionCount) {
           setState(() {
@@ -286,14 +286,11 @@ class _FetchFileDataState extends State<FetchFileData> {
 
           logConsole("All logs received. Cancel subscription");
         } else {}
-      } else if (_pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
+      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
         int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
 
         logConsole(
-          "Data Rx length: " +
-              value.length.toString() +
-              " | Actual Payload: " +
-              pktPayloadSize.toString(),
+          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
         );
         currentFileDataCounter += pktPayloadSize;
         _globalReceivedData += pktPayloadSize;
@@ -309,24 +306,18 @@ class _FetchFileDataState extends State<FetchFileData> {
         });
 
         logConsole(
-          "File data counter: " +
-              currentFileDataCounter.toString() +
-              " | Received: " +
-              displayPercent.toString() +
-              "%",
+          "File data counter: $currentFileDataCounter | Received: $displayPercent%",
         );
 
         if (currentFileDataCounter >= (expectedLength)) {
           logConsole(
-            "All data " + currentFileDataCounter.toString() + " received",
+            "All data $currentFileDataCounter received",
           );
 
           if (currentFileDataCounter > expectedLength) {
             int diffData = currentFileDataCounter - expectedLength;
             logConsole(
-              "Data received more than expected by: " +
-                  diffData.toString() +
-                  " bytes",
+              "Data received more than expected by: $diffData bytes",
             );
             //logData.removeRange(expectedLength, currentFileDataCounter);
           }
@@ -465,7 +456,7 @@ class _FetchFileDataState extends State<FetchFileData> {
 
   Future<void> _sendCommand(List<int> commandList) async {
     logConsole(
-      "Tx CMD " + commandList.toString() + " 0x" + hex.encode(commandList),
+      "Tx CMD $commandList 0x${hex.encode(commandList)}",
     );
 
     List<BluetoothService> services =
@@ -514,17 +505,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     int sec,
   ) {
     String formattedDate =
-        hour.toString() +
-        ":" +
-        min.toString() +
-        ":" +
-        sec.toString() +
-        " " +
-        day.toString() +
-        "/" +
-        month.toString() +
-        "/" +
-        year.toString();
+        "$hour:$min:$sec $day/$month/$year";
 
     return formattedDate;
   }
@@ -533,7 +514,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     return (logIndexReceived == false)
         ? Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Container(
+          child: SizedBox(
             width: 320,
             height: 100,
             child: Card(
@@ -558,7 +539,7 @@ class _FetchFileDataState extends State<FetchFileData> {
             ),
           ),
         )
-        : Container(
+        : SizedBox(
           height: 400,
           child: Scrollbar(
             //isAlwaysShown: true,
@@ -603,10 +584,8 @@ class _FetchFileDataState extends State<FetchFileData> {
                                       Row(
                                         children: [
                                           Text(
-                                            "Session ID: " +
-                                                logHeaderList[index].sessionID
-                                                    .toString(),
-                                            style: new TextStyle(fontSize: 12),
+                                            "Session ID: ${logHeaderList[index].sessionID}",
+                                            style: TextStyle(fontSize: 12),
                                           ),
                                         ],
                                       ),
@@ -623,7 +602,7 @@ class _FetchFileDataState extends State<FetchFileData> {
                                               logHeaderList[index].tmMin,
                                               logHeaderList[index].tmSec,
                                             ),
-                                            style: new TextStyle(fontSize: 12),
+                                            style: TextStyle(fontSize: 12),
                                           ),
                                         ],
                                       ),
@@ -679,10 +658,8 @@ class _FetchFileDataState extends State<FetchFileData> {
                                                   ),
                                                 ),
                                                 Text(
-                                                  displayPercent
-                                                          .truncate()
-                                                          .toString() +
-                                                      " %",
+                                                  "${displayPercent
+                                                          .truncate()} %",
                                                 ),
                                               ],
                                             ),

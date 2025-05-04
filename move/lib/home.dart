@@ -38,6 +38,8 @@ String pcCurrentDeviceName = "";
 typedef LogHeader = ({int logFileID, int sessionLength});
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -56,7 +58,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar:new Theme(
+      bottomNavigationBar:Theme(
         data: Theme.of(context).copyWith(
             canvasColor: hPi4Global.hpi4Color,
            ), // sets the inactive color of the `BottomNavigationBar`
@@ -101,7 +103,7 @@ class _HomePageState extends State<HomePage> {
 
 
 class HomeScreen extends StatefulWidget {
-  HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -178,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void logConsole(String logString) async {
-    print("AKW - " + logString);
+    print("AKW - $logString");
   }
 
   void setStateIfMounted(f) {
@@ -258,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
     print(dt.minute);
     print(dt.second);
 
-    ByteData sessionParametersLength = new ByteData(8);
+    ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
 
     sessionParametersLength.setUint8(0, dt.second);
@@ -270,11 +272,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
 
-    logConsole("Sending DateTime information: " + cmdByteList.toString());
+    logConsole("Sending DateTime information: $cmdByteList");
 
     commandDateTimePacket.addAll(cmdByteList);
 
-    logConsole("Sending DateTime Command: " + commandDateTimePacket.toString());
+    logConsole("Sending DateTime Command: $commandDateTimePacket");
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
@@ -371,7 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
       int sessionID,
       String formattedTime,
       ) async {
-    logConsole("Log data size: " + mData.length.toString());
+    logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -420,16 +422,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory _directory = Directory("");
+    Directory directory0 = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
       //_directory = Directory("/storage/emulated/0/Download");
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     } else {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     }
 
-    final exPath = _directory.path;
+    final exPath = directory0.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
 
@@ -455,7 +457,7 @@ class _HomeScreenState extends State<HomeScreen> {
       int sessionID,
       String headerName,
       ) async {
-    logConsole("Log data size: " + mData.length.toString());
+    logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -478,8 +480,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Extract other data values (2 bytes each) and convert them
       int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
 
-      logConsole("timestamp: " +timestamp.toString());
-      logConsole("value: " + value1.toString());
+      logConsole("timestamp: $timestamp");
+      logConsole("value: $value1");
 
       // Construct the row data
       List<String> dataRow = [
@@ -493,14 +495,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory _directory = Directory("");
+    Directory directory0 = Directory("");
     if (Platform.isAndroid) {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     } else {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     }
 
-    final exPath = _directory.path;
+    final exPath = directory0.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
 
@@ -549,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       //logConsole("Data Rx: $value");
-      logConsole("Data Rx in hex: " +  hex.encode(value).toString());
+      logConsole("Data Rx in hex: ${hex.encode(value)}");
       int pktType = bdata.getUint8(0);
 
       /**** Packet type Command Response ***/
@@ -1346,7 +1348,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: <Widget>[
             Text(
               'SCAN',
-              style: new TextStyle(fontSize: 16, color: Colors.white),
+              style: TextStyle(fontSize: 16, color: Colors.white),
             ),
           ],
         ),
@@ -1379,7 +1381,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
-              content: Container(
+              content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1717,13 +1719,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisSize: MainAxisSize.max,
                   children: <Widget>[
                     SizedBox(width: 10.0),
-                    Text("Last synced: "+lastSyncedDateTime,
+                    Text("Last synced: $lastSyncedDateTime",
                       style: hPi4Global.movecardSubValueTextStyle,),
                     SizedBox(width: 10.0),
                   ],
                 ),
                 SizedBox(height:10),
-                Container(
+                SizedBox(
                   //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),

@@ -27,7 +27,7 @@ import 'package:flutter/cupertino.dart';
 typedef LogHeader = ({int logFileID, int sessionLength});
 
 class DevicePage extends StatefulWidget {
-  DevicePage({Key? key}) : super(key: key);
+  const DevicePage({super.key});
 
   @override
   _DevicePageState createState() => _DevicePageState();
@@ -159,7 +159,7 @@ class _DevicePageState extends State<DevicePage> {
     print(dt.minute);
     print(dt.second);
 
-    ByteData sessionParametersLength = new ByteData(8);
+    ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
 
     sessionParametersLength.setUint8(0, dt.second);
@@ -171,11 +171,11 @@ class _DevicePageState extends State<DevicePage> {
 
     Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
 
-    logConsole("Sending DateTime information: " + cmdByteList.toString());
+    logConsole("Sending DateTime information: $cmdByteList");
 
     commandDateTimePacket.addAll(cmdByteList);
 
-    logConsole("Sending DateTime Command: " + commandDateTimePacket.toString());
+    logConsole("Sending DateTime Command: $commandDateTimePacket");
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
@@ -366,7 +366,7 @@ class _DevicePageState extends State<DevicePage> {
           children: <Widget>[
             Text(
               'SCAN',
-              style: new TextStyle(fontSize: 16, color: Colors.white),
+              style: TextStyle(fontSize: 16, color: Colors.white),
             ),
           ],
         ),
@@ -399,7 +399,7 @@ class _DevicePageState extends State<DevicePage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
-              content: Container(
+              content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -534,7 +534,7 @@ class _DevicePageState extends State<DevicePage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
@@ -872,7 +872,7 @@ class _DevicePageState extends State<DevicePage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
@@ -993,7 +993,7 @@ class _DevicePageState extends State<DevicePage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(

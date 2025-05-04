@@ -196,7 +196,7 @@ class BatteryLevelPainter extends CustomPainter {
 }
 
 class LoadingIndicator extends StatelessWidget {
-  LoadingIndicator({this.text = ''});
+  const LoadingIndicator({super.key, this.text = ''});
 
   final String text;
 
@@ -219,24 +219,24 @@ class LoadingIndicator extends StatelessWidget {
 
   Padding _getLoadingIndicator() {
     return Padding(
+        padding: EdgeInsets.only(bottom: 16),
         child: Container(
             child: SpinKitCircle(
               color: Colors.blue,
               size: 32.0,
             ),
             width: 32,
-            height: 32),
-        padding: EdgeInsets.only(bottom: 16));
+            height: 32));
   }
 
   Widget _getHeading(context) {
     return Padding(
+        padding: EdgeInsets.only(bottom: 4),
         child: Text(
           'Please wait…',
           style: TextStyle(color: Colors.white, fontSize: 16),
           textAlign: TextAlign.center,
-        ),
-        padding: EdgeInsets.only(bottom: 4));
+        ));
   }
 
   Text _getText(String displayedText) {

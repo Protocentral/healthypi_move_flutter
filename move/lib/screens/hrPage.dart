@@ -13,7 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 class HRPage extends StatefulWidget {
-  const HRPage({Key? key}) : super(key: key);
+  const HRPage({super.key});
   @override
   State<HRPage> createState() => _HRPageState();
 }
@@ -401,7 +401,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        SizedBox(
           height: SizeConfig.blockSizeVertical * 20,
           width: SizeConfig.blockSizeHorizontal * 44,
           child: Card(
@@ -456,7 +456,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
         Column(
           //mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
-            Container(
+            SizedBox(
               height: SizeConfig.blockSizeVertical * 10,
               width: SizeConfig.blockSizeHorizontal * 44,
               child: Card(
@@ -491,7 +491,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                 ),
               ),
             ),
-            Container(
+            SizedBox(
               height: SizeConfig.blockSizeVertical * 10,
               width: SizeConfig.blockSizeHorizontal * 44,
               child: Card(

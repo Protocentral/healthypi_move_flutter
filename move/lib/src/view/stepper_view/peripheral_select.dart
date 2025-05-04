@@ -7,7 +7,7 @@ import '/src/view/peripheral_select/peripheral_list.dart';
 import 'package:provider/provider.dart';
 
 class PeripheralSelect extends StatelessWidget {
-  const PeripheralSelect({Key? key}) : super(key: key);
+  const PeripheralSelect({super.key});
 
   @override
   Widget build(BuildContext context) {
