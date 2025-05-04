@@ -13,29 +13,28 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 
-class SPO2Page extends StatefulWidget {
-  const SPO2Page({Key? key}) : super(key: key);
+class ActivityPage extends StatefulWidget {
+  const ActivityPage({Key? key}) : super(key: key);
   @override
-  State<SPO2Page> createState() => _SPO2PageState();
+  State<ActivityPage> createState() => _ActivityPageState();
 }
-class _SPO2PageState extends State<SPO2Page>
+class _ActivityPageState extends State<ActivityPage>
     with SingleTickerProviderStateMixin {
 
   late TabController _tabController;
 
   List<String> timestamp = [];
-  List<String> minSpo2 = [];
-  List<String> maxSpo2 =[];
-  List<String> avgSpo2 =[];
-  List<String> latestSpo2 =[];
+  List<String> minActivity = [];
+  List<String> maxActivity =[];
+  List<String> avgActivity =[];
+  List<String> latestActivity =[];
 
-  int restingSpo2 = 0;
-  int rangeMinSpo2 = 0;
-  int rangeMaxSpo2 = 0;
-  int averageSpo2 = 0;
+
+  int totalCount = 0;
+  int Count = 0;
   late DateTime lastUpdatedTime;
 
-  List<Spo2Trends> Spo2TrendsData = [];
+  List<ActivityTrends> ActivityTrendsData = [];
 
   @override
   void initState() {
@@ -47,7 +46,7 @@ class _SPO2PageState extends State<SPO2Page>
 
   @override
   void dispose() {
-    Spo2TrendsData = [];
+    ActivityTrendsData = [];
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
@@ -56,6 +55,7 @@ class _SPO2PageState extends State<SPO2Page>
   void _handleTabChange() {
     setState(() {
       _listCSVFiles();
+
     });
   }
 
@@ -134,32 +134,36 @@ class _SPO2PageState extends State<SPO2Page>
             children: <Widget>[
               Expanded(
                 child: SfCartesianChart(
-                    plotAreaBorderWidth: 0,
-                    primaryXAxis: dateTimeAxis(),
-                    primaryYAxis: NumericAxis(
-                      majorGridLines: MajorGridLines(width: 0.05),
-                      minimum: 0,
-                      maximum: 200,
-                      interval: 10,
-                      anchorRangeToVisiblePoints: false,
-                      labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                  plotAreaBorderWidth: 0,
+                  primaryXAxis:  dateTimeAxis(),
+                  primaryYAxis: NumericAxis(
+                    majorGridLines: MajorGridLines(width: 0.05),
+                    //minimum: 0,
+                    //maximum: ,
+                   // interval: 1000,
+                    anchorRangeToVisiblePoints: false,
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
-                    palette: <Color>[
-                      hPi4Global.hpi4Color,
-                    ],
-                    series: <CartesianSeries>[
-                      HiloSeries<Spo2Trends, DateTime>(
-                          dataSource: Spo2TrendsData,
-                          xValueMapper: (Spo2Trends data, _) => data.date,
-                          lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                          highValueMapper: (Spo2Trends data, _) => data.maxSpo2
-                      ),
-                    ],
-
+                  ),
+                  palette: <Color>[
+                    hPi4Global.hpi4Color,
+                  ],
+                  series: <CartesianSeries>[
+                    ColumnSeries<ActivityTrends, DateTime>(
+                      dataSource: ActivityTrendsData,
+                      xValueMapper: (ActivityTrends data, _) => data.date,
+                      yValueMapper: (ActivityTrends data, _) => data.count,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                  ],
+                  zoomPanBehavior: ZoomPanBehavior(
+                    enablePinching: true, // Enable pinch zoom
+                    enablePanning: true, // Enable panning
+                    zoomMode: ZoomMode.x, // Allow zooming in both X and Y directions
+                  ),
                 ),
               ),
             ],
@@ -171,7 +175,20 @@ class _SPO2PageState extends State<SPO2Page>
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  Future<void> _listCSVFiles() async {
+  Future<String> _getSecondLineTimestamp(File file) async {
+    try {
+      List<String> lines = await file.readAsLines();
+      if (lines.length > 1) {
+        return lines[1]; // Assuming the timestamp is on the second line
+      }
+      return 'No second line';
+    } catch (e) {
+      return 'Error reading file: $e';
+    }
+  }
+
+
+  /*Future<void> _listCSVFiles() async {
     Directory? downloadsDirectory ;
     if (Platform.isAndroid) {
       //downloadsDirectory = Directory('/storage/emulated/0/Download');
@@ -188,43 +205,34 @@ class _SPO2PageState extends State<SPO2Page>
         List<File> csvFiles = files
             .where((file) => file is File && file.path.endsWith('.csv'))
             .map((file) => file as File)
-            .where((file) => p.basename(file.path).startsWith("spo2_")) // Filter by prefix
+            .where((file) => p.basename(file.path).startsWith("activity_")) // Filter by prefix
             .toList();
 
         List<String> fileNames = csvFiles.map((file) => p.basename(file.path)).toList();
-        //print("......"+fileNames.toString());
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
-          //timestamps.add(timestamp);
           String timestamp1 = timestamp.split(",")[0];
           int timestamp2 = int.parse(timestamp1);
           int updatedTimestamp = timestamp2*1000;
           String fileName1 = p.basename(file.path);
 
           DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
-          //print("......"+timestampDateTime.toString());
           DateTime now = DateTime.now();
           // print("......"+now.toString());
           if(_tabController.index == 0){
             String todayStr = _formatDate(now);
             if (_formatDate(timestampDateTime) == todayStr) {
               getFileData(fileName1);
-              // print("same..........");
             }else{
-              // print("different........");
             }
           }else if(_tabController.index == 1){
-            // Calculate the start of the week (7 days ago)
             DateTime weekStart = now.subtract(Duration(days: 7));
-            // Check if the file's timestamp is within the past 7 days
             if (timestampDateTime.isAfter(weekStart) && timestampDateTime.isBefore(now)) {
               getFileData(fileName1); // Process the file data
             }
           }else if(_tabController.index == 2){
-            // Calculate the start of the week (7 days ago)
             DateTime monthStart = now.subtract(Duration(days: 30));
-            // Check if the file's timestamp is within the past 7 days
             if (timestampDateTime.isAfter(monthStart) && timestampDateTime.isBefore(now)) {
               getFileData(fileName1); // Process the file data
             }
@@ -236,17 +244,6 @@ class _SPO2PageState extends State<SPO2Page>
     }
   }
 
-  Future<String> _getSecondLineTimestamp(File file) async {
-    try {
-      List<String> lines = await file.readAsLines();
-      if (lines.length > 1) {
-        return lines[1]; // Assuming the timestamp is on the second line
-      }
-      return 'No second line';
-    } catch (e) {
-      return 'Error reading file: $e';
-    }
-  }
 
   Future<void> getFileData(String fileName) async {
     Directory? downloadsDirectory;
@@ -273,29 +270,24 @@ class _SPO2PageState extends State<SPO2Page>
       }
     }
 
-    CalculateLasthourMinMax(myData);
-
     //String myData = await rootBundle.loadString("assets/Temp_data.csv");
     List<String> result = myData.split('\n');
     //print(result);
     timestamp = result.map((f) => f.split(",")[0]).toList();
 
-    avgSpo2 = result.map((f) => f.split(",")[1]).toList();
+    avgActivity = result.map((f) => f.split(",")[1]).toList();
 
     for(int i = 1; i< timestamp.length; i++){
       int tempTimeStamp = 0;
       int tempTimeStamp1 = 0;
-      int tempAvgSpo2 = 0;
-      int tempMinSpo2 = 95;
-      int tempMaxSpo2 = 99;
-
+      int tempAvgActivity = 0;
 
       tempTimeStamp = int.parse(timestamp[i]);
       tempTimeStamp1 = tempTimeStamp*1000;
-      tempAvgSpo2 = int.parse(avgSpo2[i]);
+      tempAvgActivity = int.parse(avgActivity[i]);
 
       //DateTime getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
-     var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
+      var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
       // Format the DateTime to remove the 'Z' and make it human-readable
       String formattedDate = DateFormat("yyyy-MM-dd HH:mm:ss").format(getUTCTime);
       // Parse the formatted date string back into a DateTime object
@@ -303,15 +295,13 @@ class _SPO2PageState extends State<SPO2Page>
 
 
       setState((){
-        //print(DateTime.fromMillisecondsSinceEpoch(Spo2TimeStamp1).toString());
-        Spo2TrendsData.add(Spo2Trends(formattedDateTime,
-            tempAvgSpo2-1, tempAvgSpo2));
+        //print(DateTime.fromMillisecondsSinceEpoch(ActivityTimeStamp1).toString());
+        ActivityTrendsData.add(ActivityTrends(formattedDateTime, tempAvgActivity-1));
+        totalCount = totalCount + tempAvgActivity;
+        print("......"+timestamp.length.toString());
         if( i == timestamp.length-1){
           lastUpdatedTime = formattedDateTime;
-          averageSpo2 = tempAvgSpo2;
-          rangeMinSpo2 = tempMinSpo2;
-          rangeMaxSpo2 = tempMaxSpo2;
-
+          Count = tempAvgActivity;
         }
       });
     }
@@ -322,54 +312,176 @@ class _SPO2PageState extends State<SPO2Page>
   _saveValue() async {
     String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestSpo2', averageSpo2.toString());
-    await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());
-  }
+    await prefs.setString('latestActivity', Count.toString());
+    await prefs.setString('lastUpdatedActivity', lastDateTime.toString());
+  }*/
 
-  void CalculateLasthourMinMax(String fileContent) {
-    // Split file content into rows
-    List<String> rows = fileContent.split('\n');
-    List<int> timestamps = [];
-    List<int> values = [];
 
-    // Parse the rows into timestamps and values
-    for (String row in rows) {
-      if (row.trim().isNotEmpty) {
-        try {
-          List<String> parts = row.split(',');
-          if (parts.length == 2) {
-            int timestamp = int.parse(parts[0].trim()); // Trim whitespace
-            int value = int.parse(parts[1].trim());    // Trim whitespace
-            timestamps.add(timestamp);
-            values.add(value);
+  Future<void> _listCSVFiles() async {
+    Directory? downloadsDirectory;
+    if (Platform.isAndroid) {
+      //downloadsDirectory = Directory('/storage/emulated/0/Download');
+      downloadsDirectory = await getApplicationDocumentsDirectory();
+    } else if (Platform.isIOS) {
+      downloadsDirectory = await getApplicationDocumentsDirectory();
+    }
+    if (downloadsDirectory != null) {
+      String downloadsPath = downloadsDirectory.path;
+      Directory downloadsDir = Directory(downloadsPath);
+      if (downloadsDir.existsSync()) {
+        List<FileSystemEntity> files = downloadsDir.listSync();
+
+        List<File> csvFiles =
+        files
+            .where((file) => file is File && file.path.endsWith('.csv'))
+            .map((file) => file as File)
+            .where(
+              (file) => p.basename(file.path).startsWith("activity_"),
+        ) // Filter by prefix
+            .toList();
+
+        List<String> weeklyFileNames = [];
+        List<String> MonthlyFileNames = [];
+
+        for (File file in csvFiles) {
+          String timestamp = await _getSecondLineTimestamp(file);
+          String timestamp1 = timestamp.split(",")[0];
+          int timestamp2 = int.parse(timestamp1);
+          int updatedTimestamp = timestamp2 * 1000;
+          String fileName1 = p.basename(file.path);
+
+          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+            updatedTimestamp,
+            isUtc: true,
+          );
+          DateTime now = DateTime.now();
+          if (_tabController.index == 0) {
+            String todayStr = _formatDate(now);
+
+            if (_formatDate(timestampDateTime) == todayStr) {
+              await processFileData(
+                fileNames: [fileName1],
+                groupingFormat: "yyyy-MM-dd HH:00:00", // Group by hour
+              ); // Group by hour)
+            } else {}
+          } else if (_tabController.index == 1) {
+            // Calculate the start of the week (7 days ago)
+            DateTime weekStart = now.subtract(Duration(days: 7));
+            if (timestampDateTime.isAfter(weekStart) &&
+                timestampDateTime.isBefore(now)) {
+              weeklyFileNames.add(fileName1); // Process the file data
+            }
+            // Pass the list of weekly files to the function
+            if (weeklyFileNames.isNotEmpty) {
+              await processFileData(
+                fileNames: weeklyFileNames,
+                groupingFormat: "yyyy-MM-dd", // Group by day
+              ); // Process the list of weekly files
+            } else {
+              //print("No valid files found for the past week.");
+            }
+          } else if (_tabController.index == 2) {
+            // Calculate the start of the week (7 days ago)
+            DateTime monthStart = now.subtract(Duration(days: 30));
+            // Check if the file's timestamp is within the past 7 days
+            if (timestampDateTime.isAfter(monthStart) &&
+                timestampDateTime.isBefore(now)) {
+              MonthlyFileNames.add(fileName1);
+            }
+            if (MonthlyFileNames.isNotEmpty) {
+              await processFileData(
+                fileNames: MonthlyFileNames,
+                groupingFormat: "yyyy-MM-dd", // Group by day
+              ); // Process the list of weekly files
+            } else {}
           }
-        } catch (e) {
-          print('Skipping invalid row: $row. Error: $e');
         }
       }
     }
+  }
 
-    // Get current timestamp and calculate one hour ago
-    int currentTime = DateTime.now().millisecondsSinceEpoch;
-    int oneHourAgo = currentTime - (60 * 60 * 1000);
+// Save the last updated values
+  saveValue(DateTime lastUpdatedTime, int Count) async {
+    String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('latestActivityCount', Count.toString());
+    await prefs.setString('lastUpdatedActivity', lastDateTime);
+  }
 
-    // Filter the data for the last one hour
-    List<int> lastHourValues = [];
-    for (int i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] >= oneHourAgo) {
-        lastHourValues.add(values[i]);
-      }
+  Future<void> processFileData({
+    required List<String> fileNames, // List of files to process
+    required String
+    groupingFormat, // Grouping format: "yyyy-MM-dd HH:00:00" for hourly, "yyyy-MM-dd" for daily
+  }) async {
+    Directory? downloadsDirectory;
+    Map<String, Map<String, int>> groupedStats =
+    {}; // To store grouped min and max values
+
+    if (Platform.isAndroid) {
+      downloadsDirectory = await getApplicationDocumentsDirectory();
+    } else if (Platform.isIOS) {
+      downloadsDirectory = await getApplicationDocumentsDirectory();
     }
 
-    // Calculate the minimum and maximum values
-    if (lastHourValues.isNotEmpty) {
-      int minValue = lastHourValues.reduce((a, b) => a < b ? a : b);
-      int maxValue = lastHourValues.reduce((a, b) => a > b ? a : b);
+    if (downloadsDirectory == null) return;
 
-      print('Minimum SpO2 in the last one hour: $minValue');
-      print('Maximum SpO2 in the last one hour: $maxValue');
-    } else {
-      print('No data available for the last one hour.');
+    for (String fileName in fileNames) {
+      String filePath = '${downloadsDirectory.path}/$fileName';
+      File csvFile = File(filePath);
+
+      if (await csvFile.exists()) {
+        String fileContent = await csvFile.readAsString();
+        List<String> result = fileContent.split('\n');
+        if (result.isEmpty) continue;
+
+        // Extract headers and rows
+        List<String> headers = result.first.split(',');
+        List<List<String>> rows =
+        result.skip(1).map((line) => line.split(',')).toList();
+
+        // Process each row
+        for (var row in rows) {
+          if (row.length < 2) continue;
+
+          int timestamp = int.parse(row[0]);
+          int count = int.parse(row[1]);
+
+          // Convert timestamp to DateTime and group by the specified format
+          var dateTime =
+          DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
+          String groupKey = DateFormat(groupingFormat).format(dateTime);
+
+          // Update min and max for the group
+          if (!groupedStats.containsKey(groupKey)) {
+            groupedStats[groupKey] = {
+              'count': count,
+            };
+          } else {
+            groupedStats[groupKey]!['count'] = (groupedStats[groupKey]!['count']! + count); // Add to sum
+            setState(() {
+             Count = groupedStats[groupKey]!['count']!;
+            });
+          }
+        }
+      }
+    }
+    double average = 0;
+    // Process the grouped stats and update the UI
+    groupedStats.forEach((group, stats) {
+      DateTime formattedDateTime = DateTime.parse(group);
+      setState(() {
+        ActivityTrendsData.add(ActivityTrends(formattedDateTime, stats['count']!),);
+      });
+    });
+
+    // Update the last aggregated values
+    if (groupedStats.isNotEmpty) {
+      String lastGroup = groupedStats.keys.last;
+
+      setState(() {
+        lastUpdatedTime = DateTime.parse(lastGroup);
+      });
+      saveValue(lastUpdatedTime, Count);
     }
   }
 
@@ -379,8 +491,8 @@ class _SPO2PageState extends State<SPO2Page>
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          height: SizeConfig.blockSizeVertical * 20,
-          width: SizeConfig.blockSizeHorizontal * 44,
+          height: SizeConfig.blockSizeVertical * 18,
+          width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
             child: Padding(
@@ -393,7 +505,7 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text('RANGE',
+                        Text('Total',
                             style: hPi4Global.movecardSubValueTextStyle),
                         SizedBox(
                           width: 15.0,
@@ -409,18 +521,11 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text(rangeMinSpo2.toString(),
+                        Text(Count.toString(),
                             style: hPi4Global.moveValueTextStyle),
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text('-',
-                            style: hPi4Global.moveValueTextStyle),
-                        SizedBox(
-                          width: 10.0,
-                        ),
-                        Text(rangeMaxSpo2.toString(),
-                            style: hPi4Global.moveValueTextStyle),
                         SizedBox(
                           width: 10.0,
                         ),
@@ -431,7 +536,7 @@ class _SPO2PageState extends State<SPO2Page>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text("%",
+                        Text("steps",
                             style: hPi4Global.movecardSubValueTextStyle),
                         SizedBox(
                           width: 15.0,
@@ -443,84 +548,42 @@ class _SPO2PageState extends State<SPO2Page>
             ),
           ),
         ),
-        Column(
-          //mainAxisAlignment: MainAxisAlignment.start,
-            children: <Widget>[
-              Container(
-                height: SizeConfig.blockSizeVertical * 20,
-                width: SizeConfig.blockSizeHorizontal * 44,
-                child: Card(
-                  color: Colors.grey[900],
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: <Widget>[
-                          Row(
-                            children: <Widget>[
-                              SizedBox(
-                                width: 10.0,
-                              ),
-                              Text(averageSpo2.toString(),
-                                  style: hPi4Global.moveValueTextStyle),
-                              SizedBox(
-                                width: 15.0,
-                              ),
-                              //Icon(Icons.favorite_border, color: Colors.black),
-                            ],
-                          ),
-                          Row(
-                            children: <Widget>[
-                              SizedBox(
-                                width: 10.0,
-                              ),
-                              Text('AVERAGE',
-                                  style: hPi4Global.movecardSubValueTextStyle),
-                            ],
-                          ),
-
-                        ]),
-                  ),
-                ),
-              ),
-            ]
-        ),
       ],
     );
   }
 
   Widget displayCard(String tab){
-    return Card(
-      color: Colors.black,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: SizeConfig.blockSizeVertical * 45,
-                      width: SizeConfig.blockSizeHorizontal * 88,
-                      color:Colors.transparent,
-                      child:buildChartBlock(),
-                    )
-                  ],
-                ),
-                SizedBox(height:20),
-                displayValue(),
-              ],
-            ),
-          ],
+      return Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 45,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color:Colors.transparent,
+                        child:buildChartBlock(),
+                      )
+                    ],
+                  ),
+                  SizedBox(height:20),
+                  displayValue(),
+                ],
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
   }
 
 
@@ -544,7 +607,7 @@ class _SPO2PageState extends State<SPO2Page>
             //mainAxisSize: MainAxisSize.max,
             children: [
               const Text(
-                'Spo2',
+                'Activity',
                 style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
               ),
               SizedBox(width:30.0),
@@ -599,9 +662,8 @@ class _SPO2PageState extends State<SPO2Page>
 }
 
 
-class Spo2Trends {
-  Spo2Trends(this.date, this.maxSpo2, this.minSpo2);
+class ActivityTrends {
+  ActivityTrends(this.date, this.count);
   final DateTime date;
-  final int maxSpo2;
-  final int minSpo2;
+  final int count;
 }

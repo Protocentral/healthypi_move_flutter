@@ -16,6 +16,7 @@ void main() async {
       ],
       child: MaterialApp(
         title: 'HealthyPi',
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           primarySwatch: Colors.purple,
           visualDensity: VisualDensity.adaptivePlatformDensity,

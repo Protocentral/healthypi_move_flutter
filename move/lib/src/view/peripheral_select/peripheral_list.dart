@@ -16,6 +16,7 @@ class PeripheralList extends StatelessWidget {
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
+        automaticallyImplyLeading: false,
         iconTheme: IconThemeData(
           color: hPi4Global.hpi4AppBarIconsColor, //change your color here
         ),
@@ -50,7 +51,6 @@ class PeripheralList extends StatelessWidget {
                   } else if (snapshot.hasError) {
                     return Text('${snapshot.error}');
                   }
-
                   return const CircularProgressIndicator();
                 });
           } else if (snapshot.hasError) {
@@ -95,7 +95,9 @@ class PeripheralList extends StatelessWidget {
       itemCount: peripherals.length,
       itemBuilder: (context, index) {
         return ListTile(
-          title: Text(peripherals[index].device.name, style: hPi4Global.cardWhiteTextStyle),
+          title: Text(peripherals[index].device.name,
+              style: hPi4Global.eventsWhite),
+          leading: Text(peripherals[index].rssi.toString(),style: hPi4Global.subValueWhiteTextStyle),
           onTap: () {
             ScanResult p = peripherals[index];
 
