@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:move/screens/activityPage.dart';
 import 'package:move/settings.dart';
-import 'device.dart';
+import 'screens/scr_device_mgmt.dart';
 import 'screens/scr_scan.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
