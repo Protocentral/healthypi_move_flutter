@@ -123,7 +123,7 @@ SPEC CHECKSUMS:
   file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
   flutter_archive: ad8edfd7f7d1bb12058d05424ba93e27d9930efe
-  flutter_blue_plus_darwin: 09444a26fb6bdef523e55b68fc1c59af5a877ea6
+  flutter_blue_plus_darwin: 20a08bfeaa0f7804d524858d3d8744bcc1b6dbc3
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   iOSMcuManagerLibrary: 4102a4595be1c69e5286d7f1520a733c82c30b0a
   mcumgr_flutter: 8c4a598cb1b4d10a9adbc0f13288334297185506

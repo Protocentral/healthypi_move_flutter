@@ -80,7 +80,7 @@ class _DevicePageState extends State<DevicePage> {
         _scanResults = results;
       },
       onError: (e) {
-       // Snackbar.show(ABC.b, prettyException("Scan Error:", e), success: false);
+        // Snackbar.show(ABC.b, prettyException("Scan Error:", e), success: false);
       },
     );
 
@@ -88,7 +88,6 @@ class _DevicePageState extends State<DevicePage> {
       _isScanning = state;
     });
   }
-
 
   @override
   Future<void> dispose() async {
@@ -115,14 +114,13 @@ class _DevicePageState extends State<DevicePage> {
     });
 
     await FlutterBluePlus.adapterState
-        .where((BluetoothAdapterState state) => state == BluetoothAdapterState.on)
+        .where(
+          (BluetoothAdapterState state) => state == BluetoothAdapterState.on,
+        )
         .first;
 
-    await FlutterBluePlus.startScan(
-      withNames: ['healthypi move'],
-    );
+    await FlutterBluePlus.startScan(withNames: ['healthypi move']);
   }
-
 
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -142,12 +140,14 @@ class _DevicePageState extends State<DevicePage> {
     }
   }
 
-
   void setStateIfMounted(f) {
     if (mounted) setState(f);
   }
 
-  Future<void> _sendCurrentDateTime(BluetoothDevice deviceName, String selectedOption) async {
+  Future<void> _sendCurrentDateTime(
+    BluetoothDevice deviceName,
+    String selectedOption,
+  ) async {
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -205,19 +205,22 @@ class _DevicePageState extends State<DevicePage> {
       logConsole('Data written: $commandDateTimePacket');
     }
 
-    if(selectedOption == "Set Time"){
+    if (selectedOption == "Set Time") {
       await deviceName.disconnect();
-    }else{
+    } else {
       /// Do Nothing;
     }
-
   }
 
   Future onScanPressed() async {
     try {
       startScan();
     } catch (e, backtrace) {
-      Snackbar.show(ABC.b, prettyException("Start Scan Error:", e), success: false);
+      Snackbar.show(
+        ABC.b,
+        prettyException("Start Scan Error:", e),
+        success: false,
+      );
       print(e);
       print("backtrace: $backtrace");
     }
@@ -227,7 +230,11 @@ class _DevicePageState extends State<DevicePage> {
     try {
       FlutterBluePlus.stopScan();
     } catch (e, backtrace) {
-      Snackbar.show(ABC.b, prettyException("Stop Scan Error:", e), success: false);
+      Snackbar.show(
+        ABC.b,
+        prettyException("Stop Scan Error:", e),
+        success: false,
+      );
       print(e);
       print("backtrace: $backtrace");
     }
@@ -260,7 +267,7 @@ class _DevicePageState extends State<DevicePage> {
         device.requestMtu(512);
       }
 
-   if (_connectionState == BluetoothConnectionState.connected &&
+      if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "fetchLogs") {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
@@ -276,11 +283,11 @@ class _DevicePageState extends State<DevicePage> {
         _sendCurrentDateTime(device, "Set Time");
       } else if (_connectionState == BluetoothConnectionState.connected &&
           selectedOption == "readDevice") {
-      } else if (_connectionState == BluetoothConnectionState.connected && selectedOption == "eraseAll") {
+      } else if (_connectionState == BluetoothConnectionState.connected &&
+          selectedOption == "eraseAll") {
         _eraseAllLogs(context, device);
         await FlutterBluePlus.stopScan();
-      } else {
-      }
+      } else {}
     });
   }
 
@@ -297,9 +304,9 @@ class _DevicePageState extends State<DevicePage> {
   }
 
   Future<void> _eraseAllLogs(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Erase All initiated");
     //showLoadingIndicator("Erasing logs...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -309,7 +316,6 @@ class _DevicePageState extends State<DevicePage> {
     });
     //Navigator.pop(context);
   }
-
 
   Future<void> _sendCommand(
     List<int> commandList,
@@ -364,10 +370,7 @@ class _DevicePageState extends State<DevicePage> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(
-              'SCAN',
-              style: TextStyle(fontSize: 16, color: Colors.white),
-            ),
+            Text('SCAN', style: TextStyle(fontSize: 16, color: Colors.white)),
           ],
         ),
       ),
@@ -445,13 +448,15 @@ class _DevicePageState extends State<DevicePage> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(8.0))),
-              backgroundColor: Colors.black87,
-              content: LoadingIndicator(text: text),
-            ));
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8.0)),
+            ),
+            backgroundColor: Colors.black87,
+            content: LoadingIndicator(text: text),
+          ),
+        );
       },
     );
   }
@@ -659,7 +664,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),*/
-                                         /* SizedBox(height: 10.0),
+                                          /* SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -711,13 +716,13 @@ class _DevicePageState extends State<DevicePage> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                              hPi4Global
-                                                  .hpi4Color, // background color
+                                                  hPi4Global
+                                                      .hpi4Color, // background color
                                               foregroundColor:
-                                              Colors.white, // text color
+                                                  Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                BorderRadius.circular(20),
+                                                    BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -737,7 +742,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                                    MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
                                                     Icons.delete,
@@ -830,10 +835,9 @@ class _DevicePageState extends State<DevicePage> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                       BPTCalibrationPage1(),
+                                                          BPTCalibrationPage1(),
                                                 ),
                                               );
-
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
@@ -882,18 +886,22 @@ class _DevicePageState extends State<DevicePage> {
                                       padding: const EdgeInsets.all(8.0),
                                       child: Column(
                                         mainAxisAlignment:
-                                        MainAxisAlignment.center,
+                                            MainAxisAlignment.center,
                                         mainAxisSize: MainAxisSize.max,
                                         children: <Widget>[
                                           SizedBox(height: 10),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: hPi4Global.hpi4Color.withOpacity(0.5), // background color
+                                              backgroundColor: hPi4Global
+                                                  .hpi4Color
+                                                  .withOpacity(
+                                                    0.5,
+                                                  ), // background color
                                               foregroundColor:
-                                              Colors.white, // text color
+                                                  Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                BorderRadius.circular(20),
+                                                    BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -918,7 +926,7 @@ class _DevicePageState extends State<DevicePage> {
                                               child: Row(
                                                 //mainAxisSize: MainAxisSize.min,
                                                 mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                                    MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
                                                     Icons.system_update,
@@ -938,7 +946,8 @@ class _DevicePageState extends State<DevicePage> {
                                           ),
                                           SizedBox(height: 10),
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: <Widget>[
                                               Icon(
                                                 Icons.warning_amber,
@@ -949,36 +958,49 @@ class _DevicePageState extends State<DevicePage> {
                                               Expanded(
                                                 child: Text(
                                                   " Firmware Update through this app is still not available. Please use the nrfConnect App to update your firmware. "
-                                                      "For more details details, ",
-                                                  style:hPi4Global.movecardSubValue1TextStyle,
+                                                  "For more details details, ",
+                                                  style:
+                                                      hPi4Global
+                                                          .movecardSubValue1TextStyle,
                                                   textAlign: TextAlign.justify,
                                                 ),
                                               ),
                                             ],
                                           ),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: <Widget>[
-                                          GestureDetector(
-                                            onTap: () async {
-                                              const url =
-                                                  'https://move.protocentral.com/updating_move/01-updating_with_nRF_connect/';
-                                              if (await canLaunchUrl(Uri.parse(url))) {
-                                                await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-                                              } else {
-                                                throw 'Could not launch $url';
-                                              }
-                                            },
-                                            child: Text(
-                                              'check our docs',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.blue,
-                                                decoration: TextDecoration.underline,
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: <Widget>[
+                                              GestureDetector(
+                                                onTap: () async {
+                                                  const url =
+                                                      'https://move.protocentral.com/updating_move/01-updating_with_nRF_connect/';
+                                                  if (await canLaunchUrl(
+                                                    Uri.parse(url),
+                                                  )) {
+                                                    await launchUrl(
+                                                      Uri.parse(url),
+                                                      mode:
+                                                          LaunchMode
+                                                              .externalApplication,
+                                                    );
+                                                  } else {
+                                                    throw 'Could not launch $url';
+                                                  }
+                                                },
+                                                child: Text(
+                                                  'check our docs',
+                                                  style: TextStyle(
+                                                    fontSize: 16,
+                                                    color: Colors.blue,
+                                                    decoration:
+                                                        TextDecoration
+                                                            .underline,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                            ],
                                           ),
-                                        ]),
 
                                           SizedBox(height: 10),
                                         ],

@@ -73,7 +73,7 @@ dependencies:
   #protobuf: 2.0.0
   #pdf: 3.11.3
   #open_file: ^3.5.10
-  flutter_blue_plus: ^1.35.3
+  flutter_blue_plus: ^1.35.5
 
   mcumgr_flutter: ^0.4.2
   equatable: ^2.0.5
