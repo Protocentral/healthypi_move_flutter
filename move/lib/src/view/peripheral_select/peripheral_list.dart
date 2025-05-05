@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 class PeripheralList extends StatelessWidget {
   final repository = PeripheralRepository();
-  PeripheralList({Key? key}) : super(key: key);
+  PeripheralList({super.key});
 
   @override
   Widget build(BuildContext context) {

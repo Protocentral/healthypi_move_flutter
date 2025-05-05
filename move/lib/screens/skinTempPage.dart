@@ -13,7 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
 class SkinTemperaturePage extends StatefulWidget {
-  const SkinTemperaturePage({Key? key}) : super(key: key);
+  const SkinTemperaturePage({super.key});
   @override
   State<SkinTemperaturePage> createState() => _SkinTemperaturePageState();
 }
@@ -400,7 +400,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        SizedBox(
           height: SizeConfig.blockSizeVertical * 20,
           width: SizeConfig.blockSizeHorizontal * 44,
           child: Card(
@@ -455,7 +455,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
         Column(
           //mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
-            Container(
+            SizedBox(
               height: SizeConfig.blockSizeVertical * 10,
               width: SizeConfig.blockSizeHorizontal * 44,
               child: Card(
@@ -490,7 +490,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                 ),
               ),
             ),
-            Container(
+            SizedBox(
               height: SizeConfig.blockSizeVertical * 10,
               width: SizeConfig.blockSizeHorizontal * 44,
               child: Card(

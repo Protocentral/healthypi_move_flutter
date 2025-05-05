@@ -12,7 +12,7 @@ import 'globals.dart';
 import 'home.dart';
 
 class ScanConnectScreen extends StatefulWidget {
-  const ScanConnectScreen({Key? key, required this.pageFlag}) : super(key: key);
+  const ScanConnectScreen({super.key, required this.pageFlag});
 
   final bool pageFlag;
 
@@ -147,7 +147,7 @@ class _ScanConnectScreenState extends State<ScanConnectScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text('SCAN', style: new TextStyle(fontSize: 16, color:Colors.white)
+            Text('SCAN', style: TextStyle(fontSize: 16, color:Colors.white)
             ),
           ],
         ),

@@ -13,7 +13,7 @@ void showPrivacyDialog(BuildContext context) async {
       // return object of type Dialog
       return AlertDialog(
         backgroundColor: Colors.black,
-        title: new Text("Privacy Policy",
+        title: Text("Privacy Policy",
           style: TextStyle(fontSize: 16, color: hPi4Global.hpi4AppBarIconsColor),),
         content: SingleChildScrollView(
           child: Container(
@@ -43,8 +43,8 @@ void showPrivacyDialog(BuildContext context) async {
           ),
         ),
         actions: <Widget>[
-          new TextButton(
-            child: new Text("Close",style: hPi4Global.eventsWhite,),
+          TextButton(
+            child: Text("Close",style: hPi4Global.eventsWhite,),
             onPressed: () {
               Navigator.of(context).pop();
             },

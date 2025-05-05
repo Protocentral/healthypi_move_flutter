@@ -7,6 +7,8 @@ import '../sizeConfig.dart';
 import 'bptCalibrationPage1.dart';
 
 class BPTCalibrationPage extends StatefulWidget {
+  const BPTCalibrationPage({super.key});
+
   @override
   State<BPTCalibrationPage> createState() => _BPTCalibrationPageState();
 }
@@ -39,7 +41,7 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
       ),
       body:  Center(
         child: Column(children: <Widget>[
-          Container(
+          SizedBox(
             height: SizeConfig.blockSizeVertical * 23,
             width: SizeConfig.blockSizeHorizontal * 95,
             child: Card(
@@ -54,19 +56,19 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
                   children: <Widget>[
                     Icon(Icons.warning, color: Colors.yellow[300]),
                     Text('Critical Information',
-                        style: new TextStyle(fontSize: 24.0, color: hPi4Global.hpi4Color)),
+                        style: TextStyle(fontSize: 24.0, color: hPi4Global.hpi4Color)),
                   ],
                 ),
                 Text("Calibration is very important and valid for 4 weeks."
                     "Any error in this protocol will cause incorrect reports, thereafter."
                     "Please use an FDA approved BP device for reference measurements.",
-                    style: new TextStyle(fontSize: 16.0, color: Colors.grey)),
+                    style: TextStyle(fontSize: 16.0, color: Colors.grey)),
               ],
             ),
           ),
         ),
           ),
-          Container(
+          SizedBox(
             height: SizeConfig.blockSizeVertical * 20,
             width: SizeConfig.blockSizeHorizontal * 95,
             child: Card(
@@ -81,11 +83,11 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
                       children: <Widget>[
                         Icon(Icons.warning, color: Colors.yellow[300]),
                         Text('Resting 5 minutes',
-                            style: new TextStyle(fontSize: 24.0, color: hPi4Global.hpi4Color)),
+                            style: TextStyle(fontSize: 24.0, color: hPi4Global.hpi4Color)),
                       ],
                     ),
                     Text("Please rest aleast 5 minutes before taking reference measurement.",
-                        style: new TextStyle(fontSize: 16.0, color: Colors.grey)),
+                        style: TextStyle(fontSize: 16.0, color: Colors.grey)),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16.0, 2.0, 16.0, 2.0),
                       child: TextButton(
@@ -106,7 +108,7 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
            SizedBox(
             height: SizeConfig.blockSizeVertical * 5,
           ),
-          Container(
+          SizedBox(
             height: SizeConfig.blockSizeVertical * 30,
             width: SizeConfig.blockSizeHorizontal * 95,
             child: CircularCountDownTimer(
@@ -165,12 +167,6 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
             child: MaterialButton(
               minWidth: 200.0,
               color: hPi4Global.hpi4Color,
-              child: Row(
-                children: <Widget>[
-                  Text('Calibration',
-                      style: new TextStyle(fontSize: 18.0, color: Colors.white)),
-                ],
-              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8.0),
               ),
@@ -181,6 +177,12 @@ class _BPTCalibrationPageState extends State<BPTCalibrationPage> {
                       builder: (context) => BPTCalibrationPage1(),
                     ));
               },
+              child: Row(
+                children: <Widget>[
+                  Text('Calibration',
+                      style: new TextStyle(fontSize: 18.0, color: Colors.white)),
+                ],
+              ),
             ),
           ),
         ],

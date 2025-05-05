@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, FileSystemEntity, Platform;
-import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
@@ -9,17 +8,15 @@ import 'package:flutter/foundation.dart';
 import 'package:move/screens/activityPage.dart';
 import 'package:move/settings.dart';
 import 'device.dart';
+import 'screens/scr_scan.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
-import 'package:path/path.dart' as p;
 
 import 'globals.dart';
 import 'sizeConfig.dart';
 import 'screens/hrPage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,16 +25,14 @@ import '../utils/snackbar.dart';
 import '../widgets/scan_result_tile.dart';
 import '../utils/extra.dart';
 
-int globalSpO2 = 0;
-int globalRespRate = 0;
-int _globalBatteryLevel = 50;
-
 String pcCurrentDeviceID = "";
 String pcCurrentDeviceName = "";
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
 class HomePage extends StatefulWidget {
+  const HomePage({super.key});
+
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -45,63 +40,53 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [
-    HomeScreen(),
-    DevicePage(),
-    SettingsPage(),
-  ];
-
+  final List<Widget> _screens = [HomeScreen(), DevicePage(), SettingsPage()];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar:new Theme(
+      bottomNavigationBar: Theme(
         data: Theme.of(context).copyWith(
-            canvasColor: hPi4Global.hpi4Color,
-           ), // sets the inactive color of the `BottomNavigationBar`
-        child:  Container(
-          color:hPi4Global.hpi4AppBarColor,
-          height: Platform.isAndroid? 80 : 110,
+          canvasColor: hPi4Global.hpi4Color,
+        ), // sets the inactive color of the `BottomNavigationBar`
+        child: Container(
+          color: hPi4Global.hpi4AppBarColor,
+          height: Platform.isAndroid ? 80 : 110,
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10.0),
-            child:BottomNavigationBar(
-          type: BottomNavigationBarType.shifting, // Shifting
-          selectedItemColor: hPi4Global.oldHpi4Color,
-          unselectedItemColor: Colors.white,
-          currentIndex: _currentIndex,
-          onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          items: [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
+            child: BottomNavigationBar(
+              type: BottomNavigationBarType.shifting, // Shifting
+              selectedItemColor: hPi4Global.oldHpi4Color,
+              unselectedItemColor: Colors.white,
+              currentIndex: _currentIndex,
+              onTap: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+              items: [
+                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.devices),
+                  label: 'Device',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.settings),
+                  label: 'Settings',
+                ),
+              ],
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.devices),
-              label: 'Device',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Settings',
-            ),
-          ],
-        ),
-    ),
+          ),
         ),
       ),
-
     );
   }
 }
 
-
 class HomeScreen extends StatefulWidget {
-  HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -114,7 +99,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isScanning = false;
   late StreamSubscription<List<ScanResult>> _scanResultsSubscription;
   late StreamSubscription<bool> _isScanningSubscription;
-  BluetoothConnectionState _connectionState = BluetoothConnectionState.disconnected;
+  BluetoothConnectionState _connectionState =
+      BluetoothConnectionState.disconnected;
   late StreamSubscription<BluetoothConnectionState>
   _connectionStateSubscription;
 
@@ -160,25 +146,26 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _initPackageInfo();
     _loadStoredValue();
-    if (_isScanning == false) {
+    /*if (_isScanning == false) {
       startScan();
-    }
-    _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-          (results) {
+    }*/
+    /*_scanResultsSubscription = FlutterBluePlus.scanResults.listen(
+      (results) {
         _scanResults = results;
       },
       onError: (e) {
         Snackbar.show(ABC.b, prettyException("Scan Error:", e), success: false);
       },
-    );
-
+    );*/
+    /*
     _isScanningSubscription = FlutterBluePlus.isScanning.listen((state) {
       _isScanning = state;
     });
+    */
   }
 
   void logConsole(String logString) async {
-    print("AKW - " + logString);
+    print("AKW - $logString");
   }
 
   void setStateIfMounted(f) {
@@ -194,10 +181,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Future<void> dispose() async {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
+    //_scanResultsSubscription.cancel();
+    //_isScanningSubscription.cancel();
     //_connectionStateSubscription.cancel();
-    FlutterBluePlus.stopScan();
+    //FlutterBluePlus.stopScan();
     super.dispose();
   }
 
@@ -205,7 +192,8 @@ class _HomeScreenState extends State<HomeScreen> {
   _loadStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      lastSyncedDateTime = prefs.getString('lastSynced') ?? 'No value saved yet';
+      lastSyncedDateTime =
+          prefs.getString('lastSynced') ?? 'No value saved yet';
       lastestHR = prefs.getString('latestHR') ?? '0';
       lastestTemp = prefs.getString('latestTemp') ?? '0';
       lastestSpo2 = prefs.getString('latestSpo2') ?? '0';
@@ -235,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             await dataCharacteristic?.setNotifyValue(true);
@@ -246,7 +234,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _sendCurrentDateTime(BluetoothDevice deviceName, String selectedOption) async {
+  Future<void> _sendCurrentDateTime(
+    BluetoothDevice deviceName,
+    String selectedOption,
+  ) async {
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -258,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
     print(dt.minute);
     print(dt.second);
 
-    ByteData sessionParametersLength = new ByteData(8);
+    ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
 
     sessionParametersLength.setUint8(0, dt.second);
@@ -270,11 +261,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
 
-    logConsole("Sending DateTime information: " + cmdByteList.toString());
+    logConsole("Sending DateTime information: $cmdByteList");
 
     commandDateTimePacket.addAll(cmdByteList);
 
-    logConsole("Sending DateTime Command: " + commandDateTimePacket.toString());
+    logConsole("Sending DateTime Command: $commandDateTimePacket");
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
@@ -286,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         targetService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             targetCharacteristic = characteristic;
             break;
@@ -303,10 +294,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       logConsole('Data written: $commandDateTimePacket');
     }
-
   }
 
-  Future<void> startScan() async {
+  /*Future<void> startScan() async {
     // enable bluetooth on Android
     if (Platform.isAndroid) {
       await FlutterBluePlus.turnOn();
@@ -323,12 +313,12 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     await FlutterBluePlus.adapterState
-        .where((BluetoothAdapterState state) => state == BluetoothAdapterState.on)
+        .where(
+          (BluetoothAdapterState state) => state == BluetoothAdapterState.on,
+        )
         .first;
 
-    await FlutterBluePlus.startScan(
-      withNames: ['healthypi move'],
-    );
+    await FlutterBluePlus.startScan(withNames: ['healthypi move']);
   }
 
   Future<void> stopScan() async {
@@ -347,8 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
       print(e);
       print("backtrace: $backtrace");
     }
-  }
-
+  }*/
 
   Future<void> disconnectDevice(BluetoothDevice device) async {
     try {
@@ -360,24 +349,24 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-// Function for converting little-endian bytes to integer
+  // Function for converting little-endian bytes to integer
   int convertLittleEndianToInteger(List<int> bytes) {
     List<int> reversedBytes = bytes.reversed.toList();
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
   }
 
   Future<void> _writeLogDataToFile(
-      List<int> mData,
-      int sessionID,
-      String formattedTime,
-      ) async {
-    logConsole("Log data size: " + mData.length.toString());
+    List<int> mData,
+    int sessionID,
+    String formattedTime,
+  ) async {
+    logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
     //logConsole("writing to file - hex: " +  hex.encode(mData));
 
-    int logNumberPoints = ((mData.length-1) ~/ 16);
+    int logNumberPoints = ((mData.length - 1) ~/ 16);
 
     //logConsole("log no of point: " +  logNumberPoints.toString());
 
@@ -420,16 +409,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory _directory = Directory("");
+    Directory directory0 = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
       //_directory = Directory("/storage/emulated/0/Download");
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     } else {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     }
 
-    final exPath = _directory.path;
+    final exPath = directory0.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
 
@@ -438,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isFetchingTemp) {
       file = File('$directory/temp_$sessionID.csv');
       print("Save file");
-    }else{
+    } else {
       file = File('$directory/hr_$sessionID.csv');
       print("Save file");
     }
@@ -451,11 +440,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _writeSpo2LogDataToFile(
-      List<int> mData,
-      int sessionID,
-      String headerName,
-      ) async {
-    logConsole("Log data size: " + mData.length.toString());
+    List<int> mData,
+    int sessionID,
+    String headerName,
+  ) async {
+    logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -478,14 +467,11 @@ class _HomeScreenState extends State<HomeScreen> {
       // Extract other data values (2 bytes each) and convert them
       int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
 
-      logConsole("timestamp: " +timestamp.toString());
-      logConsole("value: " + value1.toString());
+      logConsole("timestamp: $timestamp");
+      logConsole("value: $value1");
 
       // Construct the row data
-      List<String> dataRow = [
-        timestamp.toString(),
-        value1.toString(),
-      ];
+      List<String> dataRow = [timestamp.toString(), value1.toString()];
       dataList.add(dataRow);
     }
 
@@ -493,14 +479,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory _directory = Directory("");
+    Directory directory0 = Directory("");
     if (Platform.isAndroid) {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     } else {
-      _directory = await getApplicationDocumentsDirectory();
+      directory0 = await getApplicationDocumentsDirectory();
     }
 
-    final exPath = _directory.path;
+    final exPath = directory0.path;
     print("Saved Path: $exPath");
     await Directory(exPath).create(recursive: true);
 
@@ -510,11 +496,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isFetchingSpo2) {
       file = File('$directory/spo2_$sessionID.csv');
       print("Save file");
-    }else{
+    } else {
       file = File('$directory/activity_$sessionID.csv');
       print("Save file");
     }
-
 
     await file.writeAsString(csv);
 
@@ -533,23 +518,22 @@ class _HomeScreenState extends State<HomeScreen> {
   int currentFileIndex = 0; // Track the current file being fetched
   int currentTempFileIndex = 0; // Track the current Temp file being fetched
   int currentSpo2FileIndex = 0; // Track the current SpO2 file being fetched
-  int currentActivityFileIndex = 0; // Track the current Activity file being fetched
-
+  int currentActivityFileIndex =
+      0; // Track the current Activity file being fetched
 
   Future<void> _startListeningData(
-      BluetoothDevice deviceName,
-      int expectedLength,
-      int sessionID,
-      String formattedTime,
-      ) async {
-
+    BluetoothDevice deviceName,
+    int expectedLength,
+    int sessionID,
+    String formattedTime,
+  ) async {
     logConsole("Started listening....");
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-        value,
-        ) async {
+      value,
+    ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       //logConsole("Data Rx: $value");
-      logConsole("Data Rx in hex: " +  hex.encode(value).toString());
+      logConsole("Data Rx in hex: ${hex.encode(value)}");
       int pktType = bdata.getUint8(0);
 
       /**** Packet type Command Response ***/
@@ -583,7 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
             logConsole("All Temp logs Header.......$logTempHeaderList");
             _fetchNextTempLogFile(deviceName);
           }
-        }else if(isFetchingSpo2) {
+        } else if (isFetchingSpo2) {
           int logFileID = bdata.getInt64(1, Endian.little);
           int sessionLength = bdata.getInt16(9, Endian.little);
           logConsole("Spo2 Log file ID: $logFileID | Length: $sessionLength");
@@ -598,10 +582,12 @@ class _HomeScreenState extends State<HomeScreen> {
             logConsole("All Spo2 logs Header.......$logSpo2HeaderList");
             _fetchNextSpo2LogFile(deviceName);
           }
-        }else if(isFetchingActivity) {
+        } else if (isFetchingActivity) {
           int logFileID = bdata.getInt64(1, Endian.little);
           int sessionLength = bdata.getInt16(9, Endian.little);
-          logConsole("Activity Log file ID: $logFileID | Length: $sessionLength");
+          logConsole(
+            "Activity Log file ID: $logFileID | Length: $sessionLength",
+          );
 
           LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
 
@@ -613,7 +599,7 @@ class _HomeScreenState extends State<HomeScreen> {
             logConsole("All Activity logs Header.......$logActivityHeaderList");
             _fetchNextActivityLogFile(deviceName);
           }
-        }else {
+        } else {
           int logFileID = bdata.getInt64(1, Endian.little);
           int sessionLength = bdata.getInt16(9, Endian.little);
           logConsole("HR Log file ID: $logFileID | Length: $sessionLength");
@@ -634,11 +620,10 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       /***** Packet type Log Data ***/
       else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length -
-            1; //((value[1] << 8) + value[2]);
+        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
 
-        logConsole("Data Rx length: ${value
-            .length} | Actual Payload: $pktPayloadSize",
+        logConsole(
+          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
         );
         currentFileDataCounter += pktPayloadSize;
         checkNoOfWrites += 1;
@@ -651,9 +636,11 @@ class _HomeScreenState extends State<HomeScreen> {
         logConsole("All data $currentFileDataCounter received");
 
         if (isFetchingTemp) {
-          if (currentFileDataCounter >= logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
+          if (currentFileDataCounter >=
+              logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
             await _writeLogDataToFile(
-              logData, logTempHeaderList[currentTempFileIndex].logFileID,
+              logData,
+              logTempHeaderList[currentTempFileIndex].logFileID,
               formattedTime,
             );
 
@@ -681,14 +668,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _fetchSpo2LogIndex(context, deviceName);
               });
             }
-
           } else {
-            logConsole("Invalid index or condition not met: currentFileIndex=$currentTempFileIndex");
+            logConsole(
+              "Invalid index or condition not met: currentFileIndex=$currentTempFileIndex",
+            );
           }
-
-        }else if (isFetchingSpo2) {
-          if (currentFileDataCounter >= logSpo2HeaderList[currentSpo2FileIndex].sessionLength - 1) {
-            await _writeSpo2LogDataToFile(logData, logSpo2HeaderList[currentSpo2FileIndex].logFileID,
+        } else if (isFetchingSpo2) {
+          if (currentFileDataCounter >=
+              logSpo2HeaderList[currentSpo2FileIndex].sessionLength - 1) {
+            await _writeSpo2LogDataToFile(
+              logData,
+              logSpo2HeaderList[currentSpo2FileIndex].logFileID,
               "SPO2",
             );
 
@@ -716,14 +706,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _fetchActivityLogIndex(context, deviceName);
               });
             }
-
           } else {
-            logConsole("Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex");
+            logConsole(
+              "Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex",
+            );
           }
-
-        }else if (isFetchingActivity) {
-          if (currentFileDataCounter >= logActivityHeaderList[currentActivityFileIndex].sessionLength - 1) {
-            await _writeSpo2LogDataToFile(logData, logActivityHeaderList[currentActivityFileIndex].logFileID,
+        } else if (isFetchingActivity) {
+          if (currentFileDataCounter >=
+              logActivityHeaderList[currentActivityFileIndex].sessionLength -
+                  1) {
+            await _writeSpo2LogDataToFile(
+              logData,
+              logActivityHeaderList[currentActivityFileIndex].logFileID,
               "Count",
             );
 
@@ -745,14 +739,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 isFetchingActivity = false;
               });
             }
-
           } else {
-            logConsole("Invalid index or condition not met: currentFileIndex=$currentActivityFileIndex");
+            logConsole(
+              "Invalid index or condition not met: currentFileIndex=$currentActivityFileIndex",
+            );
           }
-
-        }
-        else {
-          if (currentFileDataCounter >= logHeaderList[currentFileIndex].sessionLength - 1) {
+        } else {
+          if (currentFileDataCounter >=
+              logHeaderList[currentFileIndex].sessionLength - 1) {
             await _writeLogDataToFile(
               logData,
               logHeaderList[currentFileIndex].logFileID,
@@ -771,7 +765,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _fetchNextLogFile(deviceName);
             } else {
               logConsole(
-                  "All HR files have been fetched. Starting Temp file fetching...");
+                "All HR files have been fetched. Starting Temp file fetching...",
+              );
               setState(() {
                 isFetchingTemp = true;
                 isFetchingSpo2 = false;
@@ -787,7 +782,8 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           } else {
             logConsole(
-                "Invalid index or condition not met: currentFileIndex=$currentFileIndex");
+              "Invalid index or condition not met: currentFileIndex=$currentFileIndex",
+            );
           }
         }
       }
@@ -798,7 +794,6 @@ class _HomeScreenState extends State<HomeScreen> {
     deviceName.cancelWhenDisconnected(_streamDataSubscription);
   }
 
-
   Future<void> _fetchNextLogFile(BluetoothDevice deviceName) async {
     String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -806,27 +801,39 @@ class _HomeScreenState extends State<HomeScreen> {
       int logFileID = logHeaderList[currentFileIndex].logFileID;
       int updatedTimestamp = logFileID * 1000;
 
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+        updatedTimestamp,
+      );
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's file detected with ID $logFileID. Always downloading...");
-        await _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
-      }
-      else {
+        logConsole(
+          "Today's file detected with ID $logFileID. Always downloading...",
+        );
+        await _fetchLogFile(
+          deviceName,
+          logFileID,
+          logHeaderList[currentFileIndex].sessionLength,
+          "",
+        );
+      } else {
         bool fileExists = await _doesFileExist(logFileID);
 
         if (fileExists) {
           logConsole("File with ID $logFileID already exists. Skipping...");
-
         } else {
           logConsole("Fetching file with ID $logFileID...");
-          await _fetchLogFile(deviceName, logFileID, logHeaderList[currentFileIndex].sessionLength, "");
+          await _fetchLogFile(
+            deviceName,
+            logFileID,
+            logHeaderList[currentFileIndex].sessionLength,
+            "",
+          );
           break; // Exit the loop to fetch the current file
         }
       }
 
-      currentFileIndex++;// Increment after processing
+      currentFileIndex++; // Increment after processing
     }
 
     if (currentFileIndex == logHeaderList.length) {
@@ -854,9 +861,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchLogCount(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch log count initiated");
     showLoadingIndicator("Fetching logs count...", context);
     await _startListeningData(deviceName, 0, 0, "0");
@@ -869,11 +876,10 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pop(context);
   }
 
-
   Future<void> _fetchLogIndex(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch log index initiated");
     showLoadingIndicator("Fetching logs index...", context);
     await _startListeningData(deviceName, 0, 0, "0");
@@ -887,11 +893,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchLogFile(
-      BluetoothDevice deviceName,
-      int sessionID,
-      int sessionSize,
-      String formattedTime,
-      ) async {
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    String formattedTime,
+  ) async {
     logConsole(
       "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
     );
@@ -903,7 +909,7 @@ class _HomeScreenState extends State<HomeScreen> {
     //logData.clear();
 
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize",);
+      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize");
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(hPi4Global.HrTrend);
@@ -915,8 +921,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pop(context);
   }
 
-
-
   Future<void> _fetchNextTempLogFile(BluetoothDevice deviceName) async {
     String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -924,20 +928,36 @@ class _HomeScreenState extends State<HomeScreen> {
       int logFileID = logTempHeaderList[currentTempFileIndex].logFileID;
       int updatedTimestamp = logFileID * 1000;
 
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+        updatedTimestamp,
+      );
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's Temp file detected with ID $logFileID. Always downloading...");
-        await _fetchTempLogFile(deviceName, logFileID, logTempHeaderList[currentTempFileIndex].sessionLength, "");
+        logConsole(
+          "Today's Temp file detected with ID $logFileID. Always downloading...",
+        );
+        await _fetchTempLogFile(
+          deviceName,
+          logFileID,
+          logTempHeaderList[currentTempFileIndex].sessionLength,
+          "",
+        );
       } else {
         bool fileExists = await _doesTempFileExist(logFileID);
 
         if (fileExists) {
-          logConsole("temp file with ID $logFileID already exists. Skipping...");
+          logConsole(
+            "temp file with ID $logFileID already exists. Skipping...",
+          );
         } else {
           logConsole("Fetching temp file with ID $logFileID...");
-          await _fetchTempLogFile(deviceName, logFileID, logTempHeaderList[currentTempFileIndex].sessionLength, "");
+          await _fetchTempLogFile(
+            deviceName,
+            logFileID,
+            logTempHeaderList[currentTempFileIndex].sessionLength,
+            "",
+          );
           break; // Exit the loop to fetch the current file
         }
       }
@@ -970,9 +990,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchTempLogCount(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch temperature log count initiated");
     showLoadingIndicator("Fetching temperature logs count...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -985,9 +1005,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchTempLogIndex(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch temperature log index initiated");
     showLoadingIndicator("Fetching temperature logs index...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -1000,11 +1020,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchTempLogFile(
-      BluetoothDevice deviceName,
-      int sessionID,
-      int sessionSize,
-      String formattedTime,
-      ) async {
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    String formattedTime,
+  ) async {
     logConsole(
       "Fetch temperature logs file initiated for session: $sessionID, size: $sessionSize",
     );
@@ -1013,7 +1033,9 @@ class _HomeScreenState extends State<HomeScreen> {
     currentFileDataCounter = 0;
 
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch temperature logs file entered: $sessionID, size: $sessionSize");
+      logConsole(
+        "Fetch temperature logs file entered: $sessionID, size: $sessionSize",
+      );
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(hPi4Global.tempTrend);
@@ -1025,7 +1047,6 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pop(context);
   }
 
-
   Future<void> _fetchNextSpo2LogFile(BluetoothDevice deviceName) async {
     String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -1033,20 +1054,36 @@ class _HomeScreenState extends State<HomeScreen> {
       int logFileID = logSpo2HeaderList[currentSpo2FileIndex].logFileID;
       int updatedTimestamp = logFileID * 1000;
 
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+        updatedTimestamp,
+      );
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's Spo2 file detected with ID $logFileID. Always downloading...");
-        await _fetchSpo2LogFile(deviceName, logFileID, logSpo2HeaderList[currentSpo2FileIndex].sessionLength, "");
+        logConsole(
+          "Today's Spo2 file detected with ID $logFileID. Always downloading...",
+        );
+        await _fetchSpo2LogFile(
+          deviceName,
+          logFileID,
+          logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
+          "",
+        );
       } else {
         bool fileExists = await _doesSpo2FileExist(logFileID);
 
         if (fileExists) {
-          logConsole("spo2 file with ID $logFileID already exists. Skipping...");
+          logConsole(
+            "spo2 file with ID $logFileID already exists. Skipping...",
+          );
         } else {
           logConsole("Fetching spo2 file with ID $logFileID...");
-          await _fetchSpo2LogFile(deviceName, logFileID, logSpo2HeaderList[currentSpo2FileIndex].sessionLength, "");
+          await _fetchSpo2LogFile(
+            deviceName,
+            logFileID,
+            logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
+            "",
+          );
           break; // Exit the loop to fetch the current file
         }
       }
@@ -1057,7 +1094,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (currentSpo2FileIndex == logSpo2HeaderList.length) {
       logConsole("All spo2 files have been processed.");
       currentSpo2FileIndex--;
-
     }
   }
 
@@ -1079,9 +1115,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchSpo2LogCount(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch spo2 log count initiated");
     showLoadingIndicator("Fetching spo2 logs count...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -1094,9 +1130,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchSpo2LogIndex(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch spo2 log index initiated");
     showLoadingIndicator("Fetching spo2 logs index...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -1109,11 +1145,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchSpo2LogFile(
-      BluetoothDevice deviceName,
-      int sessionID,
-      int sessionSize,
-      String formattedTime,
-      ) async {
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    String formattedTime,
+  ) async {
     logConsole(
       "Fetch spo2 logs file initiated for session: $sessionID, size: $sessionSize",
     );
@@ -1122,7 +1158,9 @@ class _HomeScreenState extends State<HomeScreen> {
     currentFileDataCounter = 0;
 
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch spo2 logs file entered: $sessionID, size: $sessionSize");
+      logConsole(
+        "Fetch spo2 logs file entered: $sessionID, size: $sessionSize",
+      );
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(hPi4Global.Spo2Trend);
@@ -1141,20 +1179,36 @@ class _HomeScreenState extends State<HomeScreen> {
       int logFileID = logActivityHeaderList[currentActivityFileIndex].logFileID;
       int updatedTimestamp = logFileID * 1000;
 
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+        updatedTimestamp,
+      );
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's Activity file detected with ID $logFileID. Always downloading...");
-        await _fetchActivityLogFile(deviceName, logFileID, logActivityHeaderList[currentActivityFileIndex].sessionLength, "");
+        logConsole(
+          "Today's Activity file detected with ID $logFileID. Always downloading...",
+        );
+        await _fetchActivityLogFile(
+          deviceName,
+          logFileID,
+          logActivityHeaderList[currentActivityFileIndex].sessionLength,
+          "",
+        );
       } else {
         bool fileExists = await _doesActivityFileExist(logFileID);
 
         if (fileExists) {
-          logConsole("Activity file with ID $logFileID already exists. Skipping...");
+          logConsole(
+            "Activity file with ID $logFileID already exists. Skipping...",
+          );
         } else {
           logConsole("Fetching Activity file with ID $logFileID...");
-          await _fetchActivityLogFile(deviceName, logFileID, logActivityHeaderList[currentActivityFileIndex].sessionLength, "");
+          await _fetchActivityLogFile(
+            deviceName,
+            logFileID,
+            logActivityHeaderList[currentActivityFileIndex].sessionLength,
+            "",
+          );
           break; // Exit the loop to fetch the current file
         }
       }
@@ -1185,11 +1239,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return await File(filePath).exists();
   }
 
-
   Future<void> _fetchActivityLogCount(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch Activity log count initiated");
     showLoadingIndicator("Fetching Activity logs count...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -1202,9 +1255,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchActivityLogIndex(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Fetch Activity log index initiated");
     showLoadingIndicator("Fetching Activity logs index...", context);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -1217,11 +1270,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchActivityLogFile(
-      BluetoothDevice deviceName,
-      int sessionID,
-      int sessionSize,
-      String formattedTime,
-      ) async {
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    String formattedTime,
+  ) async {
     logConsole(
       "Fetch Activity logs file initiated for session: $sessionID, size: $sessionSize",
     );
@@ -1230,7 +1283,9 @@ class _HomeScreenState extends State<HomeScreen> {
     currentFileDataCounter = 0;
 
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch Activity logs file entered: $sessionID, size: $sessionSize");
+      logConsole(
+        "Fetch Activity logs file entered: $sessionID, size: $sessionSize",
+      );
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(hPi4Global.ActivityTrend);
@@ -1242,7 +1297,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.pop(context);
   }
 
-  void onConnectPressed(BluetoothDevice device) {
+  /*void onConnectPressed(BluetoothDevice device) {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
         ABC.c,
@@ -1252,7 +1307,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     Navigator.pop(context);
-
 
     _connectionStateSubscription = device.connectionState.listen((state) async {
       _connectionState = state;
@@ -1284,16 +1338,16 @@ class _HomeScreenState extends State<HomeScreen> {
         Future.delayed(Duration(seconds: 3), () async {
           await _fetchLogIndex(context, device);
         });
-      }  else {
+      } else {
         //device.disconnect();
       }
     });
-  }
+  }*/
 
   Future<void> _sendCommand(
-      List<int> commandList,
-      BluetoothDevice deviceName,
-      ) async {
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -1303,7 +1357,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -1327,7 +1381,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Future.delayed(Duration(milliseconds: 500));
   }
 
-  Widget buildScanButton(BuildContext context) {
+  /*Widget buildScanButton(BuildContext context) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: hPi4Global.hpi4Color, // background color
@@ -1336,36 +1390,33 @@ class _HomeScreenState extends State<HomeScreen> {
         minimumSize: Size(SizeConfig.blockSizeHorizontal * 40, 40),
       ),
       onPressed: () {
-        onRefresh();
-        onScanPressed();
+        //onRefresh();
+        //onScanPressed();
       },
       child: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(
-              'SCAN',
-              style: new TextStyle(fontSize: 16, color: Colors.white),
-            ),
+            Text('SCAN', style: TextStyle(fontSize: 16, color: Colors.white)),
           ],
         ),
       ),
     );
-  }
+  }*/
 
-  List<Widget> _buildScanResultTiles(BuildContext context) {
+  /*List<Widget> _buildScanResultTiles(BuildContext context) {
     return _scanResults
         .map(
           (r) => ScanResultTile(
-        result: r,
-        onTap: () => onConnectPressed(r.device),
-      ),
-    )
+            result: r,
+            onTap: () => onConnectPressed(r.device),
+          ),
+        )
         .toList();
-  }
+  }*/
 
-  Future<void> showScanDialog() {
+  /*Future<void> showScanDialog() {
     return showDialog<void>(
       context: context,
       barrierDismissible: true, // user must tap button!
@@ -1379,7 +1430,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
-              content: Container(
+              content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1416,7 +1467,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
-  }
+  }*/
 
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
@@ -1424,13 +1475,15 @@ class _HomeScreenState extends State<HomeScreen> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(8.0))),
-              backgroundColor: Colors.black87,
-              content: LoadingIndicator(text: text),
-            ));
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8.0)),
+            ),
+            backgroundColor: Colors.black87,
+            content: LoadingIndicator(text: text),
+          ),
+        );
       },
     );
   }
@@ -1486,7 +1539,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(lastestHR.toString(),
+                      Text(
+                        lastestHR.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
                       SizedBox(width: 5.0),
@@ -1497,10 +1551,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text("Last updated: ",
+                      Text(
+                        "Last updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      Text(lastUpdatedHR.toString(),
+                      Text(
+                        lastUpdatedHR.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
@@ -1536,7 +1592,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(lastestSpo2.toString(),
+                      Text(
+                        lastestSpo2.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
                       SizedBox(width: 5.0),
@@ -1547,10 +1604,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text("Last updated: ",
+                      Text(
+                        "Last updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      Text(lastUpdatedSpo2.toString(),
+                      Text(
+                        lastUpdatedSpo2.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
@@ -1585,7 +1644,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(lastestTemp,
+                      Text(
+                        lastestTemp,
                         style: hPi4Global.movecardValueTextStyle,
                       ),
                       SizedBox(width: 5.0),
@@ -1596,10 +1656,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text("Last updated: ",
+                      Text(
+                        "Last updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      Text(lastUpdatedTemp.toString(),
+                      Text(
+                        lastUpdatedTemp.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
@@ -1616,7 +1678,7 @@ class _HomeScreenState extends State<HomeScreen> {
               MaterialPageRoute(builder: (_) => ActivityPage()),
             );
           },
-          child:    Card(
+          child: Card(
             color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
@@ -1634,9 +1696,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(lastestActivity.toString(), style: hPi4Global.movecardValueTextStyle),
+                      Text(
+                        lastestActivity.toString(),
+                        style: hPi4Global.movecardValueTextStyle,
+                      ),
                       SizedBox(width: 5.0),
-                      Text("Steps", style: hPi4Global.movecardSubValueTextStyle),
+                      Text(
+                        "Steps",
+                        style: hPi4Global.movecardSubValueTextStyle,
+                      ),
                       SizedBox(width: 5.0),
                     ],
                   ),
@@ -1644,10 +1712,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text("Last updated: ",
+                      Text(
+                        "Last updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
-                      Text(lastUpdatedActivity.toString(),
+                      Text(
+                        lastUpdatedActivity.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
@@ -1658,7 +1728,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-
       ],
     );
   }
@@ -1681,49 +1750,52 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 30,
             ),
             Column(
-                children: <Widget>[
-                  InkWell(
-                    onTap: () {
-                      showScanDialog();
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hPi4Global.hpi4Color,
-                      ),
-                      child: Icon(
-                        Icons.sync,
-                        color: hPi4Global.hpi4AppBarIconsColor,
-                      ),
+              children: <Widget>[
+                InkWell(
+                  onTap: () {
+                    //showScanDialog();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => ScrScan()),
+                    );
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                    child: Icon(
+                      Icons.sync,
+                      color: hPi4Global.hpi4AppBarIconsColor,
                     ),
                   ),
-                ]
-            )
-
+                ),
+              ],
+            ),
           ],
         ),
       ),
       body: ListView(
         children: [
           Center(
-            child:
-            Column(
+            child: Column(
               children: <Widget>[
-                SizedBox(height:20),
+                SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.max,
                   children: <Widget>[
                     SizedBox(width: 10.0),
-                    Text("Last synced: "+lastSyncedDateTime,
-                      style: hPi4Global.movecardSubValueTextStyle,),
+                    Text(
+                      "Last synced: $lastSyncedDateTime",
+                      style: hPi4Global.movecardSubValueTextStyle,
+                    ),
                     SizedBox(width: 10.0),
                   ],
                 ),
-                SizedBox(height:10),
-                Container(
+                SizedBox(height: 10),
+                SizedBox(
                   //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
@@ -1736,4 +1808,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-

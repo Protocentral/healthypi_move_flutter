@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 import '../firmware_select/firmware_list.dart';
 
 class FirmwareSelect extends StatelessWidget {
-  const FirmwareSelect({Key? key}) : super(key: key);
+  const FirmwareSelect({super.key});
 
   @override
   Widget build(BuildContext context) {

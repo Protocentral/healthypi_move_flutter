@@ -10,7 +10,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SettingsPage extends StatefulWidget {
-  SettingsPage({Key? key}) : super(key: key);
+  SettingsPage({super.key});
 
   @override
   _SettingsPageState createState() => _SettingsPageState();
@@ -24,7 +24,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void logConsole(String logString) async {
-    print("AKW - " + logString);
+    print("AKW - $logString");
   }
 
   void setStateIfMounted(f) {
@@ -64,7 +64,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Text(
-                        'protocentral.com', style: new TextStyle(fontSize: 14, color:Colors.white)
+                        'protocentral.com', style: TextStyle(fontSize: 14, color:Colors.white)
                     ),
                   ],
                 ),
@@ -157,7 +157,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
@@ -231,12 +231,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                 children: [
                                                   Text(
-                                                    "v " + hPi4Global.hpi4AppVersion + " ",
-                                                    style: new TextStyle(fontSize: 12,color: Colors.white ),
+                                                    "v ${hPi4Global.hpi4AppVersion} ",
+                                                    style: TextStyle(fontSize: 12,color: Colors.white ),
                                                   ),
                                                   Text(
                                                     "© ProtoCentral Electronics 2020",
-                                                    style: new TextStyle(fontSize: 12,color: Colors.white),
+                                                    style: TextStyle(fontSize: 12,color: Colors.white),
                                                   ),
                                                 ],
                                               ),

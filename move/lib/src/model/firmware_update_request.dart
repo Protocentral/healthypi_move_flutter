@@ -65,6 +65,7 @@ enum FirmwareType {
 }
 
 class LocalFirmware extends SelectedFirmware {
+  @override
   final String name;
   final Uint8List data;
   final FirmwareType type;

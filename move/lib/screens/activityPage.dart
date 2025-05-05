@@ -14,7 +14,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../globals.dart';
 
 class ActivityPage extends StatefulWidget {
-  const ActivityPage({Key? key}) : super(key: key);
+  const ActivityPage({super.key});
   @override
   State<ActivityPage> createState() => _ActivityPageState();
 }
@@ -490,7 +490,7 @@ class _ActivityPageState extends State<ActivityPage>
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        SizedBox(
           height: SizeConfig.blockSizeVertical * 18,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(

@@ -14,6 +14,8 @@ import 'package:version/version.dart';
 
 
 class FirmwareList extends StatefulWidget {
+  const FirmwareList({super.key});
+
   @override
   _FirmwareListState createState() => _FirmwareListState();
 }
@@ -94,7 +96,7 @@ class _FirmwareListState extends State<FirmwareList> {
     List<String> tags = await fetchTags();
     print(tags);
 
-    String _latestFWVersion = "0.9.18";
+    String latestFWVersion = "0.9.18";
 
     List<String> tagsWithoutV = tags.map((tag) => tag.startsWith('v') ? tag.substring(1) : tag).toList();
 
@@ -102,10 +104,10 @@ class _FirmwareListState extends State<FirmwareList> {
     print(tagsWithoutV);
 
     for (int i = 0; i < tagsWithoutV.length; i++) {
-      _latestFWVersion = _getAvailableLatestVersion(_latestFWVersion, tagsWithoutV[i]);
+      latestFWVersion = _getAvailableLatestVersion(latestFWVersion, tagsWithoutV[i]);
     }
 
-    return _latestFWVersion;
+    return latestFWVersion;
   }
 
   String _getAvailableLatestVersion(String versionCurrent, String versionAvail) {
@@ -211,7 +213,7 @@ class _FirmwareListState extends State<FirmwareList> {
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             Text('Select Firmware',
-                                style: new TextStyle(fontSize: 16, color: Colors
+                                style: TextStyle(fontSize: 16, color: Colors
                                     .white)
                             ),
                           ],

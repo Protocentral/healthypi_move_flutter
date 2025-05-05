@@ -33,10 +33,10 @@ import 'package:version/version.dart';
 
 
 class DeviceManagement extends StatefulWidget {
-  DeviceManagement({Key? key}) : super(key: key);
+  const DeviceManagement({super.key});
 
   @override
-  State createState() => new DeviceManagementState();
+  State createState() => DeviceManagementState();
 }
 
 class DeviceManagementState extends State<DeviceManagement> {
@@ -175,7 +175,7 @@ class DeviceManagementState extends State<DeviceManagement> {
 
         final fw = LocalFirmware(data: bytes, type: fwType, name: firstResult.name);
 
-        logConsole("DFU: ."+file.toString());
+        logConsole("DFU: .$file");
 
         context.read<FirmwareUpdateRequestProvider>().setFirmware(fw);
         Navigator.pop(context);
@@ -202,7 +202,7 @@ class DeviceManagementState extends State<DeviceManagement> {
           children: <Widget>[
             Text(
               'SCAN',
-              style: new TextStyle(fontSize: 16, color: Colors.white),
+              style: TextStyle(fontSize: 16, color: Colors.white),
             ),
           ],
         ),
@@ -235,7 +235,7 @@ class DeviceManagementState extends State<DeviceManagement> {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
-              content: Container(
+              content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -348,7 +348,7 @@ class DeviceManagementState extends State<DeviceManagement> {
     List<String> tags = await fetchTags();
     print(tags);
 
-    String _latestFWVersion = "0.9.18";
+    String latestFWVersion = "0.9.18";
 
     List<String> tagsWithoutV = tags.map((tag) => tag.startsWith('v') ? tag.substring(1) : tag).toList();
 
@@ -356,10 +356,10 @@ class DeviceManagementState extends State<DeviceManagement> {
     print(tagsWithoutV);
 
     for (int i = 0; i < tagsWithoutV.length; i++) {
-      _latestFWVersion = _getAvailableLatestVersion(_latestFWVersion, tagsWithoutV[i]);
+      latestFWVersion = _getAvailableLatestVersion(latestFWVersion, tagsWithoutV[i]);
     }
 
-    return _latestFWVersion;
+    return latestFWVersion;
   }
 
   String _getAvailableLatestVersion(String versionCurrent, String versionAvail) {
@@ -532,7 +532,7 @@ class DeviceManagementState extends State<DeviceManagement> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
@@ -587,7 +587,7 @@ class DeviceManagementState extends State<DeviceManagement> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
+                                SizedBox(
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(

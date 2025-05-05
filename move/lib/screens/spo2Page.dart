@@ -14,7 +14,7 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../globals.dart';
 
 class SPO2Page extends StatefulWidget {
-  const SPO2Page({Key? key}) : super(key: key);
+  const SPO2Page({super.key});
   @override
   State<SPO2Page> createState() => _SPO2PageState();
 }
@@ -378,7 +378,7 @@ class _SPO2PageState extends State<SPO2Page>
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
+        SizedBox(
           height: SizeConfig.blockSizeVertical * 20,
           width: SizeConfig.blockSizeHorizontal * 44,
           child: Card(
@@ -446,7 +446,7 @@ class _SPO2PageState extends State<SPO2Page>
         Column(
           //mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              Container(
+              SizedBox(
                 height: SizeConfig.blockSizeVertical * 20,
                 width: SizeConfig.blockSizeHorizontal * 44,
                 child: Card(

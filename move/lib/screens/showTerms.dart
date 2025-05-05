@@ -14,7 +14,7 @@ void showTermsDialog(BuildContext context) async {
       // return object of type Dialog
       return AlertDialog(
         backgroundColor: Colors.black,
-        title: new Text("Terms of Use",
+        title: Text("Terms of Use",
           style: TextStyle(fontSize: 16, color: hPi4Global.hpi4AppBarIconsColor),),
         content: SingleChildScrollView(
           child: Container(
@@ -46,8 +46,8 @@ void showTermsDialog(BuildContext context) async {
         ),
         actions: <Widget>[
           // usually buttons at the bottom of the dialog
-          new TextButton(
-            child: new Text("Close",style: hPi4Global.eventsWhite,),
+          TextButton(
+            child: Text("Close",style: hPi4Global.eventsWhite,),
             onPressed: () {
               Navigator.of(context).pop();
             },
