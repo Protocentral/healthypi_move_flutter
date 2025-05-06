@@ -7,6 +7,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
+import 'package:mcumgr_flutter/mcumgr_flutter.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
@@ -54,6 +56,12 @@ class ScrDFUState extends State<ScrDFU> {
 
   bool dfuInProgress = false;
   double dfuProgress = 0;
+
+  late Manifest _fw_manifest;
+  bool _isManifestLoaded = false;
+
+  final UpdateManagerFactory _managerFactory =
+        mcumgr.FirmwareUpdateManagerFactory();
 
   @override
   void initState() {
@@ -183,7 +191,7 @@ class ScrDFUState extends State<ScrDFU> {
 
   void _onLoadFirmware() async {
     Uint8List? zipFile;
-    List<Image>? firmwareImages;
+    List<mcumgr.Image>? firmwareImages;
 
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -197,9 +205,9 @@ class ScrDFUState extends State<ScrDFU> {
     final file = File(firstResult.path!);
     final Uint8List firmwareFileData = await file.readAsBytes();
 
-   final prefix = 'firmware_${Uuid().v4()}';
+    final prefix = 'firmware_${Uuid().v4()}';
     final systemTempDir = await path_provider.getTemporaryDirectory();
-    
+
     final tempDir = Directory('${systemTempDir.path}/$prefix');
     await tempDir.create();
 
@@ -222,17 +230,27 @@ class ScrDFUState extends State<ScrDFU> {
     final manifestString = await manifestFile.readAsString();
     Map<String, dynamic> manifestJson = json.decode(manifestString);
 
-    Manifest manifest;
-
     try {
-      manifest = Manifest.fromJson(manifestJson);
+      _fw_manifest = Manifest.fromJson(manifestJson);
     } catch (e) {
       throw Exception('Failed to parse manifest.json');
     }
 
-    print(manifest.files.toString());
+    print(_fw_manifest.files.length.toString());
 
-    firmware.firmwareImages = [];
+    if (mounted) {
+      setState(() {
+        _isManifestLoaded = true;
+      });
+    }
+
+    final updateManager = await _managerFactory.getUpdateManager(
+      _currentDevice.remoteId.toString(),
+    );
+
+    
+
+    /*firmware.firmwareImages = [];
     for (final file in manifest.files) {
       final firmwareFile = File('${destinationDir.path}/${file.file}');
       final firmwareFileData = await firmwareFile.readAsBytes();
@@ -241,7 +259,7 @@ class ScrDFUState extends State<ScrDFU> {
         data: firmwareFileData,
       );
       firmware.firmwareImages!.add(image);
-    }
+    }*/
 
     //Navigator.pop(context);
   }
@@ -358,57 +376,51 @@ class ScrDFUState extends State<ScrDFU> {
         .toList();
   }
 
-  Future<String> hpiGetFWVersion() async {
-    List<int> retval = [];
-    logConsole("Read version initiated");
-
-    /*deviceFWCharacteristic = QualifiedCharacteristic(
-      characteristicId: Uuid.parse(PatchGlobal.UUID_DIS_FW_REVISION),
-      serviceId: Uuid.parse(PatchGlobal.UUID_SERV_DIS),
-      deviceId: deviceID,
-    );
-
-    await Future.delayed(Duration(seconds: 2), () async {
-      retval = await _fble.readCharacteristic(deviceFWCharacteristic);
-
-      print("BLE: Read FW returned: " + retval.toString());
-    });
-    // } else {
-    logConsole("Read failed. Device not connected");
-    // }
-    */
-
-    return String.fromCharCodes(retval);
-  }
-
-  Widget _buildDeviceList() {
-    return Card(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 32, 8, 32),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [],
+  Widget _getFirmwareInfo() {
+    if (_isManifestLoaded == true) {
+      return Column(
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: <Widget>[
+                  Text("Image name: ${_fw_manifest.files[0].file}"),
+                  Text("Size: ${_fw_manifest.files[0].size}"),
+                  Text("Version: ${_fw_manifest.files[0].versionMcuboot}"),
+                ],
+              ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Text(
-              'Select the device you wish to update',
-              style: TextStyle(fontSize: 16),
+           Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: <Widget>[
+                  Text("Image name: ${_fw_manifest.files[1].file}"),
+                  Text("Size: ${_fw_manifest.files[1].size}"),
+                  Text("Version: ${_fw_manifest.files[1].versionMcuboot}"),
+                ],
+              ),
             ),
           ),
-          Column(
-            children: [
-              //_buildScanResultTiles(context)
-              //_buildCheckforUpdatesButton(bleScanner.discoveredDevices),
-            ],
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: <Widget>[
+                  Text("Image name: ${_fw_manifest.files[2].file}"),
+                  Text("Size: ${_fw_manifest.files[2].size}"),
+                  Text("Version: ${_fw_manifest.files[2].version}"),
+                ],
+              ),
+            ),
           ),
         ],
-      ),
-    );
+      );
+    } else {
+      return Container();
+    }
   }
 
   Widget _buildDeviceCard() {
@@ -434,12 +446,13 @@ class ScrDFUState extends State<ScrDFU> {
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    //child: Text("Debug Information: " + _currDebugString),
-                  ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text("Loaded Firmware"),
+              ),
+              _getFirmwareInfo(),
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
@@ -645,6 +658,18 @@ class ScrDFUState extends State<ScrDFU> {
                       Icon(Icons.search, color: Colors.white),
                     ],
                   ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  'Select the device to update',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
               ..._buildScanResultTiles(context),
