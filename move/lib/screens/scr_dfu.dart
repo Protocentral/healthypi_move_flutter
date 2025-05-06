@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,8 @@ import 'package:flutter_archive/flutter_archive.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:mcumgr_flutter/mcumgr_flutter.dart';
+import 'package:mcumgr_flutter/models/firmware_upgrade_mode.dart';
+import 'package:mcumgr_flutter/models/image_upload_alignment.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
@@ -40,6 +43,9 @@ class ScrDFUState extends State<ScrDFU> {
   BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
   late StreamSubscription<BluetoothAdapterState> _adapterStateStateSubscription;
 
+  late StreamSubscription<mcumgr.ProgressUpdate> _updateManagerSubscription;
+  late StreamSubscription<mcumgr.FirmwareUpgradeState> _updateStateSubscription;
+
   late BluetoothCharacteristic deviceFWCharacteristic;
 
   String _currentFWVersion = "";
@@ -62,6 +68,8 @@ class ScrDFUState extends State<ScrDFU> {
 
   final UpdateManagerFactory _managerFactory =
         mcumgr.FirmwareUpdateManagerFactory();
+
+  
 
   @override
   void initState() {
@@ -248,18 +256,44 @@ class ScrDFUState extends State<ScrDFU> {
       _currentDevice.remoteId.toString(),
     );
 
-    
+    final updateStream = updateManager.setup();
 
-    /*firmware.firmwareImages = [];
-    for (final file in manifest.files) {
+    /*_updateStateSubscription = updateManager.updateStateStream.listen((event) {
+      if (mounted) {
+        setState(() {
+          print("DFU state: ${event.toString()}");
+          
+        });
+      }
+    });*/
+
+    List <mcumgr.Image> _fw_images = [];
+    for (final file in _fw_manifest.files) {
       final firmwareFile = File('${destinationDir.path}/${file.file}');
       final firmwareFileData = await firmwareFile.readAsBytes();
-      final image = Image(
+      final image = mcumgr.Image(
         image: file.image,
         data: firmwareFileData,
       );
-      firmware.firmwareImages!.add(image);
-    }*/
+      _fw_images.add(image);
+    }
+
+    final _fw_config = const FirmwareUpgradeConfiguration(estimatedSwapTime: Duration(seconds: 0), byteAlignment: ImageUploadAlignment.fourByte, eraseAppSettings: true,
+    firmwareUpgradeMode: FirmwareUpgradeMode.confirmOnly );
+
+    _updateManagerSubscription = updateManager.progressStream.listen((event) {
+      if (mounted) {
+        setState(() {
+          print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+        });
+      }
+    });
+
+    updateManager.update(_fw_images, configuration: _fw_config);
+
+    
+
+    //updateManager.kill();
 
     //Navigator.pop(context);
   }
