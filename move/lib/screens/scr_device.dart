@@ -175,19 +175,23 @@ class _DeviceScreenState extends State<DeviceScreen> {
     }
   }
 
-    CharacteristicTile _buildCharacteristicTile(BluetoothCharacteristic c) {
+  CharacteristicTile _buildCharacteristicTile(BluetoothCharacteristic c) {
     return CharacteristicTile(
       characteristic: c,
-      descriptorTiles: c.descriptors.map((d) => DescriptorTile(descriptor: d)).toList(),
+      descriptorTiles:
+          c.descriptors.map((d) => DescriptorTile(descriptor: d)).toList(),
     );
   }
 
-    List<Widget> _buildServiceTiles(BuildContext context, BluetoothDevice d) {
+  List<Widget> _buildServiceTiles(BuildContext context, BluetoothDevice d) {
     return _services
         .map(
           (s) => ServiceTile(
             service: s,
-            characteristicTiles: s.characteristics.map((c) => _buildCharacteristicTile(c)).toList(),
+            characteristicTiles:
+                s.characteristics
+                    .map((c) => _buildCharacteristicTile(c))
+                    .toList(),
           ),
         )
         .toList();

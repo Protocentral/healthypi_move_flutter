@@ -20,10 +20,10 @@ String pcCurrentDeviceID = " ";
 String pcCurrentDeviceName = " ";
 
 class ConnectToFetchFileData extends StatefulWidget {
-  const ConnectToFetchFileData({super.key});
+  ConnectToFetchFileData({Key? key}) : super(key: key);
 
   @override
-  State createState() => ConnectToFetchFileDataState();
+  State createState() => new ConnectToFetchFileDataState();
 }
 
 class ConnectToFetchFileDataState extends State<ConnectToFetchFileData> {
@@ -51,7 +51,7 @@ class ConnectToFetchFileDataState extends State<ConnectToFetchFileData> {
   }
 
   void logConsole(String logString) async {
-    print("AKW - $logString");
+    print("AKW - " + logString);
   }
 
   Widget _showAvailableDevicesCard() {
@@ -99,7 +99,7 @@ class ConnectToFetchFileDataState extends State<ConnectToFetchFileData> {
                   ),
                 ),
                 //showScanResults(),
-                SizedBox(
+                Container(
                   height: SizeConfig.blockSizeVertical * 80,
                   width: SizeConfig.blockSizeHorizontal * 97,
                   child:  _showAvailableDevicesCard(),

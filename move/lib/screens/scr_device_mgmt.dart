@@ -8,20 +8,21 @@ import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:move/screens/bptCalibrationPage1.dart';
+import 'package:move/screens/scr_dfu.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dfu.dart';
+import '../dfu.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/fetchfileData.dart';
 import 'package:move/sizeConfig.dart';
 
-import '../widgets/scan_result_tile.dart';
+import '../../widgets/scan_result_tile.dart';
 
-import 'globals.dart';
+import '../globals.dart';
 import 'package:flutter/cupertino.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
@@ -34,15 +35,6 @@ class DevicePage extends StatefulWidget {
 }
 
 class _DevicePageState extends State<DevicePage> {
-  List<ScanResult> _scanResults = [];
-  bool _isScanning = false;
-  late StreamSubscription<List<ScanResult>> _scanResultsSubscription;
-  late StreamSubscription<bool> _isScanningSubscription;
-  BluetoothConnectionState _connectionState =
-      BluetoothConnectionState.disconnected;
-  late StreamSubscription<BluetoothConnectionState>
-  _connectionStateSubscription;
-
   String selectedOption = "sync";
 
   int totalSessionCount = 0;
@@ -71,375 +63,15 @@ class _DevicePageState extends State<DevicePage> {
   @override
   void initState() {
     super.initState();
-
-    if (_isScanning == false) {
-      startScan();
-    }
-    _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
-        _scanResults = results;
-      },
-      onError: (e) {
-        // Snackbar.show(ABC.b, prettyException("Scan Error:", e), success: false);
-      },
-    );
-
-    _isScanningSubscription = FlutterBluePlus.isScanning.listen((state) {
-      _isScanning = state;
-    });
   }
 
   @override
   Future<void> dispose() async {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    FlutterBluePlus.stopScan();
     super.dispose();
-  }
-
-  Future<void> startScan() async {
-    // enable bluetooth on Android
-    if (Platform.isAndroid) {
-      await FlutterBluePlus.turnOn();
-    }
-
-    if (await FlutterBluePlus.isSupported == false) {
-      print("Bluetooth not supported by this device");
-      return;
-    }
-
-    FlutterBluePlus.setLogLevel(LogLevel.verbose);
-    FlutterBluePlus.adapterState.listen((event) {
-      print(event);
-    });
-
-    await FlutterBluePlus.adapterState
-        .where(
-          (BluetoothAdapterState state) => state == BluetoothAdapterState.on,
-        )
-        .first;
-
-    await FlutterBluePlus.startScan(withNames: ['healthypi move']);
-  }
-
-  subscribeToChar(BluetoothDevice deviceName) async {
-    List<BluetoothService> services = await deviceName.discoverServices();
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-            dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
-            break;
-          }
-        }
-      }
-    }
   }
 
   void setStateIfMounted(f) {
     if (mounted) setState(f);
-  }
-
-  Future<void> _sendCurrentDateTime(
-    BluetoothDevice deviceName,
-    String selectedOption,
-  ) async {
-    List<int> commandDateTimePacket = [];
-
-    var dt = DateTime.now();
-    String cdate = DateFormat("yy").format(DateTime.now());
-    print(cdate);
-    print(dt.month);
-    print(dt.day);
-    print(dt.hour);
-    print(dt.minute);
-    print(dt.second);
-
-    ByteData sessionParametersLength = ByteData(8);
-    commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
-
-    sessionParametersLength.setUint8(0, dt.second);
-    sessionParametersLength.setUint8(1, dt.minute);
-    sessionParametersLength.setUint8(2, dt.hour);
-    sessionParametersLength.setUint8(3, dt.day);
-    sessionParametersLength.setUint8(4, dt.month);
-    sessionParametersLength.setUint8(5, int.parse(cdate));
-
-    Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
-
-    logConsole("Sending DateTime information: $cmdByteList");
-
-    commandDateTimePacket.addAll(cmdByteList);
-
-    logConsole("Sending DateTime Command: $commandDateTimePacket");
-
-    List<BluetoothService> services = await deviceName.discoverServices();
-
-    BluetoothService? targetService;
-    BluetoothCharacteristic? targetCharacteristic;
-
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        targetService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-            targetCharacteristic = characteristic;
-            break;
-          }
-        }
-      }
-    }
-
-    if (targetService != null && targetCharacteristic != null) {
-      // Write to the characteristic
-      await targetCharacteristic.write(
-        commandDateTimePacket,
-        withoutResponse: true,
-      );
-      logConsole('Data written: $commandDateTimePacket');
-    }
-
-    if (selectedOption == "Set Time") {
-      await deviceName.disconnect();
-    } else {
-      /// Do Nothing;
-    }
-  }
-
-  Future onScanPressed() async {
-    try {
-      startScan();
-    } catch (e, backtrace) {
-      Snackbar.show(
-        ABC.b,
-        prettyException("Start Scan Error:", e),
-        success: false,
-      );
-      print(e);
-      print("backtrace: $backtrace");
-    }
-  }
-
-  Future onStopPressed() async {
-    try {
-      FlutterBluePlus.stopScan();
-    } catch (e, backtrace) {
-      Snackbar.show(
-        ABC.b,
-        prettyException("Stop Scan Error:", e),
-        success: false,
-      );
-      print(e);
-      print("backtrace: $backtrace");
-    }
-  }
-
-  void onConnectPressed(BluetoothDevice device) {
-    device.connectAndUpdateStream().catchError((e) {
-      Snackbar.show(
-        ABC.c,
-        prettyException("Connect Error:", e),
-        success: false,
-      );
-    });
-
-    Navigator.pop(context);
-
-    _connectionStateSubscription = device.connectionState.listen((state) async {
-      _connectionState = state;
-
-      final subscription = device.mtu.listen((int mtu) {
-        // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
-        print("mtu $mtu");
-      });
-
-      // cleanup: cancel subscription when disconnected
-      device.cancelWhenDisconnected(subscription);
-
-      // You can also manually change the mtu yourself.
-      if (!kIsWeb && Platform.isAndroid) {
-        device.requestMtu(512);
-      }
-
-      if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "fetchLogs") {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder:
-                (_) => FetchFileData(
-                  connectionState: _connectionState,
-                  connectedDevice: device,
-                ),
-          ),
-        );
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "setTime") {
-        _sendCurrentDateTime(device, "Set Time");
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "readDevice") {
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "eraseAll") {
-        _eraseAllLogs(context, device);
-        await FlutterBluePlus.stopScan();
-      } else {}
-    });
-  }
-
-  Future<void> disconnectDevice(BluetoothDevice device) async {
-    try {
-      // Disconnect from the given Bluetooth device
-      Future.delayed(Duration(seconds: 2), () async {
-        await device.disconnect();
-      });
-      print('Device disconnected successfully');
-    } catch (e) {
-      print('Error disconnecting from device: $e');
-    }
-  }
-
-  Future<void> _eraseAllLogs(
-    BuildContext context,
-    BluetoothDevice deviceName,
-  ) async {
-    logConsole("Erase All initiated");
-    //showLoadingIndicator("Erasing logs...", context);
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandPacket = [];
-      commandPacket.addAll(hPi4Global.sessionLogWipeAll);
-      await _sendCommand(commandPacket, deviceName);
-    });
-    //Navigator.pop(context);
-  }
-
-  Future<void> _sendCommand(
-    List<int> commandList,
-    BluetoothDevice deviceName,
-  ) async {
-    logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
-
-    List<BluetoothService> services = await deviceName.discoverServices();
-
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-            commandCharacteristic = characteristic;
-            break;
-          }
-        }
-      }
-    }
-
-    if (commandService != null && commandCharacteristic != null) {
-      // Write to the characteristic
-      await commandCharacteristic?.write(commandList, withoutResponse: true);
-      //logConsole('Data written: $commandList');
-    }
-  }
-
-  Future onRefresh() {
-    if (_isScanning == false) {
-      FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-    }
-    return Future.delayed(Duration(milliseconds: 500));
-  }
-
-  Widget buildScanButton(BuildContext context) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: hPi4Global.hpi4Color, // background color
-        foregroundColor: Colors.white, // text color
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        minimumSize: Size(SizeConfig.blockSizeHorizontal * 40, 40),
-      ),
-      onPressed: () {
-        onRefresh();
-        onScanPressed();
-      },
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text('SCAN', style: TextStyle(fontSize: 16, color: Colors.white)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildScanResultTiles(BuildContext context) {
-    return _scanResults
-        .map(
-          (r) => ScanResultTile(
-            result: r,
-            onTap: () => onConnectPressed(r.device),
-          ),
-        )
-        .toList();
-  }
-
-  Future<void> showScanDialog() {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: true, // user must tap button!
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: Colors.black,
-              title: Text(
-                'Select device to connect',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    Expanded(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: <Widget>[
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [buildScanButton(context)],
-                          ),
-                          ..._buildScanResultTiles(context),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: Text(
-                    'Close',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
-                  onPressed: () {
-                    FlutterBluePlus.stopScan();
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -564,7 +196,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ],
                                           ),
                                           SizedBox(height: 10.0),
-                                          /*ElevatedButton(
+                                          ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -586,11 +218,11 @@ class _DevicePageState extends State<DevicePage> {
                                                 context,
                                                 MaterialPageRoute(
                                                   builder:
-                                                      (context) =>
-                                                          DeviceManagement(),
+                                                      (context) => ScrDFU(),
                                                 ),
                                               );
                                             },
+
                                             child: Padding(
                                               padding: const EdgeInsets.all(
                                                 8.0,
@@ -616,103 +248,8 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),
-                                          SizedBox(height: 10.0),*/
-                                          /*ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                selectedOption = "readDevice";
-                                              });
-                                              //showScanDialog();
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.system_update,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Read Device ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),*/
-                                          /* SizedBox(height: 10.0),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              setState(() {
-                                                selectedOption = "fetchLogs";
-                                              });
-                                              showScanDialog();
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.sync,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Fetch Logs ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(height: 10.0),*/
+                                          SizedBox(height: 10.0),
+
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -734,7 +271,7 @@ class _DevicePageState extends State<DevicePage> {
                                               setState(() {
                                                 selectedOption = "eraseAll";
                                               });
-                                              showScanDialog();
+                                              //showScanDialog();
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
