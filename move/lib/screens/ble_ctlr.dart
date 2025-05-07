@@ -4,11 +4,16 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:intl/intl.dart';
 import '../globals.dart';
 
+BluetoothService? commandService;
+BluetoothCharacteristic? commandCharacteristic;
+
+BluetoothService? dataService;
+BluetoothCharacteristic? dataCharacteristic;
+
+
 class BLEController {
-  Future<void> sendCurrentDateTime(
-    BluetoothDevice deviceName,
-    String selectedOption,
-  ) async {
+  Future<void> sendCurrentDateTime(BluetoothDevice deviceName,
+      String selectedOption,) async {
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -48,7 +53,7 @@ class BLEController {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         targetService = service;
         for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
+        in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             targetCharacteristic = characteristic;
             break;
@@ -73,13 +78,6 @@ class BLEController {
     }
   }
 
-  void logConsole(String logString) async {
-    print("debug - $logString");
-    setState(() {
-      debugText += logString;
-      debugText += "\n";
-    });
-  }
 
   Future<void> _eraseAllLogs(BluetoothDevice deviceName) async {
     //logConsole("Erase All initiated");
@@ -92,11 +90,8 @@ class BLEController {
     //Navigator.pop(context);
   }
 
-  Future<void> _sendCommand(
-    List<int> commandList,
-    BluetoothDevice deviceName,
-  ) async {
-    logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
+  Future<void> _sendCommand(List<int> commandList,
+      BluetoothDevice deviceName,) async {
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
@@ -105,7 +100,7 @@ class BLEController {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
+        in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -121,26 +116,5 @@ class BLEController {
     }
   }
 
-  /*
-  if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "fetchLogs") {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder:
-                (_) => FetchFileData(
-                  connectionState: _connectionState,
-                  connectedDevice: device,
-                ),
-          ),
-        );
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "setTime") {
-        _sendCurrentDateTime(device, "Set Time");
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "readDevice") {
-      } else if (_connectionState == BluetoothConnectionState.connected &&
-          selectedOption == "eraseAll") {
-        _eraseAllLogs(context, device);
-        await FlutterBluePlus.stopScan();
-      } else {}*/
 }
+

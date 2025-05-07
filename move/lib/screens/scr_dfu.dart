@@ -101,13 +101,6 @@ class ScrDFUState extends State<ScrDFU> {
       }
     });
 
-    /*_connectionStateSubscription = _currentDevice.connectionState.listen((
-      BluetoothConnectionState state,
-    ) {
-      if (mounted) {
-        setState(() => _connectionState = state);
-      }
-    });*/
   }
 
   @override
@@ -258,14 +251,14 @@ class ScrDFUState extends State<ScrDFU> {
 
     final updateStream = updateManager.setup();
 
-    /*_updateStateSubscription = updateManager.updateStateStream.listen((event) {
+    _updateStateSubscription = updateManager.updateStateStream!.listen((event) {
       if (mounted) {
         setState(() {
           print("DFU state: ${event.toString()}");
           
         });
       }
-    });*/
+    });
 
     List <mcumgr.Image> _fw_images = [];
     for (final file in _fw_manifest.files) {
@@ -363,12 +356,7 @@ class ScrDFUState extends State<ScrDFU> {
         success: false,
       );
     });
-    /*MaterialPageRoute route = MaterialPageRoute(
-      builder: (context) => DeviceScreen(device: device),
-      settings: RouteSettings(name: '/DeviceScreen'),
-    );
-    Navigator.of(context).push(route);
-    */
+
     if (mounted) {
       setState(() {
         _showUpdateCard = true;
@@ -507,68 +495,6 @@ class ScrDFUState extends State<ScrDFU> {
                 child: MaterialButton(
                   onPressed: () async {
                     _onLoadFirmware();
-                    /*await _startSMPClient(_currentDevice.id);
-
-                    mcumgr.ImageState state = await _smpClient.readImageState(
-                      SMPtimeout,
-                    );
-                    print("DFU Imagestate: $state");
-
-                    String dfuFilePath = await getDFUPacket(latestReleasePath);
-
-                    final File dfuPacketFile = File(dfuFilePath);
-
-                    print(
-                      "${"DFU ready: " + dfuPacketFile.path} Length:${dfuPacketFile.lengthSync()}",
-                    );
-
-                    final content = await dfuPacketFile.readAsBytes();
-                    final image = mcumgr.McuImage.decode(content);
-                    print("DFU package loaded: ${content.length}");
-
-                    setState(() {
-                      dfuInProgress = true;
-                      dfuProgress = 0;
-                    });
-
-                    try {
-                      await _smpClient.uploadImage(
-                        0,
-                        content,
-                        image.hash,
-                        const Duration(seconds: 30),
-                        onProgress: (count) {
-                          setState(() {
-                            dfuProgress = (count.toDouble() / content.length);
-                            //print("DFU Prg: " + dfuProgress.toString());
-                          });
-                        },
-                      );
-                    } finally {
-                      setState(() {
-                        dfuInProgress = false;
-                      });
-                    }
-
-                    state = await _smpClient.readImageState(SMPtimeout);
-                    print("DFU Imagestate: $state");
-
-                    if (state.images.length > 1) {
-                      await _smpClient.setPendingImage(
-                        state.images[1].hash,
-                        true,
-                        SMPtimeout,
-                      );
-                    }
-
-                    state = await _smpClient.readImageState(SMPtimeout);
-                    print("DFU Imagestate: $state");
-
-                    _smpClient.reset(SMPtimeout);
-                    setState(() {
-                      _showDeviceCard = false;
-                    });
-                    */
                   },
                   color: Colors.blue,
                   shape: RoundedRectangleBorder(

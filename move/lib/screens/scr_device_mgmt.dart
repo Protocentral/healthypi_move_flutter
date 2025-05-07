@@ -1,31 +1,17 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
-import 'package:convert/convert.dart';
-import 'package:csv/csv.dart';
-import 'package:intl/intl.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:move/screens/bptCalibrationPage1.dart';
 import 'package:move/screens/scr_dfu.dart';
-import 'package:move/utils/extra.dart';
-import 'package:move/utils/snackbar.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:move/screens/scr_scan.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../dfu.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/fetchfileData.dart';
 import 'package:move/sizeConfig.dart';
-
-import '../../widgets/scan_result_tile.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
-
-typedef LogHeader = ({int logFileID, int sessionLength});
 
 class DevicePage extends StatefulWidget {
   const DevicePage({super.key});
@@ -36,29 +22,6 @@ class DevicePage extends StatefulWidget {
 
 class _DevicePageState extends State<DevicePage> {
   String selectedOption = "sync";
-
-  int totalSessionCount = 0;
-  double displayPercent = 0;
-  double globalDisplayPercentOffset = 0;
-
-  int globalTotalFiles = 0;
-  int currentFileNumber = 0;
-  int currentFileDataCounter = 0;
-  int tappedIndex = 0;
-  int checkNoOfWrites = 0;
-
-  int noOfFiles = 0;
-
-  List<int> currentFileData = [];
-  List<int> logData = [];
-
-  BluetoothService? commandService;
-  BluetoothCharacteristic? commandCharacteristic;
-
-  BluetoothService? dataService;
-  BluetoothCharacteristic? dataCharacteristic;
-
-  late StreamSubscription<List<int>> _streamDataSubscription;
 
   @override
   void initState() {
@@ -74,24 +37,6 @@ class _DevicePageState extends State<DevicePage> {
     if (mounted) setState(f);
   }
 
-  void showLoadingIndicator(String text, BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return WillPopScope(
-          onWillPop: () async => false,
-          child: AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(8.0)),
-            ),
-            backgroundColor: Colors.black87,
-            content: LoadingIndicator(text: text),
-          ),
-        );
-      },
-    );
-  }
 
   void logConsole(String logString) async {
     print("debug - $logString");
@@ -195,7 +140,7 @@ class _DevicePageState extends State<DevicePage> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                          SizedBox(height: 10.0),
+                                         /* SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -247,7 +192,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),
+                                          ),*/
                                           SizedBox(height: 10.0),
 
                                           ElevatedButton(
@@ -268,10 +213,9 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                             onPressed: () {
-                                              setState(() {
-                                                selectedOption = "eraseAll";
-                                              });
-                                              //showScanDialog();
+                                              Navigator.of(context).pushReplacement(
+                                                MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
+                                              );
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
@@ -345,7 +289,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),*/
-                                          SizedBox(height: 10.0),
+                                          /*SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -399,7 +343,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),
+                                          ),*/
                                           SizedBox(height: 10.0),
                                         ],
                                       ),
@@ -408,8 +352,8 @@ class _DevicePageState extends State<DevicePage> {
                                 ),
                               ],
                             ),
-                            SizedBox(height: 20),
-                            Row(
+                            //SizedBox(height: 20),
+                            /*Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -546,7 +490,7 @@ class _DevicePageState extends State<DevicePage> {
                                   ),
                                 ),
                               ],
-                            ),
+                            ),*/
                             SizedBox(height: 20),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
