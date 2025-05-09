@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void showSuccessDialog(BuildContext context, String message) {
-    if(fetchStaus == "Data synced"){
+    if (fetchStaus == "Data synced") {
       showDialog(
         context: context,
         builder: (BuildContext context) {
@@ -150,33 +150,46 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(Icons.check_circle, color: Colors.green),
                   SizedBox(width: 10),
-                  Text('Success',
-                      style:TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text(
+                    'Success',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ],
               ),
-              content: Text(message,
-                  style:TextStyle(fontSize: 16, color:Colors.white)),
+              content: Text(
+                message,
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
               actions: [
                 TextButton(
-                  onPressed: () async{
-                    SharedPreferences prefs = await SharedPreferences.getInstance();
+                  onPressed: () async {
+                    SharedPreferences prefs =
+                        await SharedPreferences.getInstance();
                     await prefs.setString('fetchStatus', "Not synced");
                     Navigator.pop(context); // Close the dialog
                   },
-                  child: Text('OK',
-                      style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                  ),
                 ),
               ],
             ),
           );
         },
       );
-    }else{
+    } else {
       //Do Nothing;
     }
   }
-
-
 
   int getGridCount() {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
@@ -188,9 +201,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   double getAspectRatio() {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return MediaQuery.of(context).size.aspectRatio * 4.0 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 3.0 / 2;
     } else {
-      return MediaQuery.of(context).size.aspectRatio * 10.0 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 3.0 / 2;
     }
   }
 
@@ -198,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return GridView.count(
       primary: false,
       padding: const EdgeInsets.all(12),
-      crossAxisCount: getGridCount(),
+      crossAxisCount: 2, //getGridCount(),
       childAspectRatio: getAspectRatio(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
@@ -213,16 +226,18 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: Card(
             color: Colors.grey[900],
+
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
                   Row(
                     children: <Widget>[
                       Icon(Icons.favorite_border, color: Colors.white),
                       SizedBox(width: 10.0),
-                      Text('Heartrate', style: hPi4Global.movecardTextStyle),
+                      Text('Heart Rate', style: hPi4Global.movecardTextStyle),
                       SizedBox(width: 15.0),
                     ],
                   ),
@@ -269,6 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
                   Row(
@@ -321,6 +337,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
                   Row(
@@ -445,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: () {
                     //showScanDialog();
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"1")),
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
                     );
                   },
                   child: Container(
