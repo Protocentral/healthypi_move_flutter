@@ -1,16 +1,28 @@
 import 'dart:async';
-
+import 'dart:io' show Directory, File, FileSystemEntity, Platform;
+import 'package:convert/convert.dart';
+import 'package:csv/csv.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:move/screens/scr_syncing.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 
+import '../globals.dart';
+import '../home.dart';
+import '../sizeConfig.dart';
 import '../widgets/scan_result_tile.dart';
 import '../widgets/system_device_tile.dart';
 import 'scr_device.dart';
 
+//typedef LogHeader = ({int logFileID, int sessionLength});
+
 class ScrScan extends StatefulWidget {
-  const ScrScan({super.key});
+  const ScrScan({super.key, required this.tabIndex});
+  
+  final String tabIndex;
 
   @override
   State<ScrScan> createState() => _ScrScanState();
@@ -26,6 +38,29 @@ class _ScrScanState extends State<ScrScan> {
   late StreamSubscription<bool> _isScanningSubscription;
 
   late StreamSubscription<BluetoothAdapterState> _adapterStateStateSubscription;
+
+  BluetoothService? commandService;
+  BluetoothCharacteristic? commandCharacteristic;
+
+  BluetoothService? dataService;
+  BluetoothCharacteristic? dataCharacteristic;
+
+  late StreamSubscription<List<int>> _streamDataSubscription;
+
+  BluetoothConnectionState _connectionState =
+      BluetoothConnectionState.disconnected;
+
+  late StreamSubscription<BluetoothConnectionState>
+  _connectionStateSubscription;
+
+  double displayPercent = 0;
+  double globalDisplayPercentOffset = 0;
+
+  int currentFileDataCounter = 0;
+  int checkNoOfWrites = 0;
+
+  List<int> currentFileData = [];
+  List<int> logData = [];
 
   @override
   void initState() {
@@ -65,7 +100,16 @@ class _ScrScanState extends State<ScrScan> {
   void dispose() {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
+    _connectionStateSubscription.cancel();
     super.dispose();
+  }
+
+  void logConsole(String logString) async {
+    print("AKW - $logString");
+  }
+
+  void setStateIfMounted(f) {
+    if (mounted) setState(f);
   }
 
   Future onScanPressed() async {
@@ -85,18 +129,14 @@ class _ScrScanState extends State<ScrScan> {
     try {
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
-        withServices: [
-          // Guid("180f"), // battery
-          // Guid("180a"), // device info
-          // Guid("1800"), // generic access
-          // Guid("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // Nordic UART
-        ],
-        webOptionalServices: [
+        withServices: [],
+        withNames: ['healthypi move'],
+        /*webOptionalServices: [
           Guid("180f"), // battery
           Guid("180a"), // device info
           Guid("1800"), // generic access
           Guid("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // Nordic UART
-        ],
+        ],*/
       );
     } catch (e, backtrace) {
       Snackbar.show(
@@ -126,14 +166,69 @@ class _ScrScanState extends State<ScrScan> {
     }
   }
 
-  void onConnectPressed(BluetoothDevice device) {
+  Future<void> onConnectPressed(BluetoothDevice device) async {
     device.connectAndUpdateStream().catchError((e) {
-      Snackbar.show(ABC.c, prettyException("Connect Error:", e), success: false);
+      Snackbar.show(
+        ABC.c,
+        prettyException("Connect Error:", e),
+        success: false,
+      );
     });
-    MaterialPageRoute route = MaterialPageRoute(
-        builder: (context) => DeviceScreen(device: device), settings: RouteSettings(name: '/DeviceScreen'));
-    Navigator.of(context).push(route);
-    
+
+    _connectionStateSubscription = device.connectionState.listen((state) async {
+      _connectionState = state;
+
+      final subscription = device.mtu.listen((int mtu) {
+        // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
+        print("mtu $mtu");
+      });
+
+      // cleanup: cancel subscription when disconnected
+      device.cancelWhenDisconnected(subscription);
+
+      // You can also manually change the mtu yourself.
+      if (!kIsWeb && Platform.isAndroid) {
+        device.requestMtu(512);
+      }
+
+      if (_connectionState == BluetoothConnectionState.connected) {
+        if(widget.tabIndex == "1"){
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => SyncingScreen(device: device),
+            ),
+          );
+        }else if(widget.tabIndex == "2"){
+          showLoadingIndicator("Connected. Erasing the data...", context);
+          await subscribeToChar(device);
+          _eraseAllLogs(context, device);
+        }else{
+
+        }
+      }
+    });
+  }
+
+  Future<void> _eraseAllLogs(
+      BuildContext context,
+      BluetoothDevice deviceName,
+      ) async {
+    logConsole("Erase All initiated");
+    await Future.delayed(Duration(seconds: 2), () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogWipeAll);
+      await _sendCommand(commandPacket, deviceName);
+    });
+    Navigator.pop(context);
+    showLoadingIndicator("Disconnecting...", context);
+    await Future.delayed(Duration(seconds: 2), () async {
+      disconnectDevice(deviceName);
+      Navigator.pop(context);
+      Navigator.of(
+        context,
+      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+    });
+
   }
 
   Future onRefresh() {
@@ -148,15 +243,48 @@ class _ScrScanState extends State<ScrScan> {
 
   Widget buildScanButton(BuildContext context) {
     if (FlutterBluePlus.isScanningNow) {
-      return FloatingActionButton(
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+        ),
         onPressed: onStopPressed,
-        backgroundColor: Colors.red,
-        child: const Icon(Icons.stop),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[const Icon(Icons.stop), Spacer()],
+          ),
+        ),
       );
     } else {
-      return FloatingActionButton(
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+        ),
         onPressed: onScanPressed,
-        child: const Text("SCAN"),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text(
+                ' Scan ',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+              Spacer(),
+            ],
+          ),
+        ),
       );
     }
   }
@@ -190,18 +318,112 @@ class _ScrScanState extends State<ScrScan> {
         .toList();
   }
 
+  Future<void> disconnectDevice(BluetoothDevice device) async {
+
+    try {
+      // Disconnect from the given Bluetooth device
+      await device.disconnect();
+      print('Device disconnected successfully');
+    } catch (e) {
+      print('Error disconnecting from device: $e');
+    }
+
+  }
+
+  subscribeToChar(BluetoothDevice deviceName) async {
+    List<BluetoothService> services = await deviceName.discoverServices();
+    // Find a service and characteristic by UUID
+    for (BluetoothService service in services) {
+      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
+        commandService = service;
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
+            dataCharacteristic = characteristic;
+            await dataCharacteristic?.setNotifyValue(true);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  Future<void> _sendCommand(
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
+    logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
+
+    List<BluetoothService> services = await deviceName.discoverServices();
+
+    // Find a service and characteristic by UUID
+    for (BluetoothService service in services) {
+      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
+        commandService = service;
+        for (BluetoothCharacteristic characteristic
+            in service.characteristics) {
+          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
+            commandCharacteristic = characteristic;
+            break;
+          }
+        }
+      }
+    }
+
+    if (commandService != null && commandCharacteristic != null) {
+      // Write to the characteristic
+      await commandCharacteristic?.write(commandList, withoutResponse: true);
+      //logConsole('Data written: $commandList');
+    }
+  }
+
+  void showLoadingIndicator(String text, BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8.0)),
+            ),
+            backgroundColor: Colors.black87,
+            content: LoadingIndicator(text: text),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
       key: Snackbar.snackBarKeyB,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Find Devices')),
+        backgroundColor: hPi4Global.appBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: hPi4Global.hpi4AppBarColor,
+          automaticallyImplyLeading: false,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.max,
+            children: <Widget>[
+              Image.asset(
+                'assets/healthypi_move.png',
+                fit: BoxFit.fitWidth,
+                height: 30,
+              ),
+
+              const Text('Find Devices', style: hPi4Global.movecardTextStyle),
+            ],
+          ),
+        ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
           child: ListView(
             children: <Widget>[
               buildScanButton(context),
-
               ..._buildSystemDeviceTiles(context),
               ..._buildScanResultTiles(context),
             ],

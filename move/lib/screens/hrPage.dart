@@ -147,7 +147,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                 ),
                 palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  HiloSeries<HRTrends, DateTime>(
+                  RangeColumnSeries<HRTrends, DateTime>(
                     dataSource: hrTrendsData,
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
@@ -373,22 +373,13 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
 
       setState(() {
         lastUpdatedTime = DateTime.parse(lastGroup);
-        /*rangeMinHR = lastMin;
+        rangeMinHR = lastMin;
         rangeMaxHR = lastMax;
         averageHR = lastAvg;
-        restingHR = groupedStats[lastGroup]!['latest']!;*/
+        restingHR = groupedStats[lastGroup]!['latest']!;
       });
 
       String todayStr = _formatDate(DateTime.now());
-
-      if (_formatDate(lastUpdatedTime) == todayStr) {
-        setState(() {
-          rangeMinHR = lastMin;
-          rangeMaxHR = lastMax;
-          averageHR = lastAvg;
-          restingHR = groupedStats[lastGroup]!['latest']!;
-        });
-      }
 
       if (_formatDate(lastUpdatedTime) == todayStr) {
         saveValue(lastUpdatedTime, averageHR);

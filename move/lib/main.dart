@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:move/src/providers/firmware_update_request_provider.dart';
 import 'package:provider/provider.dart';
 //#import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 
@@ -9,12 +8,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-        create: (context) => FirmwareUpdateRequestProvider()),
-      ],
-      child: MaterialApp(
+    MaterialApp(
         title: 'HealthyPi',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -28,7 +22,6 @@ void main() async {
         ),
         home: HomePage(), //HomeScreen(),
       ),
-    ),
 
   );
   //runApp(MyApp());
