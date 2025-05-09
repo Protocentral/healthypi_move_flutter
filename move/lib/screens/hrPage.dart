@@ -71,21 +71,49 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
         maximum: DateTime(
           DateTime.now().year,
           DateTime.now().month,
-          DateTime.now().day,
-          23,
-          59,
-          59,
+          DateTime.now().day+1,
+          0,
+          0,
+          0,
         ),
         //DateTime.now(), // End value of the range slider
-        interval: 1,
+        interval: 6,
         intervalType: DateTimeIntervalType.hours,
-        dateFormat: DateFormat.Hm(),
+        dateFormat: DateFormat.H(),
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
           color: Colors.white,
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
+          axisLabelFormatter: (AxisLabelRenderDetails details) {
+            // Replace "0" (midnight) with "24"
+            String labelText = details.text;
+            if (details.value == DateTime(
+              DateTime
+                  .now()
+                  .year,
+              DateTime
+                  .now()
+                  .month,
+              DateTime
+                  .now()
+                  .day + 1,
+              0,
+              0,
+              0,
+            ).millisecondsSinceEpoch.toDouble()) {
+              labelText = '24';
+            }
+            return ChartAxisLabel(
+              labelText,
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
@@ -101,21 +129,75 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Convert the DateTime value from the axis to a readable format
+          DateTime date = DateTime.fromMillisecondsSinceEpoch(details.value.toInt());
+
+          // Check if the date is today's date
+          if (date.year == DateTime.now().year &&
+              date.month == DateTime.now().month &&
+              date.day == DateTime.now().day) {
+            return ChartAxisLabel(
+              'Today',
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
+          // Otherwise, use the default label
+          return ChartAxisLabel(
+            details.text,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
       );
     } else {
       return DateTimeAxis(
         // Display a month-long range dynamically based on slider values
         minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
         maximum: DateTime.now(), // Today
-        interval: 1, // 6-hour intervals
+        interval: 6,
         intervalType: DateTimeIntervalType.days,
-        dateFormat: DateFormat('dd MMM'), // Show day, month, and hour
+        dateFormat: DateFormat('dd'), // Show day, month, and hour
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
           color: Colors.white,
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Convert the DateTime value from the axis to a readable format
+          DateTime date = DateTime.fromMillisecondsSinceEpoch(details.value.toInt());
+
+          // Check if the date is today's date
+          if (date.year == DateTime.now().year &&
+              date.month == DateTime.now().month &&
+              date.day == DateTime.now().day) {
+            return ChartAxisLabel(
+              'Today',
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
+          // Otherwise, use the default label
+          return ChartAxisLabel(
+            details.text,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
       );
     }
   }
@@ -135,9 +217,9 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                 primaryXAxis: dateTimeAxis(),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
-                  minimum: 0,
-                  maximum: 200,
-                  interval: 10,
+                  //minimum: 0,
+                  //maximum: 200,
+                  //interval: 10,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
                     color: Colors.white,
@@ -196,6 +278,11 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
 
         List<String> weeklyFileNames = [];
         List<String> MonthlyFileNames = [];
+        hrTrendsData = [];
+        restingHR = 0;
+        rangeMinHR = 0;
+        rangeMaxHR = 0;
+        averageHR = 0;
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
@@ -357,8 +444,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
     groupedStats.forEach((group, stats) {
       DateTime formattedDateTime = DateTime.parse(group);
       setState(() {
-        hrTrendsData.add(
-          HRTrends(formattedDateTime, stats['min']!, stats['max']!),
+        hrTrendsData.add(HRTrends(formattedDateTime, stats['min']!, stats['max']!),
         );
         average = (stats['avg']! / stats['count']!);
       });
@@ -417,15 +503,13 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
-                        rangeMinHR.toString(),
+                      Text( (rangeMinHR.toString()=="0")? "--":rangeMinHR.toString(),
                         style: hPi4Global.moveValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
                       Text('-', style: hPi4Global.moveValueTextStyle),
                       SizedBox(width: 10.0),
-                      Text(
-                        rangeMaxHR.toString(),
+                      Text((rangeMaxHR.toString() == "0") ? "--": rangeMaxHR.toString(),
                         style: hPi4Global.moveValueTextStyle,
                       ),
                       SizedBox(width: 10.0),
@@ -460,8 +544,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                       Row(
                         children: <Widget>[
                           SizedBox(width: 10.0),
-                          Text(
-                            averageHR.toString(),
+                          Text((averageHR.toString() == "0")? "--" : averageHR.toString(),
                             style: hPi4Global.moveValueTextStyle,
                           ),
                           SizedBox(width: 15.0),
@@ -495,8 +578,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                       Row(
                         children: <Widget>[
                           SizedBox(width: 10.0),
-                          Text(
-                            restingHR.toString(),
+                          Text((restingHR.toString() =="0") ? "--" : restingHR.toString(),
                             style: hPi4Global.moveValueTextStyle,
                           ),
                           SizedBox(width: 15.0),
@@ -612,7 +694,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white,
-                tabs: const [Text('Day'), Text('Week'), Text('Month')],
+                tabs: const [Text('Today'), Text('Week'), Text('Month')],
               ),
             ),
           ),
@@ -622,7 +704,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
         controller: _tabController,
         physics: NeverScrollableScrollPhysics(),
         children: [
-          displayCard("Day"),
+          displayCard("Today"),
           displayCard("Week"),
           displayCard("Month"),
         ],

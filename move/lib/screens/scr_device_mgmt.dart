@@ -77,7 +77,7 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
-  // Load the stored value
+  // reset the stored value
   _resetStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -113,7 +113,7 @@ class _DevicePageState extends State<DevicePage> {
                 child: const Text('Yes',
                     style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
                 onPressed: () {
-                  if(action == "logs on the device"){
+                  if(action == "logs on the device."){
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
                     );
