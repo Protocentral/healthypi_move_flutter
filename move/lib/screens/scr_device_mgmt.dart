@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:move/screens/bptCalibrationPage1.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -72,6 +74,120 @@ class _DevicePageState extends State<DevicePage> {
           ),
         ),
       ),
+    );
+  }
+
+  // Load the stored value
+  _resetStoredValue() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      prefs.setString('lastSynced','0');
+      prefs.setString('latestHR','0');
+      prefs.setString('latestTemp','0');
+      prefs.setString('latestSpo2','0');
+      prefs.setString('latestActivityCount','0');
+      prefs.setString('lastUpdatedHR','0');
+      prefs.setString('lastUpdatedTemp','0');
+      prefs.setString('lastUpdatedSpo2','0');
+      prefs.setString('lastUpdatedActivity','0');
+      prefs.setString('fetchStatus','0');
+    });
+  }
+
+ showConfirmationDialog(BuildContext context, String action) {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            textTheme: TextTheme(),
+            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+          ),
+          child: AlertDialog(
+            title: Text('Are you sure you wish to delete all data.',
+                style:TextStyle(fontSize: 18, color: Colors.white)),
+            content: Text('This action is not reversible.',
+                style:TextStyle(fontSize: 16, color: Colors.red)),
+            actions: <Widget>[
+              TextButton(
+                child: const Text('Yes',
+                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                onPressed: () {
+                  if(action == "logs on the device"){
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
+                    );
+                  }else{
+                    Navigator.pop(context);
+                    deleteAllFiles();
+                    _resetStoredValue();
+                  }
+                },
+              ),
+              TextButton(
+                child: const Text('No',
+                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                onPressed: () {
+                  Navigator.pop(context); // Returns false
+                },
+              ),
+            ],
+          ),
+        );
+
+      },
+    );
+  }
+
+  Future<void> deleteAllFiles() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final files = dir.listSync();
+
+      for (var file in files) {
+        if (file is File) {
+          await file.delete();
+        }
+      }
+      print('All files deleted.');
+      showSuccessDialog(context, "Deleted all files");
+    } catch (e) {
+      print('Error deleting files: $e');
+    }
+  }
+
+  void showSuccessDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            textTheme: TextTheme(),
+            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+          ),
+          child: AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 10),
+                Text('Success',
+                    style:TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+              ],
+            ),
+            content: Text(message,
+                style:TextStyle(fontSize: 16, color:Colors.white)),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+                child: Text('OK',
+                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -194,7 +310,6 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),*/
                                           SizedBox(height: 10.0),
-
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -213,9 +328,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                             onPressed: () {
-                                              Navigator.of(context).pushReplacement(
-                                                MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
-                                              );
+                                              showConfirmationDialog(context, "logs on the device.");
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
@@ -230,7 +343,7 @@ class _DevicePageState extends State<DevicePage> {
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' Erase Logs ',
+                                                    ' Erase all logs on device ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
@@ -241,17 +354,17 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                           ),
-                                          /*SizedBox(height: 10.0),
+                                          SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
+                                              hPi4Global
+                                                  .hpi4Color, // background color
                                               foregroundColor:
-                                                  Colors.white, // text color
+                                              Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                    BorderRadius.circular(20),
+                                                BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -260,10 +373,7 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                             onPressed: () {
-                                              setState(() {
-                                                selectedOption = "setTime";
-                                              });
-                                              showScanDialog();
+                                              showConfirmationDialog(context, "app data.");
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
@@ -271,14 +381,14 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                    MainAxisAlignment.start,
+                                                MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
-                                                    Icons.sync,
+                                                    Icons.delete,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' Set Time ',
+                                                    ' Erase app data ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
@@ -288,9 +398,9 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
-                                          /*SizedBox(height: 10.0),
-                                          ElevatedButton(
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          /*ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -491,71 +601,6 @@ class _DevicePageState extends State<DevicePage> {
                                 ),
                               ],
                             ),*/
-                            SizedBox(height: 20),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  //height: SizeConfig.blockSizeVertical * 20,
-                                  width: SizeConfig.blockSizeHorizontal * 88,
-                                  child: Card(
-                                    color: Colors.grey[900],
-                                    elevation: 2,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.max,
-                                        children: <Widget>[
-                                          _buildDebugConsole(),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              resetLogConsole();
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.clear,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    'Clear Console ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
                       ],

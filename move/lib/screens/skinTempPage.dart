@@ -54,8 +54,6 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
   void _handleTabChange() {
     setState(() {
       _listCSVFiles();
-      // Rebuild the widget when the tab index changes
-      //buildchartBlock();
     });
   }
 
@@ -150,7 +148,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                 ),
                 palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  HiloSeries<TempTrends, DateTime>(
+                  RangeColumnSeries<TempTrends, DateTime>(
                     dataSource: TempTrendsData,
                     xValueMapper: (TempTrends data, _) => data.date,
                     lowValueMapper: (TempTrends data, _) => data.minTemp,
@@ -376,18 +374,22 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
 
       setState(() {
         lastUpdatedTime = DateTime.parse(lastGroup);
+        averageTemp = lastAvg;
+        restingTemp = groupedStats[lastGroup]!['latest']! / 100;
+        rangeMinTemp = lastMin;
+        rangeMaxTemp = lastMax;
       });
 
       String todayStr = _formatDate(DateTime.now());
 
-      if (_formatDate(lastUpdatedTime) == todayStr) {
+      /*if (_formatDate(lastUpdatedTime) == todayStr) {
         setState(() {
           averageTemp = lastAvg;
           restingTemp = groupedStats[lastGroup]!['latest']! / 100;
           rangeMinTemp = lastMin;
           rangeMaxTemp = lastMax;
         });
-      }
+      }*/
 
       if (_formatDate(lastUpdatedTime) == todayStr) {
         saveValue(lastUpdatedTime, averageTemp);
