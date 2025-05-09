@@ -39,7 +39,6 @@ class _DevicePageState extends State<DevicePage> {
     if (mounted) setState(f);
   }
 
-
   void logConsole(String logString) async {
     print("debug - $logString");
     setState(() {
@@ -77,6 +76,7 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
+
   // reset the stored value
   _resetStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -104,6 +104,7 @@ class _DevicePageState extends State<DevicePage> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
+
             title: Text('Are you sure you wish to delete all data.',
                 style:TextStyle(fontSize: 18, color: Colors.white)),
             content: Text('This action is not reversible.',
@@ -125,39 +126,27 @@ class _DevicePageState extends State<DevicePage> {
                 },
               ),
               TextButton(
-                child: const Text('No',
-                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
                 onPressed: () {
-                  Navigator.pop(context); // Returns false
+                  Navigator.of(context).pop(); // Close the dialog
                 },
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
               ),
             ],
           ),
         );
-
       },
     );
   }
 
-  Future<void> deleteAllFiles() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final files = dir.listSync();
-
-      for (var file in files) {
-        if (file is File) {
-          await file.delete();
-        }
-      }
-      print('All files deleted.');
-      showSuccessDialog(context, "Deleted all files");
-    } catch (e) {
-      print('Error deleting files: $e');
-    }
-  }
-
-  void showSuccessDialog(BuildContext context, String message) {
-    showDialog(
+  showConfirmationDialog(BuildContext context, String action) {
+    return showDialog(
       context: context,
       builder: (BuildContext context) {
         return Theme(
@@ -166,23 +155,44 @@ class _DevicePageState extends State<DevicePage> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green),
-                SizedBox(width: 10),
-                Text('Success',
-                    style:TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-              ],
+            title: Text(
+              'Are you sure you wish to delete all data.',
+              style: TextStyle(fontSize: 18, color: Colors.white),
             ),
-            content: Text(message,
-                style:TextStyle(fontSize: 16, color:Colors.white)),
-            actions: [
+            content: Text(
+              'This action is not reversible.',
+              style: TextStyle(fontSize: 16, color: Colors.red),
+            ),
+            actions: <Widget>[
               TextButton(
+                child: const Text(
+                  'Yes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
                 onPressed: () {
-                  Navigator.of(context).pop(); // Close the dialog
+                  if (action == "logs on the device") {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "2")),
+                    );
+                  } 
                 },
-                child: Text('OK',
-                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+              ),
+              TextButton(
+                child: const Text(
+                  'No',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(context); // Returns false
+                },
               ),
             ],
           ),
@@ -256,7 +266,7 @@ class _DevicePageState extends State<DevicePage> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                         /* SizedBox(height: 10.0),
+                                          /* SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -313,22 +323,25 @@ class _DevicePageState extends State<DevicePage> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
+                                                  Colors
+                                                      .red, // background color
                                               foregroundColor:
                                                   Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
                                                     BorderRadius.circular(20),
                                               ),
-                                              minimumSize: Size(
+                                              /*minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
                                                     100,
                                                 40,
-                                              ),
+                                              ),*/
                                             ),
                                             onPressed: () {
-                                              showConfirmationDialog(context, "logs on the device.");
+                                              showConfirmationDialog(
+                                                context,
+                                                "logs on the device.",
+                                              );
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.all(
@@ -355,50 +368,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                              hPi4Global
-                                                  .hpi4Color, // background color
-                                              foregroundColor:
-                                              Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                BorderRadius.circular(20),
-                                              ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              showConfirmationDialog(context, "app data.");
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.delete,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Erase app data ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
+
                                           SizedBox(height: 10.0),
                                           /*ElevatedButton(
                                             style: ElevatedButton.styleFrom(
