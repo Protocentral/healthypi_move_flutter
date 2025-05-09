@@ -120,7 +120,7 @@ class _DevicePageState extends State<DevicePage> {
                     );
                   }else{
                     Navigator.pop(context);
-                    deleteAllFiles();
+                   // deleteAllFiles();
                     _resetStoredValue();
                   }
                 },
@@ -145,61 +145,7 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
-  showConfirmationDialog(BuildContext context, String action) {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
-          ),
-          child: AlertDialog(
-            title: Text(
-              'Are you sure you wish to delete all data.',
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
-            content: Text(
-              'This action is not reversible.',
-              style: TextStyle(fontSize: 16, color: Colors.red),
-            ),
-            actions: <Widget>[
-              TextButton(
-                child: const Text(
-                  'Yes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
-                  ),
-                ),
-                onPressed: () {
-                  if (action == "logs on the device") {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "2")),
-                    );
-                  } 
-                },
-              ),
-              TextButton(
-                child: const Text(
-                  'No',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
-                  ),
-                ),
-                onPressed: () {
-                  Navigator.pop(context); // Returns false
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+ 
 
   @override
   Widget build(BuildContext context) {
