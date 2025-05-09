@@ -141,8 +141,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   // Save fetch complete status value
   saveFetchCompleteStatus() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('fetchStatus', "Data synced");
+
   }
 
   Future<void> _sendCurrentDateTime(
@@ -378,7 +377,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   }
 
-  double progressPercent = 0.0; // 0.0 to 1.0
+  double hrProgressPercent = 0.0; // 0.0 to 1.0
+  double tempProgressPercent = 0.0; // 0.0 to 1.0
+  double spo2ProgressPercent = 0.0; // 0.0 to 1.0
+  double activityProgressPercent = 0.0; // 0.0 to 1.0
 
   bool isFetchingHR = false;
   bool isFetchingTemp = false;
@@ -588,29 +590,37 @@ class _SyncingScreenState extends State<SyncingScreen> {
             return;
           }
           expectedSize = logTempHeaderList[currentTempFileIndex].sessionLength;
+          setState(() {
+            tempProgressPercent = currentFileDataCounter / expectedSize;
+          });
         } else if (isFetchingSpo2) {
           if (logSpo2HeaderList.isEmpty || currentSpo2FileIndex >= logSpo2HeaderList.length) {
             logConsole("Invalid Spo2 header access: Empty or index out of range.");
             return;
           }
           expectedSize = logSpo2HeaderList[currentSpo2FileIndex].sessionLength;
+          setState(() {
+            spo2ProgressPercent = currentFileDataCounter / expectedSize;
+          });
         } else if (isFetchingActivity) {
           if (logActivityHeaderList.isEmpty || currentActivityFileIndex >= logActivityHeaderList.length) {
             logConsole("Invalid Activity header access: Empty or index out of range.");
             return;
           }
           expectedSize = logActivityHeaderList[currentActivityFileIndex].sessionLength;
+          setState(() {
+            activityProgressPercent = currentFileDataCounter / expectedSize;
+          });
         } else {
           if (logHeaderList.isEmpty || currentFileIndex >= logHeaderList.length) {
             logConsole("Invalid HR header access: Empty or index out of range.");
             return;
           }
           expectedSize = logHeaderList[currentFileIndex].sessionLength;
+          setState(() {
+            hrProgressPercent = currentFileDataCounter / expectedSize;
+          });
         }
-        setState(() {
-          progressPercent = currentFileDataCounter / expectedSize;
-        });
-
 
         if (isFetchingTemp) {
           if (currentFileDataCounter >=
@@ -631,12 +641,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
             if (currentTempFileIndex + 1 < logTempHeaderList.length) {
               currentTempFileIndex++;
               setState(() {
-                progressPercent = 0.0;
+                tempProgressPercent = 0.0;
               });
               _fetchNextTempLogFile(deviceName);
             } else {
               logConsole("All temp files have been fetched.");
-              //_fetchNextTempLogFile(deviceName);
+              _fetchNextTempLogFile(deviceName);
               setState((){
                 isFetchingTempComplete = true;
               });
@@ -666,7 +676,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
             if (currentSpo2FileIndex + 1 < logSpo2HeaderList.length) {
               currentSpo2FileIndex++;
               setState(() {
-                progressPercent = 0.0;
+                spo2ProgressPercent = 0.0;
               });
               _fetchNextSpo2LogFile(deviceName);
             } else {
@@ -702,7 +712,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
             if (currentActivityFileIndex + 1 < logActivityHeaderList.length) {
               currentActivityFileIndex++;
               setState(() {
-                progressPercent = 0.0;
+                activityProgressPercent = 0.0;
               });
               _fetchNextActivityLogFile(deviceName);
             } else {
@@ -738,14 +748,14 @@ class _SyncingScreenState extends State<SyncingScreen> {
             if (currentFileIndex + 1 < logHeaderList.length) {
               currentFileIndex++;
               setState(() {
-                progressPercent = 0.0;
+                hrProgressPercent = 0.0;
               });
               _fetchNextLogFile(deviceName);
             } else {
               logConsole(
                 "All HR files have been fetched. Starting Temp file fetching...",
               );
-              //_fetchNextLogFile(deviceName);
+              _fetchNextLogFile(deviceName);
               setState((){
                 isFetchingHRComplete = true;
               });
@@ -1101,7 +1111,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         isFetchingTempComplete &&
         isFetchingSpo2Complete &&
         isFetchingActivityComplete) {
-      saveFetchCompleteStatus();
       logConsole("disconnected..............");
       onDisconnectPressed();
       Navigator.pop(context);
@@ -1110,6 +1119,50 @@ class _SyncingScreenState extends State<SyncingScreen> {
       ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
 
     }
+  }
+
+  Widget displayCloseandCancel(){
+    if (isFetchingHRComplete &&
+        isFetchingTempComplete &&
+        isFetchingSpo2Complete &&
+        isFetchingActivityComplete) {
+      return Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green),
+          SizedBox(width: 10),
+          Text('Success',
+              style:TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+          SizedBox(width: 10),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hPi4Global.hpi4Color,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Close'),
+            onPressed:(){
+              Navigator.of(
+                context,
+              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            },
+          )
+        ],
+      );
+    }else{
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color,
+          foregroundColor: Colors.white,
+        ),
+        child: const Text('Cancel'),
+        onPressed:(){
+          onDisconnectPressed();
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+        },
+      );
+    }
+
   }
 
   String _getCurrentTrendLabel() {
@@ -1131,7 +1184,15 @@ class _SyncingScreenState extends State<SyncingScreen> {
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
           backgroundColor: hPi4Global.hpi4AppBarColor,
-          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: (){
+              onDisconnectPressed();
+              Navigator.of(
+                context,
+              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            }
+          ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             mainAxisSize: MainAxisSize.max,
@@ -1159,19 +1220,60 @@ class _SyncingScreenState extends State<SyncingScreen> {
                       SizedBox(width: 10.0),
                     ],
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: 10),
                   SizedBox(
-                    height: SizeConfig.blockSizeVertical * 30,
+                    height: SizeConfig.blockSizeVertical * 15,
                     width: SizeConfig.blockSizeHorizontal * 95,
                     child: TrendProgressIndicator(
-                      progress: (isFetchingHR || isFetchingTemp || isFetchingSpo2 || isFetchingActivity)
-                          ? progressPercent
-                          : (isFetchingHRComplete && isFetchingTempComplete && isFetchingSpo2Complete && isFetchingActivityComplete)
+                      progress: (isFetchingHR)
+                          ? hrProgressPercent
+                          : (isFetchingHRComplete)
                           ? 1.0
                           : 0.0,
-                      label: _getCurrentTrendLabel() ,
+                      label: "Heart rate" ,
                     ),
                   ),
+                  SizedBox(height: 10),
+                  SizedBox(
+                    height: SizeConfig.blockSizeVertical * 15,
+                    width: SizeConfig.blockSizeHorizontal * 95,
+                    child: TrendProgressIndicator(
+                      progress: (isFetchingTemp)
+                          ? tempProgressPercent
+                          : (isFetchingTempComplete)
+                          ? 1.0
+                          : 0.0,
+                      label: "Temperature" ,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  SizedBox(
+                    height: SizeConfig.blockSizeVertical * 15,
+                    width: SizeConfig.blockSizeHorizontal * 95,
+                    child: TrendProgressIndicator(
+                      progress: (isFetchingSpo2)
+                          ? spo2ProgressPercent
+                          : (isFetchingSpo2Complete)
+                          ? 1.0
+                          : 0.0,
+                      label: "Spo2" ,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  SizedBox(
+                    height: SizeConfig.blockSizeVertical * 15,
+                    width: SizeConfig.blockSizeHorizontal * 95,
+                    child: TrendProgressIndicator(
+                      progress: (isFetchingActivity)
+                          ? activityProgressPercent
+                          : (isFetchingActivityComplete)
+                          ? 1.0
+                          : 0.0,
+                      label: "Activity" ,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  displayCloseandCancel(),
                 ],
               ),
             ),
@@ -1225,7 +1327,7 @@ class TrendProgressIndicator extends StatelessWidget {
           Text(
             progress > 0
                 ? "${(progress * 100).toStringAsFixed(1)}% completed"
-                : "Waiting to receive data...",
+                : "...",
             style: const TextStyle(
               fontSize: 14,
               color: Colors.white,

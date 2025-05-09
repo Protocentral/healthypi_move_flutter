@@ -63,32 +63,60 @@ class _ActivityPageState extends State<ActivityPage>
     if (_tabController.index == 0) {
       return DateTimeAxis(
         // Display a 6-hour range dynamically based on slider values
-        minimum: DateTime(
-          DateTime.now().year,
-          DateTime.now().month,
-          DateTime.now().day,
-          0,
-          0,
-          0,
-        ), // Start value of the range slider
-        maximum: DateTime(
-          DateTime.now().year,
-          DateTime.now().month,
-          DateTime.now().day,
-          23,
-          59,
-          59,
-        ),
-        //DateTime.now(), // End value of the range slider
-        interval: 1,
-        intervalType: DateTimeIntervalType.hours,
-        dateFormat: DateFormat.Hm(),
-        majorGridLines: MajorGridLines(width: 0),
-        labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
+          minimum: DateTime(
+            DateTime.now().year,
+            DateTime.now().month,
+            DateTime.now().day,
+            0,
+            0,
+            0,
+          ), // Start value of the range slider
+          maximum: DateTime(
+            DateTime.now().year,
+            DateTime.now().month,
+            DateTime.now().day+1,
+            0,
+            0,
+            0,
+          ),
+          //DateTime.now(), // End value of the range slider
+          interval: 6,
+          intervalType: DateTimeIntervalType.hours,
+          dateFormat: DateFormat.H(),
+          majorGridLines: MajorGridLines(width: 0),
+          labelStyle: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          axisLabelFormatter: (AxisLabelRenderDetails details) {
+            // Replace "0" (midnight) with "24"
+            String labelText = details.text;
+            if (details.value == DateTime(
+              DateTime
+                  .now()
+                  .year,
+              DateTime
+                  .now()
+                  .month,
+              DateTime
+                  .now()
+                  .day + 1,
+              0,
+              0,
+              0,
+            ).millisecondsSinceEpoch.toDouble()) {
+              labelText = '24';
+            }
+            return ChartAxisLabel(
+              labelText,
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
@@ -104,21 +132,75 @@ class _ActivityPageState extends State<ActivityPage>
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Convert the DateTime value from the axis to a readable format
+          DateTime date = DateTime.fromMillisecondsSinceEpoch(details.value.toInt());
+
+          // Check if the date is today's date
+          if (date.year == DateTime.now().year &&
+              date.month == DateTime.now().month &&
+              date.day == DateTime.now().day) {
+            return ChartAxisLabel(
+              'Today',
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
+          // Otherwise, use the default label
+          return ChartAxisLabel(
+            details.text,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
       );
     } else {
       return DateTimeAxis(
         // Display a month-long range dynamically based on slider values
         minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
         maximum: DateTime.now(), // Today
-        interval: 1, // 6-hour intervals
+        interval: 6,
         intervalType: DateTimeIntervalType.days,
-        dateFormat: DateFormat('dd MMM'), // Show day, month, and hour
+        dateFormat: DateFormat('dd'), // Show day, month, and hour
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
           color: Colors.white,
           fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Convert the DateTime value from the axis to a readable format
+          DateTime date = DateTime.fromMillisecondsSinceEpoch(details.value.toInt());
+
+          // Check if the date is today's date
+          if (date.year == DateTime.now().year &&
+              date.month == DateTime.now().month &&
+              date.day == DateTime.now().day) {
+            return ChartAxisLabel(
+              'Today',
+              TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            );
+          }
+          // Otherwise, use the default label
+          return ChartAxisLabel(
+            details.text,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
       );
     }
   }
@@ -391,7 +473,7 @@ class _ActivityPageState extends State<ActivityPage>
                         SizedBox(
                           width: 10.0,
                         ),
-                        Text(Count.toString(),
+                        Text((Count.toString()=="0")? "--":Count.toString(),
                             style: hPi4Global.moveValueTextStyle),
                         SizedBox(
                           width: 10.0,
@@ -507,7 +589,7 @@ class _ActivityPageState extends State<ActivityPage>
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white,
                 tabs: const [
-                  Text('Day'),
+                  Text('Today'),
                   Text('Week'),
                   Text('Month')
                 ],
@@ -520,7 +602,7 @@ class _ActivityPageState extends State<ActivityPage>
         controller: _tabController,
         physics: NeverScrollableScrollPhysics(),
         children: [
-          displayCard("Day"),
+          displayCard("Today"),
           displayCard("Week"),
           displayCard("Month"),
         ],

@@ -9,6 +9,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_syncing.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
@@ -166,6 +167,22 @@ class _ScrScanState extends State<ScrScan> {
     }
   }
 
+  _resetStoredValue() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      prefs.setString('lastSynced','0');
+      prefs.setString('latestHR','0');
+      prefs.setString('latestTemp','0');
+      prefs.setString('latestSpo2','0');
+      prefs.setString('latestActivityCount','0');
+      prefs.setString('lastUpdatedHR','0');
+      prefs.setString('lastUpdatedTemp','0');
+      prefs.setString('lastUpdatedSpo2','0');
+      prefs.setString('lastUpdatedActivity','0');
+      prefs.setString('fetchStatus','0');
+    });
+  }
+
   Future<void> onConnectPressed(BluetoothDevice device) async {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
@@ -220,6 +237,7 @@ class _ScrScanState extends State<ScrScan> {
       await _sendCommand(commandPacket, deviceName);
     });
     Navigator.pop(context);
+    _resetStoredValue();
     showLoadingIndicator("Disconnecting...", context);
     await Future.delayed(Duration(seconds: 2), () async {
       disconnectDevice(deviceName);
@@ -404,7 +422,13 @@ class _ScrScanState extends State<ScrScan> {
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
           backgroundColor: hPi4Global.hpi4AppBarColor,
-          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed:
+                () => Navigator.of(
+              context,
+            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
+          ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             mainAxisSize: MainAxisSize.max,

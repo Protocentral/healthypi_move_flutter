@@ -76,8 +76,26 @@ class _DevicePageState extends State<DevicePage> {
     );
   }
 
-  void showSuccessDialog(BuildContext context, String message) {
-    showDialog(
+
+  // reset the stored value
+  _resetStoredValue() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      prefs.setString('lastSynced','0');
+      prefs.setString('latestHR','0');
+      prefs.setString('latestTemp','0');
+      prefs.setString('latestSpo2','0');
+      prefs.setString('latestActivityCount','0');
+      prefs.setString('lastUpdatedHR','0');
+      prefs.setString('lastUpdatedTemp','0');
+      prefs.setString('lastUpdatedSpo2','0');
+      prefs.setString('lastUpdatedActivity','0');
+      prefs.setString('fetchStatus','0');
+    });
+  }
+
+ showConfirmationDialog(BuildContext context, String action) {
+    return showDialog(
       context: context,
       builder: (BuildContext context) {
         return Theme(
@@ -86,25 +104,27 @@ class _DevicePageState extends State<DevicePage> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green),
-                SizedBox(width: 10),
-                Text(
-                  'Success',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            content: Text(
-              message,
-              style: TextStyle(fontSize: 16, color: Colors.white),
-            ),
-            actions: [
+
+            title: Text('Are you sure you wish to delete all data.',
+                style:TextStyle(fontSize: 18, color: Colors.white)),
+            content: Text('This action is not reversible.',
+                style:TextStyle(fontSize: 16, color: Colors.red)),
+            actions: <Widget>[
+              TextButton(
+                child: const Text('Yes',
+                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                onPressed: () {
+                  if(action == "logs on the device."){
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
+                    );
+                  }else{
+                    Navigator.pop(context);
+                    deleteAllFiles();
+                    _resetStoredValue();
+                  }
+                },
+              ),
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop(); // Close the dialog

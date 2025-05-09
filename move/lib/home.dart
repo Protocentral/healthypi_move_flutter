@@ -96,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String lastUpdatedSpo2 = '';
   String lastUpdatedActivity = '';
 
-  String fetchStaus = '';
 
   @override
   void initState() {
@@ -121,74 +120,16 @@ class _HomeScreenState extends State<HomeScreen> {
   _loadStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      lastSyncedDateTime = prefs.getString('lastSynced') ?? '--';
-      lastestHR = prefs.getString('latestHR') ?? '--';
-      lastestTemp = prefs.getString('latestTemp') ?? "--";
-      lastestSpo2 = prefs.getString('latestSpo2') ?? '--';
-      lastestActivity = prefs.getString('latestActivityCount') ?? '--';
-      lastUpdatedHR = prefs.getString('lastUpdatedHR') ?? '--';
-      lastUpdatedTemp = prefs.getString('lastUpdatedTemp') ?? '--';
-      lastUpdatedSpo2 = prefs.getString('lastUpdatedSpo2') ?? '--';
-      lastUpdatedActivity = prefs.getString('lastUpdatedActivity') ?? '--';
-      fetchStaus = prefs.getString('fetchStatus') ?? 'Not synced';
+      lastSyncedDateTime = (prefs.getString('lastSynced') == '0') ? '--' : prefs.getString('lastSynced')!;
+      lastestHR = (prefs.getString('latestHR') == "0") ? '--' : prefs.getString('latestHR')!;
+      lastestTemp = (prefs.getString('latestTemp') == "0") ? '--' : prefs.getString('latestTemp')!;
+      lastestSpo2 = (prefs.getString('latestSpo2') == "0") ? '--':prefs.getString('latestSpo2')!;
+      lastestActivity = (prefs.getString('latestActivityCount') == "0") ? '--' : prefs.getString('latestActivityCount')!;
+      lastUpdatedHR = (prefs.getString('lastUpdatedHR') == "0") ? '--' : prefs.getString('lastUpdatedHR')!;
+      lastUpdatedTemp = (prefs.getString('lastUpdatedTemp') == "0") ? '--' : prefs.getString('lastUpdatedTemp')!;
+      lastUpdatedSpo2 = (prefs.getString('lastUpdatedSpo2') == "0") ? '--' : prefs.getString('lastUpdatedSpo2')!;
+      lastUpdatedActivity = (prefs.getString('lastUpdatedActivity') == "0") ? '--' : prefs.getString('lastUpdatedActivity')!;
     });
-    showSuccessDialog(context, "Data synced");
-  }
-
-  void showSuccessDialog(BuildContext context, String message) {
-    if (fetchStaus == "Data synced") {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return Theme(
-            data: ThemeData.dark().copyWith(
-              textTheme: TextTheme(),
-              dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
-            ),
-            child: AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green),
-                  SizedBox(width: 10),
-                  Text(
-                    'Success',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-              content: Text(
-                message,
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () async {
-                    SharedPreferences prefs =
-                        await SharedPreferences.getInstance();
-                    await prefs.setString('fetchStatus', "Not synced");
-                    Navigator.pop(context); // Close the dialog
-                  },
-                  child: Text(
-                    'OK',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: hPi4Global.hpi4Color,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    } else {
-      //Do Nothing;
-    }
   }
 
   int getGridCount() {
