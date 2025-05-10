@@ -120,8 +120,7 @@ class _DevicePageState extends State<DevicePage> {
                     );
                   }else{
                     Navigator.pop(context);
-                    deleteAllFiles();
-                    _resetStoredValue();
+                    //_resetStoredValue();
                   }
                 },
               ),
@@ -130,59 +129,6 @@ class _DevicePageState extends State<DevicePage> {
                   Navigator.of(context).pop(); // Close the dialog
                 },
                 child: Text(
-                  'OK',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  showConfirmationDialog(BuildContext context, String action) {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
-          ),
-          child: AlertDialog(
-            title: Text(
-              'Are you sure you wish to delete all data.',
-              style: TextStyle(fontSize: 18, color: Colors.white),
-            ),
-            content: Text(
-              'This action is not reversible.',
-              style: TextStyle(fontSize: 16, color: Colors.red),
-            ),
-            actions: <Widget>[
-              TextButton(
-                child: const Text(
-                  'Yes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
-                  ),
-                ),
-                onPressed: () {
-                  if (action == "logs on the device") {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "2")),
-                    );
-                  } 
-                },
-              ),
-              TextButton(
-                child: const Text(
                   'No',
                   style: TextStyle(
                     fontSize: 16,
@@ -190,9 +136,6 @@ class _DevicePageState extends State<DevicePage> {
                     color: hPi4Global.hpi4Color,
                   ),
                 ),
-                onPressed: () {
-                  Navigator.pop(context); // Returns false
-                },
               ),
             ],
           ),
@@ -266,7 +209,7 @@ class _DevicePageState extends State<DevicePage> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                          /* SizedBox(height: 10.0),
+                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -318,13 +261,12 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
+                                          ),
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  Colors
-                                                      .red, // background color
+                                                  Colors.red, // background color
                                               foregroundColor:
                                                   Colors.white, // text color
                                               shape: RoundedRectangleBorder(
@@ -368,9 +310,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
-
-                                          SizedBox(height: 10.0),
-                                          /*ElevatedButton(
+                                          ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -423,7 +363,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
+                                          ),
                                           SizedBox(height: 10.0),
                                         ],
                                       ),
@@ -432,145 +372,6 @@ class _DevicePageState extends State<DevicePage> {
                                 ),
                               ],
                             ),
-                            //SizedBox(height: 20),
-                            /*Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  //height: SizeConfig.blockSizeVertical * 20,
-                                  width: SizeConfig.blockSizeHorizontal * 88,
-                                  child: Card(
-                                    color: Colors.grey[900],
-                                    elevation: 2,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.max,
-                                        children: <Widget>[
-                                          SizedBox(height: 10),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: hPi4Global
-                                                  .hpi4Color
-                                                  .withOpacity(
-                                                    0.5,
-                                                  ), // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              /*Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder:
-                                                      (context) =>
-                                                      DeviceManagement(),
-                                                ),
-                                              );*/
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                //mainAxisSize: MainAxisSize.min,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.system_update,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Update Firmware ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(height: 10),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: <Widget>[
-                                              Icon(
-                                                Icons.warning_amber,
-                                                color: Colors.white,
-                                                size: 30.0,
-                                              ),
-                                              SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(
-                                                  " Firmware Update through this app is still not available. Please use the nrfConnect App to update your firmware. "
-                                                  "For more details details, ",
-                                                  style:
-                                                      hPi4Global
-                                                          .movecardSubValue1TextStyle,
-                                                  textAlign: TextAlign.justify,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: <Widget>[
-                                              GestureDetector(
-                                                onTap: () async {
-                                                  const url =
-                                                      'https://move.protocentral.com/updating_move/01-updating_with_nRF_connect/';
-                                                  if (await canLaunchUrl(
-                                                    Uri.parse(url),
-                                                  )) {
-                                                    await launchUrl(
-                                                      Uri.parse(url),
-                                                      mode:
-                                                          LaunchMode
-                                                              .externalApplication,
-                                                    );
-                                                  } else {
-                                                    throw 'Could not launch $url';
-                                                  }
-                                                },
-                                                child: Text(
-                                                  'check our docs',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    color: Colors.blue,
-                                                    decoration:
-                                                        TextDecoration
-                                                            .underline,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-
-                                          SizedBox(height: 10),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),*/
                           ],
                         ),
                       ],

@@ -170,9 +170,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
     sessionParametersLength.setUint8(5, int.parse(cdate));
 
     Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
-    logConsole("Sending DateTime information: $cmdByteList");
+   // logConsole("Sending DateTime information: $cmdByteList");
     commandDateTimePacket.addAll(cmdByteList);
-    logConsole("Sending DateTime Command: $commandDateTimePacket");
+    //logConsole("Sending DateTime Command: $commandDateTimePacket");
     await _sendCommand(commandDateTimePacket, deviceName);
 
   }
@@ -235,7 +235,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       int sessionID,
       String formattedTime,
       ) async {
-    logConsole("Log data size: ${mData.length}");
+   // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -317,7 +317,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       int sessionID,
       String headerName,
       ) async {
-    logConsole("Log data size: ${mData.length}");
+   // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -501,10 +501,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           }
         });
 
-        logConsole(
-          "Session count for trendType " +
-              bdata.getUint16(3, Endian.little).toString(),
-        );
+       // logConsole("Session count for trendType " + bdata.getUint16(3, Endian.little).toString(),);
       }
       /*****  Packet type Log Index ***/
       else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
@@ -521,7 +518,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
 
           if (logTempHeaderList.length == tempSessionCount) {
-            logConsole("All Temp logs Header.......$logTempHeaderList");
+           // logConsole("All Temp logs Header.......$logTempHeaderList");
             _fetchNextTempLogFile(deviceName);
           }
         } else if (trendType == 02) {
@@ -537,7 +534,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
 
           if (logSpo2HeaderList.length == spo2SessionCount) {
-            logConsole("All Spo2 logs Header.......$logSpo2HeaderList");
+           // logConsole("All Spo2 logs Header.......$logSpo2HeaderList");
             _fetchNextSpo2LogFile(deviceName);
           }
         } else if (trendType == 04) {
@@ -550,7 +547,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
 
           if (logActivityHeaderList.length == activitySessionCount) {
-            logConsole("All Activity logs Header.......$logActivityHeaderList");
+           // logConsole("All Activity logs Header.......$logActivityHeaderList");
             _fetchNextActivityLogFile(deviceName);
           }
 
@@ -566,7 +563,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
 
           if (logHeaderList.length == hrSessionCount) {
-            logConsole("All HR logs Header.......$logHeaderList");
+           // logConsole("All HR logs Header.......$logHeaderList");
             _fetchNextLogFile(deviceName);
           }
         }
@@ -586,7 +583,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         int expectedSize = 0;
         if (isFetchingTemp) {
           if (logTempHeaderList.isEmpty || currentTempFileIndex >= logTempHeaderList.length) {
-            logConsole("Invalid Temp header access: Empty or index out of range.");
+            //logConsole("Invalid Temp header access: Empty or index out of range.");
             return;
           }
           expectedSize = logTempHeaderList[currentTempFileIndex].sessionLength;
@@ -595,7 +592,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
         } else if (isFetchingSpo2) {
           if (logSpo2HeaderList.isEmpty || currentSpo2FileIndex >= logSpo2HeaderList.length) {
-            logConsole("Invalid Spo2 header access: Empty or index out of range.");
+            //logConsole("Invalid Spo2 header access: Empty or index out of range.");
             return;
           }
           expectedSize = logSpo2HeaderList[currentSpo2FileIndex].sessionLength;
@@ -604,7 +601,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
         } else if (isFetchingActivity) {
           if (logActivityHeaderList.isEmpty || currentActivityFileIndex >= logActivityHeaderList.length) {
-            logConsole("Invalid Activity header access: Empty or index out of range.");
+           // logConsole("Invalid Activity header access: Empty or index out of range.");
             return;
           }
           expectedSize = logActivityHeaderList[currentActivityFileIndex].sessionLength;
@@ -613,7 +610,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           });
         } else {
           if (logHeaderList.isEmpty || currentFileIndex >= logHeaderList.length) {
-            logConsole("Invalid HR header access: Empty or index out of range.");
+            //logConsole("Invalid HR header access: Empty or index out of range.");
             return;
           }
           expectedSize = logHeaderList[currentFileIndex].sessionLength;
@@ -645,7 +642,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               });
               _fetchNextTempLogFile(deviceName);
             } else {
-              logConsole("All temp files have been fetched.");
+             // logConsole("All temp files have been fetched.");
               _fetchNextTempLogFile(deviceName);
               setState((){
                 isFetchingTempComplete = true;
@@ -653,9 +650,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               _checkAllFetchesComplete(deviceName);
             }
           } else {
-            logConsole(
-              "Invalid index or condition not met: currentFileIndex=$currentTempFileIndex",
-            );
+           // logConsole("Invalid index or condition not met: currentFileIndex=$currentTempFileIndex",);
           }
         } else if (isFetchingSpo2) {
           if (currentFileDataCounter >=
@@ -680,7 +675,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               });
               _fetchNextSpo2LogFile(deviceName);
             } else {
-              logConsole("All Spo2 files have been fetched.");
+             // logConsole("All Spo2 files have been fetched.");
               _fetchNextSpo2LogFile(deviceName);
               setState((){
                 isFetchingSpo2Complete = true;
@@ -688,9 +683,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               _checkAllFetchesComplete(deviceName);
             }
           } else {
-            logConsole(
-              "Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex",
-            );
+           // logConsole("Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex",);
           }
         } else if (isFetchingActivity) {
           if (currentFileDataCounter >=
@@ -716,7 +709,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               });
               _fetchNextActivityLogFile(deviceName);
             } else {
-              logConsole("All Activity files have been fetched.");
+              //logConsole("All Activity files have been fetched.");
               //_fetchNextActivityLogFile(deviceName);
               setState((){
                 isFetchingActivityComplete = true;
@@ -725,9 +718,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               _checkAllFetchesComplete(deviceName);
             }
           } else {
-            logConsole(
-              "Invalid index or condition not met: currentFileIndex=$currentActivityFileIndex",
-            );
+           // logConsole("Invalid index or condition not met: currentFileIndex=$currentActivityFileIndex",);
           }
         } else {
           if (currentFileDataCounter >=
@@ -752,9 +743,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               });
               _fetchNextLogFile(deviceName);
             } else {
-              logConsole(
-                "All HR files have been fetched. Starting Temp file fetching...",
-              );
+              //logConsole("All HR files have been fetched. Starting Temp file fetching...",);
               _fetchNextLogFile(deviceName);
               setState((){
                 isFetchingHRComplete = true;
@@ -762,9 +751,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               _checkAllFetchesComplete(deviceName);
             }
           } else {
-            logConsole(
-              "Invalid index or condition not met: currentFileIndex=$currentFileIndex",
-            );
+           // logConsole("Invalid index or condition not met: currentFileIndex=$currentFileIndex",);
           }
         }
       }
@@ -788,9 +775,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole(
-          "Today's file detected with ID $logFileID. Always downloading...",
-        );
+        logConsole("Today's file detected with ID $logFileID. Always downloading...",);
         await _fetchLogFile(
           deviceName,
           logFileID,
@@ -853,8 +838,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole(
-          "Today's Temp file detected with ID $logFileID. Always downloading...",
+        logConsole("Today's Temp file detected with ID $logFileID. Always downloading...",
         );
         await _fetchLogFile(
           deviceName,
@@ -888,7 +872,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All Temperature files have been processed.");
       currentTempFileIndex--;
 
-        Future.delayed(Duration(seconds: 3), () async {
+        Future.delayed(Duration(seconds: 7), () async {
           setState(() {
             isFetchingTempComplete = true;
             isFetchingHR = false;
@@ -1059,7 +1043,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       BluetoothDevice deviceName,
       List<int> trendType,
       ) async {
-    logConsole("Fetch log count initiated");
+    //logConsole("Fetch log count initiated");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.getSessionCount);
@@ -1073,7 +1057,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       BluetoothDevice deviceName,
       List<int> trendType,
       ) async {
-    logConsole("Fetch log index initiated");
+    //logConsole("Fetch log index initiated");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       //List<int> type = [trendType];
@@ -1089,13 +1073,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
       int sessionSize,
       List<int> trendType,
       ) async {
-    logConsole(
-      "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
-    );
+    //logConsole("Fetch logs file initiated for session: $sessionID, size: $sessionSize",);
     // Reset all fetch variables
     currentFileDataCounter = 0;
     await Future.delayed(Duration(seconds: 2), () async {
-      logConsole("Fetch logs file entered: $sessionID, size: $sessionSize");
+      //logConsole("Fetch logs file entered: $sessionID, size: $sessionSize");
       List<int> commandFetchLogFile = [];
       commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
       commandFetchLogFile.addAll(trendType);
@@ -1111,7 +1093,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         isFetchingTempComplete &&
         isFetchingSpo2Complete &&
         isFetchingActivityComplete) {
-      logConsole("disconnected..............");
+     // logConsole("disconnected..............");
       onDisconnectPressed();
       Navigator.pop(context);
       Navigator.of(
@@ -1150,7 +1132,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }else{
       return ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: hPi4Global.hpi4Color,
+          backgroundColor: Colors.red,
           foregroundColor: Colors.white,
         ),
         child: const Text('Cancel'),

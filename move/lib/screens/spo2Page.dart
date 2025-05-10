@@ -234,7 +234,7 @@ class _SPO2PageState extends State<SPO2Page>
                       hPi4Global.hpi4Color,
                     ],
                     series: <CartesianSeries>[
-                      HiloSeries<Spo2Trends, DateTime>(
+                      RangeColumnSeries<Spo2Trends, DateTime>(
                           dataSource: Spo2TrendsData,
                           xValueMapper: (Spo2Trends data, _) => data.date,
                           lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
