@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
@@ -18,6 +19,8 @@ import 'package:path_provider/path_provider.dart' as path_provider;
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
 import 'package:uuid/uuid.dart';
 
+import '../globals.dart';
+import '../home.dart';
 import '../utils/manifest.dart';
 import '../widgets/scan_result_tile.dart';
 import '../widgets/system_device_tile.dart';
@@ -62,14 +65,13 @@ class ScrDFUState extends State<ScrDFU> {
 
   bool dfuInProgress = false;
   double dfuProgress = 0;
+  double progressPercentage = 0;
 
   late Manifest _fw_manifest;
   bool _isManifestLoaded = false;
 
   final UpdateManagerFactory _managerFactory =
         mcumgr.FirmwareUpdateManagerFactory();
-
-  
 
   @override
   void initState() {
@@ -177,15 +179,49 @@ class ScrDFUState extends State<ScrDFU> {
 
   Widget buildScanButton(BuildContext context) {
     if (FlutterBluePlus.isScanningNow) {
-      return FloatingActionButton(
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+        ),
         onPressed: _onStopPressed,
-        backgroundColor: Colors.red,
-        child: const Icon(Icons.stop),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[const Icon(Icons.stop), Spacer()],
+          ),
+        ),
       );
     } else {
-      return FloatingActionButton(
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+        ),
         onPressed: _onScanPressed,
-        child: const Text("SCAN"),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.search, color: Colors.white),
+              const Text(
+                ' Scan for devices ',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+              Spacer(),
+            ],
+          ),
+        ),
       );
     }
   }
@@ -277,7 +313,9 @@ class ScrDFUState extends State<ScrDFU> {
     _updateManagerSubscription = updateManager.progressStream.listen((event) {
       if (mounted) {
         setState(() {
+          progressPercentage = (event.bytesSent / event.imageSize) * 100;
           print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+
         });
       }
     });
@@ -410,6 +448,14 @@ class ScrDFUState extends State<ScrDFU> {
                   Text("Image name: ${_fw_manifest.files[0].file}"),
                   Text("Size: ${_fw_manifest.files[0].size}"),
                   Text("Version: ${_fw_manifest.files[0].versionMcuboot}"),
+                  SizedBox(
+                    height: 10, // Adjust this value to increase or decrease height
+                    child: LinearProgressIndicator(
+                      value: progressPercentage > 0 ? progressPercentage : null,
+                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -422,6 +468,14 @@ class ScrDFUState extends State<ScrDFU> {
                   Text("Image name: ${_fw_manifest.files[1].file}"),
                   Text("Size: ${_fw_manifest.files[1].size}"),
                   Text("Version: ${_fw_manifest.files[1].versionMcuboot}"),
+                  SizedBox(
+                    height: 10, // Adjust this value to increase or decrease height
+                    child: LinearProgressIndicator(
+                      value: progressPercentage > 0 ? progressPercentage : null,
+                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -434,6 +488,15 @@ class ScrDFUState extends State<ScrDFU> {
                   Text("Image name: ${_fw_manifest.files[2].file}"),
                   Text("Size: ${_fw_manifest.files[2].size}"),
                   Text("Version: ${_fw_manifest.files[2].version}"),
+                  SizedBox(
+                    height: 10, // Adjust this value to increase or decrease height
+                    child: LinearProgressIndicator(
+                      value: progressPercentage > 0 ? progressPercentage : null,
+                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+
                 ],
               ),
             ),
@@ -483,13 +546,6 @@ class ScrDFUState extends State<ScrDFU> {
                   textAlign: TextAlign.center,
                 ),
               ),
-              LinearProgressIndicator(
-                backgroundColor: Colors.blueGrey[100],
-                //color: Colors.blue,
-                value: (dfuProgress),
-                minHeight: 25,
-                semanticsLabel: 'Receiving Data',
-              ),
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: MaterialButton(
@@ -520,20 +576,6 @@ class ScrDFUState extends State<ScrDFU> {
                 child: MaterialButton(
                   onPressed: () async {
                     onDisconnectPressed();
-                    //_cancelAndDisconnect();
-                    /*if (_listeningDebug == true) {
-                      _streamDebug.cancel();
-                    }
-                    if (_listeningSMP = true) {
-                      _smpClient.close();
-                    }
-                    //patchBle.disconnect();
-                    await Future.delayed(Duration(seconds: 1), () async {
-                      setState(() {
-                        _showDeviceCard = false;
-                      });
-                    });
-                    */
                   },
                   color: Colors.red,
                   shape: RoundedRectangleBorder(
@@ -591,46 +633,53 @@ class ScrDFUState extends State<ScrDFU> {
     return ScaffoldMessenger(
       key: Snackbar.snackBarKeyB,
       child: Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(title: const Text('Find Devices')),
+        backgroundColor: hPi4Global.appBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: hPi4Global.hpi4AppBarColor,
+          leading: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () {
+                onDisconnectPressed();
+                Navigator
+                    .of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => HomePage()));
+              }
+          ),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.max,
+            children: <Widget>[
+              material.Image.asset(
+                'assets/healthypi_move.png',
+                fit: BoxFit.fitWidth,
+                height: 30,
+              ),
+            ],
+          ),
+        ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
           child: ListView(
             children: <Widget>[
-              //buildScanButton(context),
-              MaterialButton(
-                onPressed: () async {
-                  _onScanPressed();
-                },
-                color: Colors.blue[800],
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      const Text(
-                        'Scan for devices ',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
+              Column(
+                  children:[
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        'Select the device to update',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      Icon(Icons.search, color: Colors.white),
-                    ],
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Select the device to update',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
+                      child: buildScanButton(context),
+                    ),
+                  ]
               ),
               ..._buildScanResultTiles(context),
               _buildDeviceCard(),

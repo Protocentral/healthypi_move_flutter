@@ -49,7 +49,8 @@ class hPi4Global {
   static const List<int> TempTrend = [0x03];
   static const List<int> ActivityTrend = [0x04];
 
-  static const List<int> StartBPTCal= [0x60];
+  static const List<int> StartBPTCal= [0x61];
+  static const List<int> SetBPTCalMode= [0x60];
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;
