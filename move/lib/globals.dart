@@ -66,7 +66,7 @@ class hPi4Global {
       TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
 
   static const TextStyle movecardTextStyle =
-  TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white);
+  TextStyle(fontSize: 16, color: Colors.white);
   static const TextStyle movecardValueTextStyle =
   TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle moveValueTextStyle =

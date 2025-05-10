@@ -53,13 +53,14 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   bool _showcalibrationButton = false;
   bool _showcalibrationCard = false;
   bool _showcalibrationprogress = false;
+  bool _showScanCard = true;
 
   @override
   void initState() {
     super.initState();
 
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-          (results) {
+      (results) {
         if (mounted) {
           setState(() => _scanResults = results);
         }
@@ -76,8 +77,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     });
 
     _adapterStateStateSubscription = FlutterBluePlus.adapterState.listen((
-        state,
-        ) {
+      state,
+    ) {
       _adapterState = state;
       if (mounted) {
         setState(() {});
@@ -100,12 +101,10 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     print("[HPI] $logString");
   }
 
-
   Future onScanPressed() async {
     try {
       // `withServices` is required on iOS for privacy purposes, ignored on android.
       var withServices = [Guid("180f")]; // Battery Level Service
-
     } catch (e, backtrace) {
       Snackbar.show(
         ABC.b,
@@ -119,7 +118,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
         withServices: [],
-        withNames: ['healthypi move'],
+        //withNames: ['healthypi move'],
         /*webOptionalServices: [
           Guid("180f"), // battery
           Guid("180a"), // device info
@@ -140,7 +139,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       setState(() {});
     }
   }
-
 
   Future onRefresh() {
     if (_isScanning == false) {
@@ -166,7 +164,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     }
   }
 
-
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
@@ -174,7 +171,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             await dataCharacteristic?.setNotifyValue(true);
@@ -229,7 +226,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         targetService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             targetCharacteristic = characteristic;
             break;
@@ -246,7 +243,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       );
       logConsole('Data written: $commandDateTimePacket');
     }
-
   }
 
   late BluetoothDevice Connecteddevice;
@@ -262,6 +258,14 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
 
     _connectionStateSubscription = device.connectionState.listen((state) async {
       _connectionState = state;
+
+      if (mounted) {
+        setState(() {
+          _showScanCard = false;
+          _showcalibrationButton = true;
+          //_showcalibrationCard = true;
+        });
+      }
 
       final subscription = device.mtu.listen((int mtu) {
         // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
@@ -282,15 +286,13 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             Connecteddevice = device;
             sendSetCalibrationCommand(device);
             _showcalibrationButton = true;
-
           });
         }
       }
-
     });
   }
 
-  Future<void> sendSetCalibrationCommand(BluetoothDevice device) async{
+  Future<void> sendSetCalibrationCommand(BluetoothDevice device) async {
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.SetBPTCalMode);
@@ -304,41 +306,36 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   int status = 0;
   String statusString = "";
 
-  Future<void> _startListeningData(
-      BluetoothDevice deviceName,
-      ) async {
-
+  Future<void> _startListeningData(BluetoothDevice deviceName) async {
     logConsole("Started listening....");
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-        value,
-        ) async {
+      value,
+    ) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       //logConsole("Data Rx: $value");
       logConsole("Data Rx in hex: ${hex.encode(value)}");
 
-      setState((){
+      setState(() {
         status = bdata.getUint8(0);
         progress = bdata.getUint8(1);
         index = bdata.getUint8(2);
       });
-      if(status == 0){
+      if (status == 0) {
         statusString = "Nosignal";
-      }else if(status == 1){
+      } else if (status == 1) {
         statusString = "In progress";
-      }else if(status == 2){
+      } else if (status == 2) {
         statusString = "Success";
-        setState((){
+        setState(() {
           _showcalibrationButton = false;
           _showcalibrationCard = false;
           _showcalibrationprogress = false;
         });
-      }else if(status == 6){
+      } else if (status == 6) {
         statusString = "Failed";
-      }else{
+      } else {
         statusString = "";
       }
-
-
     });
 
     // cleanup: cancel subscription when disconnected
@@ -346,9 +343,9 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   }
 
   Future<void> sendStartCalibration(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Send start calibration command initiated");
     await _startListeningData(deviceName);
     await Future.delayed(Duration(seconds: 2), () async {
@@ -359,14 +356,16 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       List<int> userCommandData1 = [];
 
       // Convert the user input string to an integer list (if applicable)
-        if (userInput1.isNotEmpty) {
-          userCommandData = userInput1.split(',').map((e) => int.parse(e.trim())).toList();
-        }else{
-          userCommandData = [0];
-        }
+      if (userInput1.isNotEmpty) {
+        userCommandData =
+            userInput1.split(',').map((e) => int.parse(e.trim())).toList();
+      } else {
+        userCommandData = [0];
+      }
       if (userInput2.isNotEmpty) {
-        userCommandData1 = userInput2.split(',').map((e) => int.parse(e.trim())).toList();
-      }else{
+        userCommandData1 =
+            userInput2.split(',').map((e) => int.parse(e.trim())).toList();
+      } else {
         userCommandData1 = [0];
       }
 
@@ -377,13 +376,12 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
 
       await _sendCommand(commandPacket, deviceName);
       logConsole(commandPacket.toString());
-      setState((){
+      setState(() {
         _showcalibrationprogress = true;
       });
       Navigator.pop(context);
     });
   }
-
 
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
@@ -391,21 +389,23 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return WillPopScope(
-            onWillPop: () async => false,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(8.0))),
-              backgroundColor: Colors.black87,
-              content: LoadingIndicator(text: text),
-            ));
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8.0)),
+            ),
+            backgroundColor: Colors.black87,
+            content: LoadingIndicator(text: text),
+          ),
+        );
       },
     );
   }
 
   Future<void> _sendCommand(
-      List<int> commandList,
-      BluetoothDevice deviceName,
-      ) async {
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -415,7 +415,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -449,11 +449,42 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     return _scanResults
         .map(
           (r) => ScanResultTile(
-        result: r,
-        onTap: () => onConnectPressed(r.device),
-      ),
-    )
+            result: r,
+            onTap: () => onConnectPressed(r.device),
+          ),
+        )
         .toList();
+  }
+
+  Widget _buildScanCard(BuildContext context) {
+    if (_showScanCard == true) {
+      return Card(
+        color: Colors.grey[800],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: <Widget>[
+              Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    'Select the device to calibrate',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              buildScanButton(context),
+              ..._buildScanResultTiles(context),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return Container();
+    }
   }
 
   Widget buildScanButton(BuildContext context) {
@@ -505,346 +536,334 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     }
   }
 
-  Widget showCalibrationStartButton(){
-    if(_showcalibrationButton == true){
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: hPi4Global.hpi4Color, // background color
-            foregroundColor: Colors.white, // text color
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+  Widget _showCalibrationStartButton() {
+    if (_showcalibrationButton == true) {
+      return ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: hPi4Global.hpi4Color, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          onPressed:(){
-            setState((){
-              _showcalibrationCard = true;
-            });
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.search, color: Colors.white),
-                const Text(
-                  ' Start Calibration ',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-                Spacer(),
-              ],
-            ),
-          ),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
         ),
-      );
-    }else{
-      return Container();
-    }
-  }
-
-  Widget showCalibrationCard(){
-      if(_showcalibrationCard == true){
-        return Card(
-          color: Colors.black,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(height:20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          //height: SizeConfig.blockSizeVertical * 20,
-                          width: SizeConfig.blockSizeHorizontal * 88,
-                          child:Card(
-                            color: Colors.grey[900],
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: <Widget>[
-                                      //Icon(Icons.warning, color: Colors.yellow[300]),
-                                      Text('Calibration of '+index.toString()+'/3',
-                                        style:
-                                        hPi4Global.movecardTextStyle,),
-                                      SizedBox(height: 5.0),
-                                      Text('Measure your blood pressure using a standard BP moniter and enter the results below.',
-                                        style:
-                                        hPi4Global.movecardSubValue1TextStyle,),
-                                    ],
-                                  ),
-                                  SizedBox(height: 10.0),
-                              Form(
-                                key: _formKey,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  children: <Widget>[
-                                    Expanded(
-                                      // optional flex property if flex is 1 because the default flex is 1
-                                      flex: 1,
-                                      child: TextFormField(
-                                        controller: _systolicController,
-                                        style: TextStyle(
-                                          color: Colors.white, // Sets the text color
-                                          fontSize: 16,        // Sets the font size
-                                        ),
-                                        decoration: InputDecoration(
-                                          labelText: 'Systolic',
-                                          labelStyle: TextStyle(
-                                            color: Colors.grey[400],
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.grey[700],
-                                          border: OutlineInputBorder(
-                                            borderSide: BorderSide.none,
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                        ),
-                                        keyboardType: TextInputType.number, // Sets the keyboard type for numeric input
-                                        validator: (value) {
-                                          // Validation logic
-                                          if (value == null || value.isEmpty) {
-                                            return 'Please enter a value';
-                                          }
-                                          final intValue = int.tryParse(value);
-                                          if (intValue == null) {
-                                            return 'Please enter a valid number';
-                                          }
-                                          if (intValue < 80 || intValue > 180) {
-                                            return 'Enter between 80 and 180';
-                                          }
-                                          return null; // Return null if the input is valid
-                                        },
-                                      ),
-                                    ),
-                                    SizedBox(width: 20.0),
-                                    Expanded(
-                                      // optional flex property if flex is 1 because the default flex is 1
-                                      flex: 1,
-                                      child: TextFormField(
-                                        controller: _diastolicController,
-                                        style: TextStyle(
-                                          color: Colors.white, // Sets the text color
-                                          fontSize: 16,        // Sets the font size
-                                        ),
-                                        decoration: InputDecoration(
-                                          labelText: 'Diastolic',
-                                          labelStyle: TextStyle(
-                                            color: Colors.grey[400],
-                                          ),
-                                          filled: true,
-                                          fillColor: Colors.grey[700],
-                                          border: OutlineInputBorder(
-                                            borderSide: BorderSide.none,
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                        ),
-                                        keyboardType: TextInputType.number, // Sets the keyboard type for numeric input
-                                        validator: (value) {
-                                          // Validation logic
-                                          if (value == null || value.isEmpty) {
-                                            return 'Please enter a value';
-                                          }
-                                          final intValue = int.tryParse(value);
-                                          if (intValue == null) {
-                                            return 'Please enter a valid number';
-                                          }
-                                          if (intValue < 50 || intValue > 120) {
-                                            return ' Enter between 50 and 120';
-                                          }
-                                          return null; // Return null if the input is valid
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-
-
-                                  SizedBox(height: 15.0),
-                                  Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child:ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor:
-                                        hPi4Global
-                                            .hpi4Color, // background color
-                                        foregroundColor:
-                                        Colors.white, // text color
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(20),
-                                        ),
-                                        minimumSize: Size(
-                                          SizeConfig.blockSizeHorizontal *
-                                              100,
-                                          40,
-                                        ),
-                                      ),
-                                      onPressed: () async{
-                                        FocusScope.of(context).unfocus();
-                                        if (_formKey.currentState!.validate()) {
-                                          showLoadingIndicator("Sending start calibration...", context);
-                                          await FlutterBluePlus.stopScan();
-                                          await subscribeToChar(Connecteddevice);
-                                          _sendCurrentDateTime(Connecteddevice);
-                                          Future.delayed(Duration(seconds: 2), () async {
-                                            await sendStartCalibration(context, Connecteddevice);
-                                          });
-                                        } else {
-                                          // Input is invalid, show errors
-                                        }
-
-                                      },
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(
-                                          8.0,
-                                        ),
-                                        child: Row(
-                                          //mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment:
-                                          MainAxisAlignment.start,
-                                          children: <Widget>[
-                                            const Text(
-                                              ' Proceed ',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            Spacer(),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 20),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      }else{
-        return Container();
-      }
-  }
-
-  Widget showCalibrationProgress(){
-    if( _showcalibrationprogress == true){
-      return Card(
-        color: Colors.black,
+        onPressed: () {
+          setState(() {
+            _showcalibrationCard = true;
+          });
+        },
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          padding: const EdgeInsets.all(8.0),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                 // SizedBox(height:20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        //height: SizeConfig.blockSizeVertical * 20,
-                        width: SizeConfig.blockSizeHorizontal * 88,
-                        child:Card(
-                          color: Colors.grey[900],
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min, // Shrink-wrap children
-                              children: <Widget>[
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min, // Shrink-wrap children
-                                  children: <Widget>[
-                                    Text(
-                                      'Calibration of $index',
-                                      style: hPi4Global.movecardTextStyle,
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 10.0),
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min, // Shrink-wrap children
-                                  children: <Widget>[
-                                    Text(
-                                      'Progress: ${(progress * 100).toInt()}%',
-                                        style: hPi4Global.movecardTextStyle,
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 5.0),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      height: 10,
-                                      width: 200, // Provide a fixed width for the progress bar
-                                      child: LinearProgressIndicator(
-                                        value: progress.toDouble() > 0 ? progress.toDouble() : null,
-                                        valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
-                                        backgroundColor: Colors.white24,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 5.0),
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min, // Shrink-wrap children
-                                  children: <Widget>[
-                                    Text(
-                                      'Calibration $index is: $statusString',
-                                      style: hPi4Global.movecardTextStyle,
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 10.0),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20),
-                ],
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.search, color: Colors.white),
+              const Text(
+                ' Start Calibration ',
+                style: TextStyle(fontSize: 16, color: Colors.white),
               ),
+              Spacer(),
             ],
           ),
         ),
       );
-    }else{
+    } else {
       return Container();
     }
   }
 
+  Widget showCalibrationCard() {
+    if (_showcalibrationCard == true) {
+      return Card(
+        color: Colors.grey[800],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        //Icon(Icons.warning, color: Colors.yellow[300]),
+                        Text(
+                          'Calibrate point ${index+1} of 3',
+                          style: hPi4Global.movecardTextStyle,
+                        ),
+                        SizedBox(height: 5.0),
+                        Text(
+                          'Measure your blood pressure using a standard BP moniter and enter the results below. \nWhen you are ready and the finger sensor is in place, press the Proceed button.',
+                          style: hPi4Global.movecardSubValue1TextStyle,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10.0),
+                    Form(
+                      key: _formKey,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: <Widget>[
+                          Expanded(
+                            // optional flex property if flex is 1 because the default flex is 1
+                            flex: 1,
+                            child: TextFormField(
+                              controller: _systolicController,
+                              style: TextStyle(
+                                color: Colors.white, // Sets the text color
+                                fontSize: 16, // Sets the font size
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Systolic',
+                                labelStyle: TextStyle(color: Colors.grey[400]),
+                                filled: true,
+                                fillColor: Colors.grey[700],
+                                border: OutlineInputBorder(
+                                  borderSide: BorderSide.none,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              keyboardType:
+                                  TextInputType
+                                      .number, // Sets the keyboard type for numeric input
+                              validator: (value) {
+                                // Validation logic
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter a value';
+                                }
+                                final intValue = int.tryParse(value);
+                                if (intValue == null) {
+                                  return 'Please enter a valid number';
+                                }
+                                if (intValue < 80 || intValue > 180) {
+                                  return 'Enter between 80 and 180';
+                                }
+                                return null; // Return null if the input is valid
+                              },
+                            ),
+                          ),
+                          SizedBox(width: 20.0),
+                          Expanded(
+                            // optional flex property if flex is 1 because the default flex is 1
+                            flex: 1,
+                            child: TextFormField(
+                              controller: _diastolicController,
+                              style: TextStyle(
+                                color: Colors.white, // Sets the text color
+                                fontSize: 16, // Sets the font size
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Diastolic',
+                                labelStyle: TextStyle(color: Colors.grey[400]),
+                                filled: true,
+                                fillColor: Colors.grey[700],
+                                border: OutlineInputBorder(
+                                  borderSide: BorderSide.none,
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              keyboardType:
+                                  TextInputType
+                                      .number, // Sets the keyboard type for numeric input
+                              validator: (value) {
+                                // Validation logic
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter a value';
+                                }
+                                final intValue = int.tryParse(value);
+                                if (intValue == null) {
+                                  return 'Please enter a valid number';
+                                }
+                                if (intValue < 50 || intValue > 120) {
+                                  return ' Enter between 50 and 120';
+                                }
+                                return null; // Return null if the input is valid
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    SizedBox(height: 15.0),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              hPi4Global.hpi4Color, // background color
+                          foregroundColor: Colors.white, // text color
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          minimumSize: Size(
+                            SizeConfig.blockSizeHorizontal * 100,
+                            40,
+                          ),
+                        ),
+                        onPressed: () async {
+                          FocusScope.of(context).unfocus();
+                          if (_formKey.currentState!.validate()) {
+                            showLoadingIndicator(
+                              "Sending start calibration...",
+                              context,
+                            );
+                            await FlutterBluePlus.stopScan();
+                            await subscribeToChar(Connecteddevice);
+                            _sendCurrentDateTime(Connecteddevice);
+                            Future.delayed(Duration(seconds: 2), () async {
+                              await sendStartCalibration(
+                                context,
+                                Connecteddevice,
+                              );
+                            });
+                          } else {
+                            // Input is invalid, show errors
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            //mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: <Widget>[
+                              const Text(
+                                ' Proceed ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Spacer(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    showCalibrationProgress(),
+                  ],
+                ),
+              ),
+              SizedBox(height: 20),
+            ],
+          ),
+        ),
+      );
+    } else {
+      return Container();
+    }
+  }
+
+  Widget showCalibrationProgress() {
+    if (_showcalibrationprogress == true) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // SizedBox(height:20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      //height: SizeConfig.blockSizeVertical * 20,
+                      width: SizeConfig.blockSizeHorizontal * 88,
+                      child: Card(
+                        color: Colors.grey[900],
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            mainAxisSize:
+                                MainAxisSize.min, // Shrink-wrap children
+                            children: <Widget>[
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize:
+                                    MainAxisSize.min, // Shrink-wrap children
+                                children: <Widget>[
+                                  Text(
+                                    'Calibration of $index',
+                                    style: hPi4Global.movecardTextStyle,
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 10.0),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize:
+                                    MainAxisSize.min, // Shrink-wrap children
+                                children: <Widget>[
+                                  Text(
+                                    'Progress: $progress%',
+                                    style: hPi4Global.movecardTextStyle,
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 5.0),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: <Widget>[
+                                  SizedBox(
+                                    height: 10,
+                                    width:
+                                        200, // Provide a fixed width for the progress bar
+                                    child: LinearProgressIndicator(
+                                      value:
+                                          progress.toDouble() > 0
+                                              ? progress.toDouble()
+                                              : null,
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            hPi4Global.hpi4Color,
+                                          ),
+                                      backgroundColor: Colors.white24,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 5.0),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize:
+                                    MainAxisSize.min, // Shrink-wrap children
+                                children: <Widget>[
+                                  Text(
+                                    'Calibration $index is: $statusString',
+                                    style: hPi4Global.movecardTextStyle,
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 10.0),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else {
+      return Container();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -854,17 +873,17 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
         leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              if(_showcalibrationButton == true){
-                onDisconnectPressed();
-              }else{
-                /// Do Nothing
-              }
-              Navigator
-                  .of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => HomePage()));
+          icon: Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            if (_showcalibrationButton == true) {
+              onDisconnectPressed();
+            } else {
+              /// Do Nothing
             }
+            Navigator.of(
+              context,
+            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+          },
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -883,33 +902,20 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
         child: ListView(
           children: <Widget>[
             Column(
-              children:[
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'Select the device to calibrate',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
-                  child: buildScanButton(context),
-                ),
-              ]
+              children: [
+                
+                //buildScanButton(context),
+                //..._buildScanResultTiles(context),
+              ],
             ),
-            ..._buildScanResultTiles(context),
-            showCalibrationStartButton(),
+            _buildScanCard(context),
+            SizedBox(height: 20),
+            _showCalibrationStartButton(),
+            SizedBox(height: 20),
             showCalibrationCard(),
-            showCalibrationProgress(),
           ],
         ),
       ),
     );
   }
-
 }
