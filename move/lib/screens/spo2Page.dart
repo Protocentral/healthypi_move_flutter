@@ -368,8 +368,8 @@ class _SPO2PageState extends State<SPO2Page>
       int tempTimeStamp = 0;
       int tempTimeStamp1 = 0;
       int tempAvgSpo2 = 0;
-      int tempMinSpo2 = 95;
-      int tempMaxSpo2 = 99;
+      int tempMinSpo2 = 0;
+      int tempMaxSpo2 = 0;
 
 
       tempTimeStamp = int.parse(timestamp[i]);
@@ -402,7 +402,7 @@ class _SPO2PageState extends State<SPO2Page>
 
   // Save a value
   _saveValue() async {
-    String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
+    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('latestSpo2', averageSpo2.toString());
     await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());

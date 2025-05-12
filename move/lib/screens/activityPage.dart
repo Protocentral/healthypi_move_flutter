@@ -354,7 +354,7 @@ class _ActivityPageState extends State<ActivityPage>
 
 // Save the last updated values
   saveValue(DateTime lastUpdatedTime, int Count) async {
-    String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(lastUpdatedTime);
+    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('latestActivityCount', Count.toString());
     await prefs.setString('lastUpdatedActivity', lastDateTime);
