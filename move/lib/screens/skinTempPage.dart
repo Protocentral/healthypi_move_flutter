@@ -48,6 +48,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
   void dispose() {
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
+    TempTrendsData = [];
     super.dispose();
   }
 
@@ -352,7 +353,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
   // Save a value
   saveValue(DateTime lastUpdatedTime, double averageTemp) async {
     String lastDateTime = DateFormat(
-      'yyyy-MM-dd HH:mm:ss',
+      'EEE d MMM',
     ).format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('latestTemp', averageTemp.toString());

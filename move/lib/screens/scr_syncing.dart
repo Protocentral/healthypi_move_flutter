@@ -134,7 +134,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   // Save a value
   _saveValue() async {
     DateTime now = DateTime.now();
-    String lastDateTime = DateFormat('yyyy-MM-dd HH:mm:ss').format(now);
+    String lastDateTime = DateFormat('EEE d MMM').format(now);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastSynced', lastDateTime);
   }

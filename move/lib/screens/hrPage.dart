@@ -47,6 +47,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
   void dispose() {
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
+    hrTrendsData = [];
     super.dispose();
   }
 
@@ -356,7 +357,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
   // Save a value
   saveValue(DateTime lastUpdatedTime, int averageHR) async {
     String lastDateTime = DateFormat(
-      'yyyy-MM-dd HH:mm:ss',
+      'EEE d MMM',
     ).format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('latestHR', averageHR.toString());
@@ -427,8 +428,6 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                 groupedStats[groupKey]!['max']! > maxHR
                     ? groupedStats[groupKey]!['max']!
                     : maxHR;
-            //print(groupedStats[groupKey]!['min']);
-            //print(groupedStats[groupKey]!['max']);
             groupedStats[groupKey]!['avg'] =
                 (groupedStats[groupKey]!['avg']! + avgHR); // Add to sum
             groupedStats[groupKey]!['count'] =
@@ -438,8 +437,6 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
       }
     }
     double average = 0;
-    double Max = 0;
-    double Min = 0;
     // Process the grouped stats and update the UI
     groupedStats.forEach((group, stats) {
       DateTime formattedDateTime = DateTime.parse(group);

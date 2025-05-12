@@ -572,6 +572,42 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     }
   }
 
+  Widget _showCancelButton() {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
+        child:  ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red, // background color
+            foregroundColor: Colors.white, // text color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+          onPressed: () async{
+            await onDisconnectPressed();
+            Navigator.of(
+              context,
+            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.cancel, color: Colors.white),
+                const Text(
+                  ' Cancel ',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
+                Spacer(),
+              ],
+            ),
+          ),
+        ),
+      );
+  }
+
+
   Widget showCalibrationCard() {
     if (_showcalibrationCard == true) {
       return Card(
@@ -764,12 +800,12 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   Widget showCalibrationProgress() {
     if (_showcalibrationprogress == true) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        padding: const EdgeInsets.fromLTRB(8, 4, 16, 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+             mainAxisAlignment: MainAxisAlignment.spaceBetween,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // SizedBox(height:20),
@@ -779,7 +815,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                   children: [
                     SizedBox(
                       //height: SizeConfig.blockSizeVertical * 20,
-                      width: SizeConfig.blockSizeHorizontal * 88,
+                      width: SizeConfig.blockSizeHorizontal * 78,
                       child: Card(
                         color: Colors.grey[900],
                         child: Padding(
@@ -818,8 +854,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                 children: <Widget>[
                                   SizedBox(
                                     height: 10,
-                                    width:
-                                        200, // Provide a fixed width for the progress bar
+                                    width: 150, // Provide a fixed width for the progress bar
                                     child: LinearProgressIndicator(
                                       value:
                                           progress.toDouble() > 0
@@ -913,6 +948,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             _showCalibrationStartButton(),
             SizedBox(height: 20),
             showCalibrationCard(),
+            SizedBox(height: 20),
+            _showCancelButton(),
           ],
         ),
       ),
