@@ -251,7 +251,8 @@ class _ScrScanState extends State<ScrScan> {
 
   Future onRefresh() {
     if (_isScanning == false) {
-      //FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
+      onScanPressed();
+
     }
     if (mounted) {
       setState(() {});
@@ -268,7 +269,7 @@ class _ScrScanState extends State<ScrScan> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 50, 40),
         ),
         onPressed: onStopPressed,
         child: Padding(
@@ -287,7 +288,7 @@ class _ScrScanState extends State<ScrScan> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 50, 40),
         ),
         onPressed: onScanPressed,
         child: Padding(
@@ -446,7 +447,8 @@ class _ScrScanState extends State<ScrScan> {
         ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
-          child: ListView(
+            child: ListView(
+            shrinkWrap: true,
             children: <Widget>[
               Column(
                   children:[

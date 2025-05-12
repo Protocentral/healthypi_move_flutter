@@ -120,7 +120,9 @@ class _DevicePageState extends State<DevicePage> {
                     );
                   }else{
                     Navigator.pop(context);
-                    //_resetStoredValue();
+                   // deleteAllFiles();
+                    _resetStoredValue();
+
                   }
                 },
               ),
@@ -129,7 +131,7 @@ class _DevicePageState extends State<DevicePage> {
                   Navigator.of(context).pop(); // Close the dialog
                 },
                 child: Text(
-                  'No',
+                  'OK',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
