@@ -252,6 +252,7 @@ class _ScrScanState extends State<ScrScan> {
   Future onRefresh() {
     if (_isScanning == false) {
       onScanPressed();
+
     }
     if (mounted) {
       setState(() {});
@@ -295,8 +296,9 @@ class _ScrScanState extends State<ScrScan> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
+              Icon(Icons.search, color: Colors.white),
               const Text(
-                ' Scan ',
+                ' Scan for devices ',
                 style: TextStyle(fontSize: 16, color: Colors.white),
               ),
               Spacer(),
@@ -448,7 +450,15 @@ class _ScrScanState extends State<ScrScan> {
             child: ListView(
             shrinkWrap: true,
             children: <Widget>[
-              buildScanButton(context),
+              Column(
+                  children:[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
+                      child: buildScanButton(context),
+                    ),
+                  ]
+              ),
+              ..._buildSystemDeviceTiles(context),
               ..._buildScanResultTiles(context),
             ],
           ),

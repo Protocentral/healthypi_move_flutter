@@ -198,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text(
-                        "Last updated: ",
+                        "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       Text(
@@ -252,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text(
-                        "Last updated: ",
+                        "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       Text(
@@ -305,7 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text(
-                        "Last updated: ",
+                        "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       Text(
@@ -361,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text(
-                        "Last updated: ",
+                        "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
                       ),
                       Text(

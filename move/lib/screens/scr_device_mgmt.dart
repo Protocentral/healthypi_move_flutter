@@ -122,6 +122,7 @@ class _DevicePageState extends State<DevicePage> {
                     Navigator.pop(context);
                    // deleteAllFiles();
                     _resetStoredValue();
+
                   }
                 },
               ),
@@ -144,8 +145,6 @@ class _DevicePageState extends State<DevicePage> {
       },
     );
   }
-
- 
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +211,7 @@ class _DevicePageState extends State<DevicePage> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                          /* SizedBox(height: 10.0),
+                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
@@ -264,13 +263,12 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
+                                          ),
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  Colors
-                                                      .red, // background color
+                                                  Colors.red, // background color
                                               foregroundColor:
                                                   Colors.white, // text color
                                               shape: RoundedRectangleBorder(
@@ -314,9 +312,7 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
-
-                                          SizedBox(height: 10.0),
-                                          /*ElevatedButton(
+                                          ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -369,7 +365,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
+                                          ),
                                           SizedBox(height: 10.0),
                                         ],
                                       ),
@@ -378,145 +374,6 @@ class _DevicePageState extends State<DevicePage> {
                                 ),
                               ],
                             ),
-                            //SizedBox(height: 20),
-                            /*Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  //height: SizeConfig.blockSizeVertical * 20,
-                                  width: SizeConfig.blockSizeHorizontal * 88,
-                                  child: Card(
-                                    color: Colors.grey[900],
-                                    elevation: 2,
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(8.0),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        mainAxisSize: MainAxisSize.max,
-                                        children: <Widget>[
-                                          SizedBox(height: 10),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: hPi4Global
-                                                  .hpi4Color
-                                                  .withOpacity(
-                                                    0.5,
-                                                  ), // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
-                                            ),
-                                            onPressed: () {
-                                              /*Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder:
-                                                      (context) =>
-                                                      DeviceManagement(),
-                                                ),
-                                              );*/
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                //mainAxisSize: MainAxisSize.min,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.system_update,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Update Firmware ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(height: 10),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: <Widget>[
-                                              Icon(
-                                                Icons.warning_amber,
-                                                color: Colors.white,
-                                                size: 30.0,
-                                              ),
-                                              SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(
-                                                  " Firmware Update through this app is still not available. Please use the nrfConnect App to update your firmware. "
-                                                  "For more details details, ",
-                                                  style:
-                                                      hPi4Global
-                                                          .movecardSubValue1TextStyle,
-                                                  textAlign: TextAlign.justify,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: <Widget>[
-                                              GestureDetector(
-                                                onTap: () async {
-                                                  const url =
-                                                      'https://move.protocentral.com/updating_move/01-updating_with_nRF_connect/';
-                                                  if (await canLaunchUrl(
-                                                    Uri.parse(url),
-                                                  )) {
-                                                    await launchUrl(
-                                                      Uri.parse(url),
-                                                      mode:
-                                                          LaunchMode
-                                                              .externalApplication,
-                                                    );
-                                                  } else {
-                                                    throw 'Could not launch $url';
-                                                  }
-                                                },
-                                                child: Text(
-                                                  'check our docs',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    color: Colors.blue,
-                                                    decoration:
-                                                        TextDecoration
-                                                            .underline,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-
-                                          SizedBox(height: 10),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),*/
                           ],
                         ),
                       ],

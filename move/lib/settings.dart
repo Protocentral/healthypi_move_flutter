@@ -126,14 +126,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _getAppSettingsTile() {
-    return ListTile(title: Column(children: [
-          
-          
-        ],
-      ));
-  }
-
   void showSuccessDialog(BuildContext context, String message) {
     showDialog(
       context: context,
@@ -422,60 +414,66 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ],
                     ),
+
                   ),
                 ),
                 Card(
                   color: Colors.black,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(height: 20),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    hPi4Global.hpi4Color, // background color
-                                foregroundColor: Colors.white, // text color
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                minimumSize: Size(
-                                  SizeConfig.blockSizeHorizontal * 100,
-                                  40,
-                                ),
-                              ),
-                              onPressed: () {
-                                showConfirmationDialog(context, "app data.");
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(Icons.delete, color: Colors.white),
-                                    const Text(
-                                      ' Erase app data ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
+                  child:Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                  SizedBox(
+                  //height: SizeConfig.blockSizeVertical * 20,
+                  width: SizeConfig.blockSizeHorizontal * 88,
+                    child: Card(
+                          color: Colors.grey[900],
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+                            child: Column(
+                              children:[
+                                SizedBox(height:10),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red, // background color
+                                    foregroundColor: Colors.white, // text color
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
-                                    Spacer(),
-                                  ],
+                                    minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+                                  ),
+                                  onPressed: () {
+                                    showConfirmationDialog(context, "app data.");
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: <Widget>[
+                                        Icon(
+                                          Icons.delete,
+                                          color: Colors.white,
+                                        ),
+                                        Text(
+                                          'Erase app data',
+                                          style: TextStyle(fontSize: 14, color: Colors.white),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ],
+                              ]
+                            )
+
+                          ),
                         ),
-                      ],
-                    ),
+
+                  ),
+
+                    ],
                   ),
                 ),
+
               ],
             ),
           ),
