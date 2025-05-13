@@ -406,8 +406,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
           int latestHR = int.parse(row[4]);
 
           // Convert timestamp to DateTime and group by the specified format
-          var dateTime =
-              DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
+          var dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
           String groupKey = DateFormat(groupingFormat).format(dateTime);
 
           // Update min and max for the group
@@ -420,8 +419,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
               'latest': latestHR,
             };
           } else {
-            groupedStats[groupKey]!['min'] =
-                groupedStats[groupKey]!['min']! < minHR
+            groupedStats[groupKey]!['min'] = groupedStats[groupKey]!['min']! < minHR
                     ? groupedStats[groupKey]!['min']!
                     : minHR;
             groupedStats[groupKey]!['max'] =

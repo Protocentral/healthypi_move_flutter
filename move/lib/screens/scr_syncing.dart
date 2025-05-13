@@ -134,7 +134,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   // Save a value
   _saveValue() async {
     DateTime now = DateTime.now();
-    String lastDateTime = DateFormat('EEE d MMM').format(now);
+    String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastSynced', lastDateTime);
   }
@@ -620,8 +620,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         }
 
         if (isFetchingTemp) {
-          if (currentFileDataCounter >=
-              logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
+          if (currentFileDataCounter >= logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
             await _writeLogDataToFile(
               logData,
               logTempHeaderList[currentTempFileIndex].logFileID,
@@ -639,6 +638,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               currentTempFileIndex++;
               setState(() {
                 tempProgressPercent = 0.0;
+                logData.clear();
               });
               _fetchNextTempLogFile(deviceName);
             } else {
@@ -672,6 +672,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               currentSpo2FileIndex++;
               setState(() {
                 spo2ProgressPercent = 0.0;
+                logData.clear();
               });
               _fetchNextSpo2LogFile(deviceName);
             } else {
@@ -706,6 +707,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               currentActivityFileIndex++;
               setState(() {
                 activityProgressPercent = 0.0;
+                logData.clear();
               });
               _fetchNextActivityLogFile(deviceName);
             } else {
@@ -740,6 +742,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
               currentFileIndex++;
               setState(() {
                 hrProgressPercent = 0.0;
+                logData.clear();
               });
               _fetchNextLogFile(deviceName);
             } else {
@@ -872,7 +875,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All Temperature files have been processed.");
       currentTempFileIndex--;
 
-        Future.delayed(Duration(seconds: 7), () async {
+        Future.delayed(Duration(seconds: 3), () async {
           setState(() {
             isFetchingTempComplete = true;
             isFetchingHR = false;
@@ -1147,21 +1150,83 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   }
 
-  String _getCurrentTrendLabel() {
-    if (isFetchingHR) return "Heart Rate";
-    if (isFetchingTemp) return "Temperature";
-    if (isFetchingSpo2) return "SpO2";
-    if (isFetchingActivity) return "Activity";
-    if (isFetchingHRComplete && isFetchingTempComplete && isFetchingSpo2Complete && isFetchingActivityComplete)
-      return "All files fetched";
-    return "Waiting";
+  Widget showHRProgress(){
+    return SizedBox(
+      height: SizeConfig.blockSizeVertical * 15,
+      width: SizeConfig.blockSizeHorizontal * 95,
+      child: TrendProgressIndicator(
+        progress: (isFetchingHR)
+            ? hrProgressPercent
+            : (isFetchingHRComplete)
+            ? 1.0
+            : 0.0,
+        label: "Heart rate" ,
+      ),
+    );
+  }
+
+  Widget showTempProgress(){
+    if(isFetchingHRComplete){
+      return SizedBox(
+        height: SizeConfig.blockSizeVertical * 15,
+        width: SizeConfig.blockSizeHorizontal * 95,
+        child: TrendProgressIndicator(
+          progress: (isFetchingTemp)
+              ? tempProgressPercent
+              : (isFetchingTempComplete)
+              ? 1.0
+              : 0.0,
+          label: "Temperature" ,
+        ),
+      );
+    }else{
+      return Container();
+    }
+  }
+
+  Widget showSpo2Progress(){
+    if(isFetchingTempComplete){
+      return SizedBox(
+        height: SizeConfig.blockSizeVertical * 15,
+        width: SizeConfig.blockSizeHorizontal * 95,
+        child: TrendProgressIndicator(
+          progress: (isFetchingSpo2)
+              ? spo2ProgressPercent
+              : (isFetchingSpo2Complete)
+              ? 1.0
+              : 0.0,
+          label: "Spo2" ,
+        ),
+      );
+    }else{
+      return Container();
+    }
+  }
+
+  Widget showActivityProgress(){
+    if(isFetchingSpo2Complete){
+      return SizedBox(
+        height: SizeConfig.blockSizeVertical * 15,
+        width: SizeConfig.blockSizeHorizontal * 95,
+        child: TrendProgressIndicator(
+          progress: (isFetchingActivity)
+              ? activityProgressPercent
+              : (isFetchingActivityComplete)
+              ? 1.0
+              : 0.0,
+          label: "Activity" ,
+        ),
+      );
+    }else{
+      return Container();
+    }
   }
 
 
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
-      key: Snackbar.snackBarKeyC,
+      //key: Snackbar.snackBarKeyC,
       child: Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
@@ -1203,57 +1268,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     ],
                   ),
                   SizedBox(height: 10),
-                  SizedBox(
-                    height: SizeConfig.blockSizeVertical * 15,
-                    width: SizeConfig.blockSizeHorizontal * 95,
-                    child: TrendProgressIndicator(
-                      progress: (isFetchingHR)
-                          ? hrProgressPercent
-                          : (isFetchingHRComplete)
-                          ? 1.0
-                          : 0.0,
-                      label: "Heart rate" ,
-                    ),
-                  ),
+                  showHRProgress(),
                   SizedBox(height: 10),
-                  SizedBox(
-                    height: SizeConfig.blockSizeVertical * 15,
-                    width: SizeConfig.blockSizeHorizontal * 95,
-                    child: TrendProgressIndicator(
-                      progress: (isFetchingTemp)
-                          ? tempProgressPercent
-                          : (isFetchingTempComplete)
-                          ? 1.0
-                          : 0.0,
-                      label: "Temperature" ,
-                    ),
-                  ),
+                  showTempProgress(),
                   SizedBox(height: 10),
-                  SizedBox(
-                    height: SizeConfig.blockSizeVertical * 15,
-                    width: SizeConfig.blockSizeHorizontal * 95,
-                    child: TrendProgressIndicator(
-                      progress: (isFetchingSpo2)
-                          ? spo2ProgressPercent
-                          : (isFetchingSpo2Complete)
-                          ? 1.0
-                          : 0.0,
-                      label: "Spo2" ,
-                    ),
-                  ),
+                  showSpo2Progress(),
                   SizedBox(height: 10),
-                  SizedBox(
-                    height: SizeConfig.blockSizeVertical * 15,
-                    width: SizeConfig.blockSizeHorizontal * 95,
-                    child: TrendProgressIndicator(
-                      progress: (isFetchingActivity)
-                          ? activityProgressPercent
-                          : (isFetchingActivityComplete)
-                          ? 1.0
-                          : 0.0,
-                      label: "Activity" ,
-                    ),
-                  ),
+                  showActivityProgress(),
                   SizedBox(height: 20),
                   displayCloseandCancel(),
                 ],

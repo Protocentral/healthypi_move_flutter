@@ -49,14 +49,15 @@ class hPi4Global {
   static const List<int> TempTrend = [0x03];
   static const List<int> ActivityTrend = [0x04];
 
-  static const List<int> StartBPTCal= [0x61];
-  static const List<int> SetBPTCalMode= [0x60];
-
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;
   static const int CES_CMDIF_TYPE_CMD_RSP = 0x06;
 
   static const List<int> WISER_CMD_SET_DEVICE_TIME = [0x41];
+
+  static const List<int> StartBPTCal= [0x61];
+  static const List<int> SetBPTCalMode= [0x60];
+  static const List<int> EndBPTCal= [0x602];
 
   static const TextStyle eventStyle =
       TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
