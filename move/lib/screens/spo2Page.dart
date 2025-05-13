@@ -357,9 +357,8 @@ class _SPO2PageState extends State<SPO2Page>
 
     CalculateLasthourMinMax(myData);
 
-    //String myData = await rootBundle.loadString("assets/Temp_data.csv");
     List<String> result = myData.split('\n');
-    //print(result);
+    print(result);
     timestamp = result.map((f) => f.split(",")[0]).toList();
 
     avgSpo2 = result.map((f) => f.split(",")[1]).toList();
