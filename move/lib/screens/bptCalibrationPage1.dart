@@ -95,6 +95,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     _diastolicController.dispose();
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
+    _streamDataSubscription.cancel();
     FlutterBluePlus.stopScan();
     super.dispose();
   }
@@ -229,7 +230,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
           setState(() {
             Connecteddevice = device;
             sendSetCalibrationCommand(device);
-            _showcalibrationButton = true;
+            //_showcalibrationButton = true;
+            _showcalibrationCard = true;
           });
         }
       }
@@ -276,11 +278,11 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).pop(); // Close the dialog
-                  sendEndCalibration(context, Connecteddevice, 'success');
+                  Navigator.pop(context); // Close the dialog
+                  //sendEndCalibration(context, Connecteddevice, 'success');
                 },
                 child: Text(
-                  'End Calibration',
+                  'OK',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -312,22 +314,21 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       setState(() {
         status = bdata.getUint8(0);
         progress = bdata.getUint8(1);
-        index = bdata.getUint8(2);
+        //index = bdata.getUint8(2);
       });
       if (status == 0) {
         statusString = "No signal";
       } else if (status == 1) {
-        statusString = "In progress";
+        statusString = "";
       } else if (status == 2) {
-        statusString = "Success";
+        statusString = "";
         setState(() {
           _showOnSuccessCal = true;
           _showcalibrationButton = false;
           _showcalibrationCard = false;
           _showcalibrationprogress = false;
         });
-        showSuccessDialog(context, 'Success',
-          'Calibration was successful!',
+        showSuccessDialog(context, 'Success', 'Calibration was successful!',
           Icon(Icons.check_circle, color: Colors.green), // Pass the custom icon here
         );
       }
@@ -397,7 +398,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   Future<void> sendEndCalibration(
       BuildContext context,
       BluetoothDevice deviceName,
-      String fromWhere
       ) async {
     logConsole("Send end calibration command initiated");
     await Future.delayed(Duration(seconds: 2), () async {
@@ -405,13 +405,9 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
       commandPacket.addAll(hPi4Global.EndBPTCal);
       await _sendCommand(commandPacket, deviceName);
       logConsole(commandPacket.toString());
-      if(fromWhere == "exit"){
-
-      }else{
-        setState(() {
-          _showOnSuccessCal = true;
-        });
-      }
+      setState(() {
+        _showOnSuccessCal = true;
+      });
       Navigator.pop(context);
     });
   }
@@ -576,54 +572,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     }
   }
 
-  Widget _showCalibrationStartButton() {
-    if (_showcalibrationButton == true) {
-      return Card(
-        color: Colors.grey[800],
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: <Widget>[
-              Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: hPi4Global.hpi4Color, // background color
-                    foregroundColor: Colors.white, // text color
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                    onPressed: () {
-                    setState(() {
-                      _showcalibrationCard = true;
-                    });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(Icons.start, color: Colors.white),
-                        const Text(
-                          ' Enter Calibration Mode ',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                        Spacer(),
-                      ],
-                    ),
-                  ),
-                )
-              ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      return Container();
-    }
-  }
-
   Widget _showAnotherPointCard(){
     if (_showOnSuccessCal == true) {
       return Card(
@@ -633,10 +581,17 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
           child: Column(
             children: <Widget>[
               Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text("Calibration point no "+(index+1).toString()+"/5",
+                  style: hPi4Global.movecardSubValue1TextStyle,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              Padding(
                 padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
                 child:  ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red, // background color
+                    backgroundColor: hPi4Global.hpi4Color, // background color
                     foregroundColor: Colors.white, // text color
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -644,7 +599,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                   ),
                   onPressed: () async{
                     setState((){
-                      _showcalibrationButton = true;
+                      //_showcalibrationButton = true;
+                      _showcalibrationCard = true;
                       _showOnSuccessCal = false;
                       index = index+1;
                     });
@@ -672,7 +628,41 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                   style: hPi4Global.movecardSubValue1TextStyle,
                   textAlign: TextAlign.center,
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                child:  ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red, // background color
+                    foregroundColor: Colors.white, // text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  onPressed: () async{
+                    sendEndCalibration(context, Connecteddevice);
+                    Future.delayed(Duration(seconds: 2), () async {
+                      Navigator.of(
+                        context,
+                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                    });
 
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(Icons.cancel, color: Colors.white),
+                        const Text(
+                          ' End Calibration ',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                        Spacer(),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -714,11 +704,14 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                     ),
                   ),
                   onPressed: () async{
-                    sendEndCalibration(context, Connecteddevice, 'exit');
-                    await onDisconnectPressed();
-                    Navigator.of(
-                      context,
-                    ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                    sendEndCalibration(context, Connecteddevice);
+                    Future.delayed(Duration(seconds: 2), () async {
+                      await onDisconnectPressed();
+                      Navigator.of(
+                        context,
+                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                    });
+
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
@@ -767,7 +760,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                       children: <Widget>[
                         //Icon(Icons.warning, color: Colors.yellow[300]),
                         Text(
-                          'Calibrate point ${index+1}',
+                          "Calibrate point "+ (index+1).toString(),
                           style: hPi4Global.movecardTextStyle,
                         ),
                         SizedBox(height: 5.0),
@@ -977,8 +970,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                     height: 10,
                                     width: 150, // Provide a fixed width for the progress bar
                                     child: LinearProgressIndicator(
-                                      value:
-                                          progress.toDouble() > 0 ? progress.toDouble() : null,
+                                      //value: progress.toDouble() > 0 ? progress.toDouble() : null,
+                                      value: progress.toDouble(),
                                       valueColor:
                                           const AlwaysStoppedAnimation<Color>(
                                             hPi4Global.hpi4Color,
@@ -994,8 +987,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                 mainAxisSize:
                                 MainAxisSize.min, // Shrink-wrap children
                                 children: <Widget>[
-                                  Text(
-                                    'Calibrating...',
+                                  Text('Calibrating...',
                                     style: hPi4Global.movecardTextStyle,
                                   ),
                                 ],
@@ -1007,11 +999,47 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                     MainAxisSize.min, // Shrink-wrap children
                                 children: <Widget>[
                                   Text('$statusString',
-                                    style: TextStyle(fontSize: 14, color: Colors.red),
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,color: Colors.red),
                                   ),
                                 ],
                               ),
                               SizedBox(height: 10.0),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                                child:  ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red, // background color
+                                    foregroundColor: Colors.white, // text color
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                  onPressed: () async{
+                                    sendEndCalibration(context, Connecteddevice);
+                                    Future.delayed(Duration(seconds: 2), () async {
+                                      await onDisconnectPressed();
+                                      Navigator.of(
+                                        context,
+                                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                                    });
+
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: <Widget>[
+                                        Icon(Icons.cancel, color: Colors.white),
+                                        const Text(
+                                          ' Cancel ',
+                                          style: TextStyle(fontSize: 16, color: Colors.white),
+                                        ),
+                                        Spacer(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1074,11 +1102,11 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             SizedBox(height: 20),
             _showAnotherPointCard(),
             SizedBox(height: 20),
-            _showCalibrationStartButton(),
-            SizedBox(height: 20),
+            //_showCalibrationStartButton(),
+            //SizedBox(height: 20),
             showCalibrationCard(),
-            SizedBox(height: 20),
-            _showCancelButton(),
+            //SizedBox(height: 20),
+            //_showCancelButton(),
           ],
         ),
       ),

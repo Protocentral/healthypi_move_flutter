@@ -57,7 +57,7 @@ class hPi4Global {
 
   static const List<int> StartBPTCal= [0x61];
   static const List<int> SetBPTCalMode= [0x60];
-  static const List<int> EndBPTCal= [0x602];
+  static const List<int> EndBPTCal= [0x62];
 
   static const TextStyle eventStyle =
       TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
@@ -69,7 +69,7 @@ class hPi4Global {
   static const TextStyle movecardTextStyle =
   TextStyle(fontSize: 16, color: Colors.white);
   static const TextStyle movecardValueTextStyle =
-  TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
+  TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle moveValueTextStyle =
   TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white);
   static const TextStyle movecardSubValueTextStyle =

@@ -236,6 +236,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                     xValueMapper: (TempTrends data, _) => data.date,
                     lowValueMapper: (TempTrends data, _) => data.minTemp,
                     highValueMapper: (TempTrends data, _) => data.maxTemp,
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
                   ),
                 ],
               ),

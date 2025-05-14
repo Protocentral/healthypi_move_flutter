@@ -33,7 +33,6 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
   int averageHR = 0;
   late DateTime lastUpdatedTime;
 
-  List<HRTrends> hrTrendsData = [];
 
   @override
   void initState() {
@@ -50,6 +49,8 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
     hrTrendsData = [];
     super.dispose();
   }
+
+  List<HRTrends> hrTrendsData = [];
 
   void _handleTabChange() {
     setState(() {
@@ -235,6 +236,7 @@ class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
                   ),
                 ],
                 /*zoomPanBehavior: ZoomPanBehavior(

@@ -238,7 +238,8 @@ class _SPO2PageState extends State<SPO2Page>
                           dataSource: Spo2TrendsData,
                           xValueMapper: (Spo2Trends data, _) => data.date,
                           lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                          highValueMapper: (Spo2Trends data, _) => data.maxSpo2
+                          highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
+                        borderRadius: BorderRadius.all(Radius.circular(10)),
                       ),
                     ],
 
@@ -254,9 +255,8 @@ class _SPO2PageState extends State<SPO2Page>
   }
 
   Future<void> _listCSVFiles() async {
-    Directory? downloadsDirectory ;
+    Directory? downloadsDirectory;
     if (Platform.isAndroid) {
-      //downloadsDirectory = Directory('/storage/emulated/0/Download');
       downloadsDirectory = await getApplicationDocumentsDirectory();
     } else if (Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
@@ -274,46 +274,133 @@ class _SPO2PageState extends State<SPO2Page>
             .toList();
 
         List<String> fileNames = csvFiles.map((file) => p.basename(file.path)).toList();
-        //print("......"+fileNames.toString());
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
-          //timestamps.add(timestamp);
           String timestamp1 = timestamp.split(",")[0];
           int timestamp2 = int.parse(timestamp1);
-          int updatedTimestamp = timestamp2*1000;
+          int updatedTimestamp = timestamp2 * 1000;
           String fileName1 = p.basename(file.path);
 
           DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
-          //print("......"+timestampDateTime.toString());
           DateTime now = DateTime.now();
-          // print("......"+now.toString());
-          if(_tabController.index == 0){
-            String todayStr = _formatDate(now);
-            if (_formatDate(timestampDateTime) == todayStr) {
-              getFileData(fileName1);
-              // print("same..........");
-            }else{
-              // print("different........");
+
+          if (_tabController.index == 0) {
+            // Last 1 hour
+            DateTime oneHourAgo = now.subtract(Duration(hours: 1));
+            if (timestampDateTime.isAfter(oneHourAgo) && timestampDateTime.isBefore(now)) {
+              await _processFileForHourlyOrDailyStats(fileName1, "hour");
             }
-          }else if(_tabController.index == 1){
-            // Calculate the start of the week (7 days ago)
-            DateTime weekStart = now.subtract(Duration(days: 7));
-            // Check if the file's timestamp is within the past 7 days
-            if (timestampDateTime.isAfter(weekStart) && timestampDateTime.isBefore(now)) {
-              getFileData(fileName1); // Process the file data
+          } else if (_tabController.index == 1) {
+            // Last 24 hours (1 day)
+            DateTime oneDayAgo = now.subtract(Duration(days: 1));
+            if (timestampDateTime.isAfter(oneDayAgo) && timestampDateTime.isBefore(now)) {
+              await _processFileForHourlyOrDailyStats(fileName1, "day");
             }
-          }else if(_tabController.index == 2){
-            // Calculate the start of the week (7 days ago)
-            DateTime monthStart = now.subtract(Duration(days: 30));
-            // Check if the file's timestamp is within the past 7 days
-            if (timestampDateTime.isAfter(monthStart) && timestampDateTime.isBefore(now)) {
-              getFileData(fileName1); // Process the file data
+          } else if (_tabController.index == 2) {
+            // Last 30 days (1 month)
+            DateTime oneMonthAgo = now.subtract(Duration(days: 30));
+            if (timestampDateTime.isAfter(oneMonthAgo) && timestampDateTime.isBefore(now)) {
+              await _processFileForHourlyOrDailyStats(fileName1, "month");
             }
           }
-
         }
+      }
+    }
+  }
 
+  Future<void> _processFileForHourlyOrDailyStats(String fileName, String range) async {
+    Directory? downloadsDirectory;
+    if (Platform.isAndroid) {
+      downloadsDirectory = await getApplicationDocumentsDirectory();
+    } else if (Platform.isIOS) {
+      downloadsDirectory = await getApplicationDocumentsDirectory();
+    }
+
+    if (downloadsDirectory != null) {
+      String filePath = '${downloadsDirectory.path}/$fileName';
+      File csvFile = File(filePath);
+
+      if (await csvFile.exists()) {
+        String fileContent = await csvFile.readAsString();
+       _calculateMinMaxBasedOnRange(fileContent, range);
+
+      }
+    }
+  }
+
+  _calculateMinMaxBasedOnRange(String fileContent, String range) {
+    List<String> lines = fileContent.split('\n');
+    Map<String, List<int>> groupedData = {};
+    DateTime now = DateTime.now();
+    Duration rangeDuration;
+
+    // Define the range for grouping
+    if (range == "hour") {
+      rangeDuration = Duration(hours: 1);
+    } else if (range == "day") {
+      rangeDuration = Duration(days: 1);
+    } else if (range == "month") {
+      rangeDuration = Duration(days: 30); // Assuming 30 days for a month
+    } else {
+      throw Exception("Invalid range specified.");
+    }
+
+    for (int i = 1; i < lines.length; i++) { // Start from 1 to skip the header
+      if (lines[i].trim().isEmpty) continue;
+
+      List<String> parts = lines[i].split(',');
+      if (parts.length < 2) continue;
+
+      int timestamp = int.parse(parts[0]) * 1000;
+      int spo2 = int.parse(parts[1]);
+
+      DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
+      if (dateTime.isBefore(now.subtract(rangeDuration)) || dateTime.isAfter(now)) {
+        continue; // Skip data outside the range
+      }
+
+      String rangeKey = "0";
+
+      if (range == "hour") {
+        rangeKey = DateFormat('yyyy-MM-dd HH:00:00').format(dateTime); // Group by hour
+      } else if (range == "day" || range == "month") {
+        rangeKey = DateFormat('yyyy-MM-dd').format(dateTime); // Group by day
+      }
+
+      if (!groupedData.containsKey(rangeKey)) {
+        groupedData[rangeKey] = [];
+      }
+      groupedData[rangeKey]!.add(spo2);
+    }
+    int minSpo2 = 0;
+    int maxSpo2 = 0;
+
+    groupedData.forEach((group, spo2Values) {
+      minSpo2 = spo2Values.reduce((a, b) => a < b ? a : b); // Calculate min as an int
+      maxSpo2 = spo2Values.reduce((a, b) => a > b ? a : b); // Calculate max as an int
+
+      DateTime formattedDateTime = DateTime.parse(group);
+      setState(() {
+        Spo2TrendsData.add(Spo2Trends(formattedDateTime, minSpo2, maxSpo2));
+        restingSpo2 = maxSpo2;
+        averageSpo2 = maxSpo2;
+        rangeMinSpo2 = minSpo2;
+        rangeMaxSpo2 = maxSpo2;
+
+      });
+      print("$range: $group, Min: $minSpo2, Max: $maxSpo2");
+    });
+
+    if (groupedData.isNotEmpty) {
+      String lastGroup = groupedData.keys.last;
+      setState(() {
+        lastUpdatedTime = DateTime.parse(lastGroup);
+      });
+
+      String todayStr = _formatDate(DateTime.now());
+      if (_formatDate(lastUpdatedTime) == todayStr) {
+        saveValue(lastUpdatedTime);
       }
     }
   }
@@ -330,14 +417,12 @@ class _SPO2PageState extends State<SPO2Page>
     }
   }
 
-  Future<void> getFileData(String fileName) async {
+  /*Future<void> getFileData(String fileName) async {
     Directory? downloadsDirectory;
     String myData = '';
 
     if (Platform.isAndroid) {
-      //downloadsDirectory = Directory('/storage/emulated/0/Download');
       downloadsDirectory = await getApplicationDocumentsDirectory();
-
     } else if (Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
     }
@@ -397,17 +482,17 @@ class _SPO2PageState extends State<SPO2Page>
       });
     }
     _saveValue();
-  }
+  }*/
 
   // Save a value
-  _saveValue() async {
+  saveValue(DateTime lastUpdatedTime) async {
     String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestSpo2', averageSpo2.toString());
+    await prefs.setString('latestSpo2', restingSpo2.toString());
     await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());
   }
 
-  void CalculateLasthourMinMax(String fileContent) {
+  /*void CalculateLasthourMinMax(String fileContent) {
     // Split file content into rows
     List<String> rows = fileContent.split('\n');
     List<int> timestamps = [];
@@ -452,7 +537,7 @@ class _SPO2PageState extends State<SPO2Page>
     } else {
       print('No data available for the last one hour.');
     }
-  }
+  }*/
 
   Widget displayValue(){
     return Row(

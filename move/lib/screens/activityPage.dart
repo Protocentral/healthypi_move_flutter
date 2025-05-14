@@ -24,11 +24,6 @@ class _ActivityPageState extends State<ActivityPage>
   late TabController _tabController;
 
   List<String> timestamp = [];
-  List<String> minActivity = [];
-  List<String> maxActivity =[];
-  List<String> avgActivity =[];
-  List<String> latestActivity =[];
-
 
   int totalCount = 0;
   int Count = 0;
@@ -238,6 +233,7 @@ class _ActivityPageState extends State<ActivityPage>
                       dataSource: ActivityTrendsData,
                       xValueMapper: (ActivityTrends data, _) => data.date,
                       yValueMapper: (ActivityTrends data, _) => data.count,
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
                       color: hPi4Global.hpi4Color,
                     ),
                   ],
@@ -272,7 +268,6 @@ class _ActivityPageState extends State<ActivityPage>
   Future<void> _listCSVFiles() async {
     Directory? downloadsDirectory;
     if (Platform.isAndroid) {
-      //downloadsDirectory = Directory('/storage/emulated/0/Download');
       downloadsDirectory = await getApplicationDocumentsDirectory();
     } else if (Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
@@ -283,17 +278,13 @@ class _ActivityPageState extends State<ActivityPage>
       if (downloadsDir.existsSync()) {
         List<FileSystemEntity> files = downloadsDir.listSync();
 
-        List<File> csvFiles =
-        files
+        List<File> csvFiles = files
             .where((file) => file is File && file.path.endsWith('.csv'))
             .map((file) => file as File)
             .where(
               (file) => p.basename(file.path).startsWith("activity_"),
         ) // Filter by prefix
             .toList();
-
-        List<String> weeklyFileNames = [];
-        List<String> MonthlyFileNames = [];
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
@@ -307,51 +298,41 @@ class _ActivityPageState extends State<ActivityPage>
             isUtc: true,
           );
           DateTime now = DateTime.now();
-          if (_tabController.index == 0) {
-            String todayStr = _formatDate(now);
 
+          if (_tabController.index == 0) {
+            // Group by every hour for the day
+            String todayStr = _formatDate(now);
             if (_formatDate(timestampDateTime) == todayStr) {
               await processFileData(
                 fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd HH:00:00", // Group by hour
-              ); // Group by hour)
-            } else {}
+              );
+            }
           } else if (_tabController.index == 1) {
-            // Calculate the start of the week (7 days ago)
+            // Group by every day for the week
             DateTime weekStart = now.subtract(Duration(days: 7));
             if (timestampDateTime.isAfter(weekStart) &&
                 timestampDateTime.isBefore(now)) {
-              weeklyFileNames.add(fileName1); // Process the file data
-            }
-            // Pass the list of weekly files to the function
-            if (weeklyFileNames.isNotEmpty) {
               await processFileData(
-                fileNames: weeklyFileNames,
+                fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd", // Group by day
-              ); // Process the list of weekly files
-            } else {
-              //print("No valid files found for the past week.");
+              );
             }
           } else if (_tabController.index == 2) {
-            // Calculate the start of the week (7 days ago)
+            // Group by every day for the month
             DateTime monthStart = now.subtract(Duration(days: 30));
-            // Check if the file's timestamp is within the past 7 days
             if (timestampDateTime.isAfter(monthStart) &&
                 timestampDateTime.isBefore(now)) {
-              MonthlyFileNames.add(fileName1);
-            }
-            if (MonthlyFileNames.isNotEmpty) {
               await processFileData(
-                fileNames: MonthlyFileNames,
+                fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd", // Group by day
-              ); // Process the list of weekly files
-            } else {}
+              );
+            }
           }
         }
       }
     }
   }
-
 // Save the last updated values
   saveValue(DateTime lastUpdatedTime, int Count) async {
     String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
@@ -398,6 +379,8 @@ class _ActivityPageState extends State<ActivityPage>
           int timestamp = int.parse(row[0]);
           int count = int.parse(row[1]);
 
+          print("from file...."+ count.toString());
+
           // Convert timestamp to DateTime and group by the specified format
           var dateTime =
           DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
@@ -424,6 +407,7 @@ class _ActivityPageState extends State<ActivityPage>
       setState(() {
         ActivityTrendsData.add(ActivityTrends(formattedDateTime, stats['count']!),);
       });
+      print(" $group, Count: $stats['count']");
     });
 
     // Update the last aggregated values
