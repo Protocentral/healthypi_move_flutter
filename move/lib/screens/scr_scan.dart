@@ -262,51 +262,84 @@ class _ScrScanState extends State<ScrScan> {
 
   Widget buildScanButton(BuildContext context) {
     if (FlutterBluePlus.isScanningNow) {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: hPi4Global.hpi4Color, // background color
-          foregroundColor: Colors.white, // text color
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+        child:ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: hPi4Global.hpi4Color, // background color
+            foregroundColor: Colors.white, // text color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
           ),
-          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 50, 40),
-        ),
-        onPressed: onStopPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[const Icon(Icons.stop), Spacer()],
+          onPressed: onStopPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[const Icon(Icons.stop), Spacer()],
+            ),
           ),
         ),
       );
     } else {
-      return ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: hPi4Global.hpi4Color, // background color
-          foregroundColor: Colors.white, // text color
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+        child:  ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: hPi4Global.hpi4Color, // background color
+            foregroundColor: Colors.white, // text color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
           ),
-          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 50, 40),
-        ),
-        onPressed: onScanPressed,
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(Icons.search, color: Colors.white),
-              const Text(
-                ' Scan for devices ',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              Spacer(),
-            ],
+          onPressed: onScanPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Icons.search, color: Colors.white),
+                const Text(
+                  ' Scan for devices ',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
+                ),
+                Spacer(),
+              ],
+            ),
           ),
         ),
       );
     }
+  }
+
+  Widget _buildScanCard(BuildContext context) {
+      return Card(
+        color: Colors.grey[800],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  'Select the device',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              buildScanButton(context),
+              ..._buildScanResultTiles(context),
+            ],
+          ),
+        ),
+      );
   }
 
   List<Widget> _buildSystemDeviceTiles(BuildContext context) {
@@ -452,14 +485,9 @@ class _ScrScanState extends State<ScrScan> {
             children: <Widget>[
               Column(
                   children:[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
-                      child: buildScanButton(context),
-                    ),
                   ]
               ),
-              ..._buildSystemDeviceTiles(context),
-              ..._buildScanResultTiles(context),
+              _buildScanCard(context),
             ],
           ),
         ),

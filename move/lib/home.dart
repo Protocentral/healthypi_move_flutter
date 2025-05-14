@@ -120,15 +120,15 @@ class _HomeScreenState extends State<HomeScreen> {
   _loadStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      lastSyncedDateTime = (prefs.getString('lastSynced') == '0') ? '--' : prefs.getString('lastSynced')!;
-      lastestHR = (prefs.getString('latestHR') == "0") ? '--' : prefs.getString('latestHR')!;
-      lastestTemp = (prefs.getString('latestTemp') == "0") ? '--' : prefs.getString('latestTemp')!;
-      lastestSpo2 = (prefs.getString('latestSpo2') == "0") ? '--':prefs.getString('latestSpo2')!;
-      lastestActivity = (prefs.getString('latestActivityCount') == "0") ? '--' : prefs.getString('latestActivityCount')!;
-      lastUpdatedHR = (prefs.getString('lastUpdatedHR') == "0") ? '--' : prefs.getString('lastUpdatedHR')!;
-      lastUpdatedTemp = (prefs.getString('lastUpdatedTemp') == "0") ? '--' : prefs.getString('lastUpdatedTemp')!;
-      lastUpdatedSpo2 = (prefs.getString('lastUpdatedSpo2') == "0") ? '--' : prefs.getString('lastUpdatedSpo2')!;
-      lastUpdatedActivity = (prefs.getString('lastUpdatedActivity') == "0") ? '--' : prefs.getString('lastUpdatedActivity')!;
+      lastSyncedDateTime = (prefs.getString('lastSynced') ?? '--') == '0' ? '--' : prefs.getString('lastSynced') ?? '--';
+      lastestHR = (prefs.getString('latestHR') ?? '--') == "0" ? '--' : prefs.getString('latestHR') ?? '--';
+      lastestTemp = (prefs.getString('latestTemp') ?? '--') == "0" ? '--' : prefs.getString('latestTemp') ?? '--';
+      lastestSpo2 = (prefs.getString('latestSpo2') ?? '--') == "0" ? '--' : prefs.getString('latestSpo2') ?? '--';
+      lastestActivity = (prefs.getString('latestActivityCount') ?? '--') == "0" ? '--' : prefs.getString('latestActivityCount') ?? '--';
+      lastUpdatedHR = (prefs.getString('lastUpdatedHR') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedHR') ?? '--';
+      lastUpdatedTemp = (prefs.getString('lastUpdatedTemp') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedTemp') ?? '--';
+      lastUpdatedSpo2 = (prefs.getString('lastUpdatedSpo2') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedSpo2') ?? '--';
+      lastUpdatedActivity = (prefs.getString('lastUpdatedActivity') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedActivity') ?? '--';
     });
   }
 
@@ -189,7 +189,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestHR.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                      SizedBox(width: 5.0),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
                       Text("bpm", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
@@ -243,7 +247,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestSpo2.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                      SizedBox(width: 5.0),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
                       Text("%", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
@@ -296,7 +304,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestTemp,
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                      SizedBox(width: 5.0),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
                       Text("\u00b0 F", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
@@ -348,12 +360,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestActivity.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                      SizedBox(width: 5.0),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
                       Text(
                         "Steps",
-                        style: hPi4Global.movecardSubValueTextStyle,
+                        style: hPi4Global.movecardTextStyle,
                       ),
-                      SizedBox(width: 5.0),
                     ],
                   ),
                   SizedBox(height: 20.0),
