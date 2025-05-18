@@ -9,6 +9,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_syncing.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
@@ -183,6 +184,8 @@ class _ScrScanState extends State<ScrScan> {
     });
   }
 
+  bool pairedStatus = false;
+
   Future<void> onConnectPressed(BluetoothDevice device) async {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
@@ -209,7 +212,8 @@ class _ScrScanState extends State<ScrScan> {
       }
 
       if (_connectionState == BluetoothConnectionState.connected) {
-        if(widget.tabIndex == "1"){
+        showPairDeviceDialog(context, device);
+        /*if(widget.tabIndex == "1"){
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => SyncingScreen(device: device),
@@ -221,7 +225,7 @@ class _ScrScanState extends State<ScrScan> {
           _eraseAllLogs(context, device);
         }else{
 
-        }
+        }*/
       }
     });
   }
@@ -383,6 +387,109 @@ class _ScrScanState extends State<ScrScan> {
 
   }
 
+  showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            textTheme: TextTheme(),
+            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+          ),
+          child: AlertDialog(
+            title: Row(
+              children: [
+                //Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 10),
+                Text('Do you wish to pair the device ?',
+                  style: TextStyle(
+                    fontSize: 18,
+                    //fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              '  Please click "Yes" to pair',
+              style: TextStyle(fontSize: 16, color: Colors.white),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async{
+                  // Write the device MAC address to a file in the application directory
+                  try {
+                    // Get the app directory
+                    final Directory appDocDir = await getApplicationDocumentsDirectory();
+                    final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+
+                    // Write the MAC address (device.id.id is the MAC in flutter_blue_plus)
+                    final File macFile = File(filePath);
+                    await macFile.writeAsString(device.id.id);
+                    logConsole("...........Paired status saved");
+                    Navigator.pop(context); // Close the dialog
+                    if(widget.tabIndex == "1"){
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => SyncingScreen(device: device),
+                        ),
+                      );
+                    }else if(widget.tabIndex == "2"){
+                      showLoadingIndicator("Connected. Erasing the data...", context);
+                      await subscribeToChar(device);
+                      _eraseAllLogs(context, device);
+                    }else{
+
+                    }
+                  } catch (e) {
+                    // Handle errors, e.g., show error message
+                  }
+
+
+
+                },
+                child: Text(
+                  'Yes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context); // Close the dialog
+                  if(widget.tabIndex == "1"){
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => SyncingScreen(device: device),
+                      ),
+                    );
+                  }else if(widget.tabIndex == "2"){
+                    showLoadingIndicator("Connected. Erasing the data...", context);
+                    await subscribeToChar(device);
+                    _eraseAllLogs(context, device);
+                  }else{
+
+                  }
+                },
+                child: Text(
+                  'No',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
@@ -452,7 +559,7 @@ class _ScrScanState extends State<ScrScan> {
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
-      key: Snackbar.snackBarKeyB,
+     // key: Snackbar.snackBarKeyB,
       child: Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(

@@ -171,7 +171,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     sessionParametersLength.setUint8(5, int.parse(cdate));
 
     Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
-   // logConsole("Sending DateTime information: $cmdByteList");
+    // logConsole("Sending DateTime information: $cmdByteList");
     commandDateTimePacket.addAll(cmdByteList);
     //logConsole("Sending DateTime Command: $commandDateTimePacket");
     await _sendCommand(commandDateTimePacket, deviceName);
@@ -236,7 +236,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       int sessionID,
       String formattedTime,
       ) async {
-   // logConsole("Log data size: ${mData.length}");
+    // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -318,7 +318,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       int sessionID,
       String headerName,
       ) async {
-   // logConsole("Log data size: ${mData.length}");
+    // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
@@ -393,6 +393,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
   bool isFetchingSpo2Complete = false;
   bool isFetchingActivityComplete = false;
 
+  bool isFetchingTodayHR = false;
+  bool isFetchingTodayTemp= false;
+  bool isFetchingTodaySpo2 = false;
+  bool isFetchingTodayActivity = false;
+
+
   List<LogHeader> logHeaderList = List.empty(growable: true);
   List<LogHeader> logTempHeaderList = List.empty(growable: true);
   List<LogHeader> logSpo2HeaderList = List.empty(growable: true);
@@ -409,374 +415,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
   int currentActivityFileIndex =
   0; // Track the current Activity file being fetched
 
-  /*Future<void> _startListeningData(
-      BluetoothDevice deviceName,
-      int expectedLength,
-      int sessionID,
-      String formattedTime,
-      ) async {
-    logConsole("Started listening....");
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-        value,
-        ) async {
-      ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      //logConsole("Data Rx: $value");
-      //logConsole("Data Rx in hex: ${hex.encode(value)}");
-      int pktType = bdata.getUint8(0);
-
-      /**** Packet type Command Response ***/
-      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
-        setState(() {
-          switch (bdata.getUint8(2)) {
-            case 01:
-              hrSessionCount = bdata.getUint16(3, Endian.little);
-              if (hrSessionCount == 0) {
-                setState(() {
-                  isFetchingHRComplete = true;
-                  isFetchingTemp = true;
-                  isFetchingSpo2 = false;
-                  isFetchingActivity = false;
-                });
-                _checkAllFetchesComplete(deviceName);
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
-                });
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
-                });
-              }
-              break;
-            case 02:
-              spo2SessionCount = bdata.getUint16(3, Endian.little);
-              if (spo2SessionCount == 0) {
-                setState(() {
-                  isFetchingSpo2Complete = true;
-                  isFetchingSpo2 = false;
-                  isFetchingTemp = false;
-                  isFetchingActivity = true;
-                });
-                _checkAllFetchesComplete(deviceName);
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogCount(
-                    context,
-                    deviceName,
-                    hPi4Global.ActivityTrend,
-                  );
-                });
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogIndex(
-                    context,
-                    deviceName,
-                    hPi4Global.ActivityTrend,
-                  );
-                });
-              }
-              break;
-            case 03:
-              tempSessionCount = bdata.getUint16(3, Endian.little);
-              if (tempSessionCount == 0) {
-                setState(() {
-                  isFetchingTempComplete = true;
-                  isFetchingTemp = false;
-                  isFetchingSpo2 = true;
-                  isFetchingActivity = false;
-                });
-                _checkAllFetchesComplete(deviceName);
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
-                });
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
-                });
-              }
-              break;
-            case 04:
-              activitySessionCount = bdata.getUint16(3, Endian.little);
-              if (activitySessionCount == 0) {
-                setState(() {
-                  isFetchingActivityComplete = true;
-                });
-                _checkAllFetchesComplete(deviceName);
-              }
-              break;
-          }
-        });
-
-       // logConsole("Session count for trendType " + bdata.getUint16(3, Endian.little).toString(),);
-      }
-      /*****  Packet type Log Index ***/
-      else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        int trendType = bdata.getUint8(11);
-        if (trendType == 03) {
-          int logFileID = bdata.getInt64(1, Endian.little);
-          int sessionLength = bdata.getInt16(9, Endian.little);
-          LogHeader mLog = (
-              logFileID: logFileID,
-              sessionLength: sessionLength,
-          );
-          setState(() {
-            logTempHeaderList.add(mLog);
-          });
-
-          if (logTempHeaderList.length == tempSessionCount) {
-           // logConsole("All Temp logs Header.......$logTempHeaderList");
-            _fetchNextTempLogFile(deviceName);
-          }
-        } else if (trendType == 02) {
-          int logFileID = bdata.getInt64(1, Endian.little);
-          int sessionLength = bdata.getInt16(9, Endian.little);
-          LogHeader mLog = (
-              logFileID: logFileID,
-              sessionLength: sessionLength,
-          );
-
-          setState(() {
-            logSpo2HeaderList.add(mLog);
-          });
-
-          if (logSpo2HeaderList.length == spo2SessionCount) {
-           // logConsole("All Spo2 logs Header.......$logSpo2HeaderList");
-            _fetchNextSpo2LogFile(deviceName);
-          }
-        } else if (trendType == 04) {
-          int logFileID = bdata.getInt64(1, Endian.little);
-          int sessionLength = bdata.getInt16(9, Endian.little);
-          LogHeader mLog = (logFileID: logFileID, sessionLength: sessionLength);
-
-          setState(() {
-            logActivityHeaderList.add(mLog);
-          });
-
-          if (logActivityHeaderList.length == activitySessionCount) {
-           // logConsole("All Activity logs Header.......$logActivityHeaderList");
-            _fetchNextActivityLogFile(deviceName);
-          }
-
-        } else {
-          int logFileID = bdata.getInt64(1, Endian.little);
-          int sessionLength = bdata.getInt16(9, Endian.little);
-          LogHeader mLog = (
-              logFileID: logFileID,
-              sessionLength: sessionLength,
-          );
-          setState(() {
-            logHeaderList.add(mLog);
-          });
-
-          if (logHeaderList.length == hrSessionCount) {
-           // logConsole("All HR logs Header.......$logHeaderList");
-            _fetchNextLogFile(deviceName);
-          }
-        }
-      }
-      /***** Packet type Log Data ***/
-      else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
-
-        currentFileDataCounter += pktPayloadSize;
-        checkNoOfWrites += 1;
-
-        //logConsole("No of writes $checkNoOfWrites");
-        logConsole("Data Counter $currentFileDataCounter");
-
-        logData.addAll(value.sublist(1, value.length));
-
-        int expectedSize = 0;
-        if (isFetchingTemp) {
-          if (logTempHeaderList.isEmpty || currentTempFileIndex >= logTempHeaderList.length) {
-            //logConsole("Invalid Temp header access: Empty or index out of range.");
-            return;
-          }
-          totalFileDataCounter += pktPayloadSize;
-          expectedSize = logTempHeaderList.map((header) => header.sessionLength).reduce((a, b) => a + b);
-          expectedSize = logTempHeaderList[currentTempFileIndex].sessionLength;
-          setState(() {
-            tempProgressPercent = totalFileDataCounter / expectedSize;
-          });
-        } else if (isFetchingSpo2) {
-          if (logSpo2HeaderList.isEmpty || currentSpo2FileIndex >= logSpo2HeaderList.length) {
-            //logConsole("Invalid Spo2 header access: Empty or index out of range.");
-            return;
-          }
-          expectedSize = logSpo2HeaderList[currentSpo2FileIndex].sessionLength;
-          setState(() {
-            spo2ProgressPercent = currentFileDataCounter / expectedSize;
-          });
-        } else if (isFetchingActivity) {
-          if (logActivityHeaderList.isEmpty || currentActivityFileIndex >= logActivityHeaderList.length) {
-           // logConsole("Invalid Activity header access: Empty or index out of range.");
-            return;
-          }
-          expectedSize = logActivityHeaderList[currentActivityFileIndex].sessionLength;
-          setState(() {
-            activityProgressPercent = currentFileDataCounter / expectedSize;
-          });
-        } else {
-          if (logHeaderList.isEmpty || currentFileIndex >= logHeaderList.length) {
-            // logConsole("Invalid HR header access: Empty list.");
-            return;
-          }
-          totalFileDataCounter += pktPayloadSize;
-          expectedSize = logHeaderList.map((header) => header.sessionLength).reduce((a, b) => a + b);
-          setState(() {
-            hrProgressPercent =  totalFileDataCounter/ expectedSize;
-          });
-         /* if (logHeaderList.isEmpty || currentFileIndex >= logHeaderList.length) {
-            //logConsole("Invalid HR header access: Empty or index out of range.");
-            return;
-          }
-          expectedSize = logHeaderList[currentFileIndex].sessionLength;
-          setState(() {
-            hrProgressPercent = currentFileDataCounter / expectedSize;
-          });*/
-        }
-
-        if (isFetchingTemp) {
-          if (currentFileDataCounter >= logTempHeaderList[currentTempFileIndex].sessionLength - 1) {
-            await _writeLogDataToFile(
-              logData,
-              logTempHeaderList[currentTempFileIndex].logFileID,
-              formattedTime,
-            );
-
-            // Reset all fetch variables
-            displayPercent = 0;
-            globalDisplayPercentOffset = 0;
-            currentFileDataCounter = 0;
-            checkNoOfWrites = 0;
-            logData = [];
-
-            if (currentTempFileIndex + 1 < logTempHeaderList.length) {
-              currentTempFileIndex++;
-              setState(() {
-                tempProgressPercent = 0.0;
-                logData = [];
-              });
-              _fetchNextTempLogFile(deviceName);
-            } else {
-             // logConsole("All temp files have been fetched.");
-              _fetchNextTempLogFile(deviceName);
-              setState((){
-                isFetchingTempComplete = true;
-              });
-              _checkAllFetchesComplete(deviceName);
-            }
-          } else {
-           // logConsole("Invalid index or condition not met: currentFileIndex=$currentTempFileIndex",);
-          }
-        } else if (isFetchingSpo2) {
-          if (currentFileDataCounter >=
-              logSpo2HeaderList[currentSpo2FileIndex].sessionLength - 1) {
-            await _writeSpo2LogDataToFile(
-              logData,
-              logSpo2HeaderList[currentSpo2FileIndex].logFileID,
-              "SPO2",
-            );
-
-            // Reset all fetch variables
-            displayPercent = 0;
-            globalDisplayPercentOffset = 0;
-            currentFileDataCounter = 0;
-            checkNoOfWrites = 0;
-            logData = [];
-
-            if (currentSpo2FileIndex + 1 < logSpo2HeaderList.length) {
-              currentSpo2FileIndex++;
-              setState(() {
-                spo2ProgressPercent = 0.0;
-                logData = [];
-              });
-              _fetchNextSpo2LogFile(deviceName);
-            } else {
-             // logConsole("All Spo2 files have been fetched.");
-              _fetchNextSpo2LogFile(deviceName);
-              setState((){
-                isFetchingSpo2Complete = true;
-              });
-              _checkAllFetchesComplete(deviceName);
-            }
-          } else {
-           // logConsole("Invalid index or condition not met: currentFileIndex=$currentSpo2FileIndex",);
-          }
-        } else if (isFetchingActivity) {
-          if (currentFileDataCounter >=
-              logActivityHeaderList[currentActivityFileIndex].sessionLength -
-                  1) {
-            await _writeSpo2LogDataToFile(
-              logData,
-              logActivityHeaderList[currentActivityFileIndex].logFileID,
-              "Count",
-            );
-
-            // Reset all fetch variables
-            displayPercent = 0;
-            globalDisplayPercentOffset = 0;
-            currentFileDataCounter = 0;
-            checkNoOfWrites = 0;
-            logData = [];
-
-            if (currentActivityFileIndex + 1 < logActivityHeaderList.length) {
-              currentActivityFileIndex++;
-              setState(() {
-                activityProgressPercent = 0.0;
-                logData = [];
-              });
-              _fetchNextActivityLogFile(deviceName);
-            } else {
-              //logConsole("All Activity files have been fetched.");
-              //_fetchNextActivityLogFile(deviceName);
-              setState((){
-                isFetchingActivityComplete = true;
-
-              });
-              _checkAllFetchesComplete(deviceName);
-            }
-          } else {
-           // logConsole("Invalid index or condition not met: currentFileIndex=$currentActivityFileIndex",);
-          }
-        } else {
-          if (currentFileDataCounter >=
-              logHeaderList[currentFileIndex].sessionLength - 1) {
-            await _writeLogDataToFile(
-              logData,
-              logHeaderList[currentFileIndex].logFileID,
-              formattedTime,
-            );
-
-            // Reset all fetch variables
-            displayPercent = 0;
-            globalDisplayPercentOffset = 0;
-            //currentFileDataCounter = 0;
-            checkNoOfWrites = 0;
-            logData = [];
-
-            if (currentFileIndex + 1 < logHeaderList.length) {
-              currentFileIndex++;
-              setState(() {
-                //hrProgressPercent = 0.0;
-                logData = [];
-              });
-              _fetchNextLogFile(deviceName);
-            } else {
-              //logConsole("All HR files have been fetched. Starting Temp file fetching...",);
-              _fetchNextLogFile(deviceName);
-              setState((){
-                isFetchingHRComplete = true;
-              });
-              _checkAllFetchesComplete(deviceName);
-            }
-          } else {
-           // logConsole("Invalid index or condition not met: currentFileIndex=$currentFileIndex",);
-          }
-        }
-      }
-    });
-
-    // cleanup: cancel subscription when disconnected
-    deviceName.cancelWhenDisconnected(_streamDataSubscription);
-
-  }*/
-
   Future<void> _startListeningData(
       BluetoothDevice deviceName,
       int expectedLength,
@@ -786,6 +424,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     logConsole("Started listening....");
 
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((value) async {
+      //logConsole("Data Rx: $value");
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
 
@@ -826,12 +465,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
               tempSessionCount = sessionCount;
               if (tempSessionCount == 0) {
                 isFetchingTempComplete = true;
-                isFetchingTemp = false;
-                isFetchingActivity = true;
-                Future.delayed(Duration(seconds: 2), () async {
-                  await _fetchLogCount(context, deviceName, hPi4Global.ActivityTrend);
-                  await _fetchLogIndex(context, deviceName, hPi4Global.ActivityTrend);
-                });
               }
               break;
 
@@ -839,6 +472,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
               activitySessionCount = sessionCount;
               if (activitySessionCount == 0) {
                 isFetchingActivityComplete = true;
+                isFetchingTemp = true;
+                isFetchingActivity = false;
+                Future.delayed(Duration(seconds: 2), () async {
+                  await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
+                  await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
+                });
               }
               break;
           }
@@ -882,6 +521,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
         int pktPayloadSize = value.length - 1;
         currentFileDataCounter += pktPayloadSize;
         checkNoOfWrites += 1;
+
+        logConsole("Data Counter $currentFileDataCounter");
 
         if (isFetchingHR) {
           logData.addAll(value.sublist(1));
@@ -965,15 +606,19 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
       if (fileDate == todayDate) {
         logConsole("Today's file detected with ID $logFileID. Always downloading...",);
-        await _fetchLogFile(
-          deviceName,
-          logFileID,
-          logHeaderList[currentFileIndex].sessionLength,
-          hPi4Global.HrTrend,
-        );
+        if(isFetchingTodayHR == false){
+          await _fetchLogFile(
+            deviceName,
+            logFileID,
+            logHeaderList[currentFileIndex].sessionLength,
+            hPi4Global.HrTrend,
+          );
+        }
+        setState(() {
+          isFetchingTodayHR = true;
+        });
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "hr");
-
         if (fileExists) {
           logConsole("File with ID $logFileID already exists. Skipping...");
         } else {
@@ -995,23 +640,23 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All files have been processed.");
       currentFileIndex--;
 
-        Future.delayed(Duration(seconds: 2), () async {
-          setState(() {
-            totalFileDataCounter = 0;
-            isFetchingHRComplete = true;
-            isFetchingHR = false;
-            isFetchingSpo2 = true;
-            isFetchingActivity = false;
-            isFetchingTemp = false;
-          });
+      Future.delayed(Duration(seconds: 2), () async {
+        setState(() {
+          totalFileDataCounter = 0;
+          isFetchingHRComplete = true;
+          isFetchingHR = false;
+          isFetchingSpo2 = true;
+          isFetchingActivity = false;
+          isFetchingTemp = false;
         });
-        _checkAllFetchesComplete(deviceName);
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
-        });
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
-        });
+      });
+      _checkAllFetchesComplete(deviceName);
+      Future.delayed(Duration(seconds: 2), () async {
+        await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
+      });
+      Future.delayed(Duration(seconds: 2), () async {
+        await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
+      });
     }
   }
 
@@ -1031,15 +676,20 @@ class _SyncingScreenState extends State<SyncingScreen> {
         logConsole(
           "Today's Spo2 file detected with ID $logFileID. Always downloading...",
         );
-        await _fetchLogFile(
-          deviceName,
-          logFileID,
-          logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
-          hPi4Global.Spo2Trend,
-        );
+        if(isFetchingTodaySpo2 == false){
+          await _fetchLogFile(
+            deviceName,
+            logFileID,
+            logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
+            hPi4Global.Spo2Trend,
+          );
+        }
+        setState(() {
+          isFetchingTodaySpo2 = true;
+        });
+
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "spo2");
-
         if (fileExists) {
           logConsole(
             "spo2 file with ID $logFileID already exists. Skipping...",
@@ -1063,30 +713,30 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All spo2 files have been processed.");
       currentSpo2FileIndex--;
 
-        Future.delayed(Duration(seconds: 2), () async {
-          setState(() {
-            isFetchingSpo2Complete = true;
-            isFetchingHR = false;
-            isFetchingSpo2 = false;
-            isFetchingTemp = true;
-            isFetchingActivity = false;
-          });
+      Future.delayed(Duration(seconds: 2), () async {
+        setState(() {
+          isFetchingSpo2Complete = true;
+          isFetchingHR = false;
+          isFetchingSpo2 = false;
+          isFetchingTemp = false;
+          isFetchingActivity = true;
         });
-        _checkAllFetchesComplete(deviceName);
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogCount(
-            context,
-            deviceName,
-            hPi4Global.TempTrend,
-          );
-        });
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogIndex(
-            context,
-            deviceName,
-            hPi4Global.TempTrend,
-          );
-        });
+      });
+      _checkAllFetchesComplete(deviceName);
+      Future.delayed(Duration(seconds: 2), () async {
+        await _fetchLogCount(
+          context,
+          deviceName,
+          hPi4Global.ActivityTrend,
+        );
+      });
+      Future.delayed(Duration(seconds: 2), () async {
+        await _fetchLogIndex(
+          context,
+          deviceName,
+          hPi4Global.ActivityTrend,
+        );
+      });
 
     }
   }
@@ -1106,12 +756,18 @@ class _SyncingScreenState extends State<SyncingScreen> {
       if (fileDate == todayDate) {
         logConsole("Today's Temp file detected with ID $logFileID. Always downloading...",
         );
-        await _fetchLogFile(
-          deviceName,
-          logFileID,
-          logTempHeaderList[currentTempFileIndex].sessionLength,
-          hPi4Global.TempTrend,
-        );
+        if(isFetchingTodayTemp == false){
+          await _fetchLogFile(
+            deviceName,
+            logFileID,
+            logTempHeaderList[currentTempFileIndex].sessionLength,
+            hPi4Global.TempTrend,
+          );
+        }
+        setState(() {
+          isFetchingTodayTemp = true;
+        });
+
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "temp");
 
@@ -1138,22 +794,16 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All Temperature files have been processed.");
       currentTempFileIndex--;
 
-      Future.delayed(Duration(seconds: 3), () async {
+      Future.delayed(Duration(seconds: 8), () async {
         setState(() {
           totalFileDataCounter = 0;
           isFetchingTempComplete = true;
           isFetchingHR = false;
           isFetchingTemp = false;
           isFetchingSpo2 = false;
-          isFetchingActivity = true;
+          isFetchingActivity = false;
         });
-      });
-      _checkAllFetchesComplete(deviceName);
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogCount(context, deviceName, hPi4Global.ActivityTrend);
-      });
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogIndex(context, deviceName, hPi4Global.ActivityTrend);
+        _checkAllFetchesComplete(deviceName);
       });
 
     }
@@ -1175,12 +825,18 @@ class _SyncingScreenState extends State<SyncingScreen> {
         logConsole(
           "Today's Activity file detected with ID $logFileID. Always downloading...",
         );
-        await _fetchLogFile(
-          deviceName,
-          logFileID,
-          logActivityHeaderList[currentActivityFileIndex].sessionLength,
-          hPi4Global.ActivityTrend,
-        );
+        if(isFetchingTodayActivity == false){
+          await _fetchLogFile(
+            deviceName,
+            logFileID,
+            logActivityHeaderList[currentActivityFileIndex].sessionLength,
+            hPi4Global.ActivityTrend,
+          );
+        }
+        setState(() {
+          isFetchingTodayActivity = true;
+        });
+
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "activity");
 
@@ -1210,10 +866,16 @@ class _SyncingScreenState extends State<SyncingScreen> {
           isFetchingActivityComplete = true;
           isFetchingHR = false;
           isFetchingSpo2 = false;
-          isFetchingTemp = false;
+          isFetchingTemp = true;
           isFetchingActivity = false;
         });
         _checkAllFetchesComplete(deviceName);
+        Future.delayed(Duration(seconds: 2), () async {
+          await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
+        });
+        Future.delayed(Duration(seconds: 2), () async {
+          await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
+        });
       });
 
     }
@@ -1284,7 +946,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         isFetchingTempComplete &&
         isFetchingSpo2Complete &&
         isFetchingActivityComplete) {
-     // logConsole("disconnected..............");
+      // logConsole("disconnected..............");
       onDisconnectPressed();
       //Navigator.pop(context);
       Navigator.push(
@@ -1295,39 +957,39 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Widget displayCloseandCancel(){
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-        child:  ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+      child:  ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          onPressed:(){
-            onDisconnectPressed();
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Icons.cancel, color: Colors.white),
-                const Text(
-                  ' Cancel ',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-                Spacer(),
-              ],
-            ),
+          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+        ),
+        onPressed:(){
+          onDisconnectPressed();
+          Navigator.of(
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.cancel, color: Colors.white),
+              const Text(
+                ' Cancel ',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+              Spacer(),
+            ],
           ),
         ),
-      );
+      ),
+    );
 
   }
 
@@ -1366,7 +1028,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Widget showTempProgress(){
-    if(isFetchingSpo2Complete){
+    if(isFetchingActivityComplete){
       return SizedBox(
         height: SizeConfig.blockSizeVertical * 15,
         width: SizeConfig.blockSizeHorizontal * 95,
@@ -1385,7 +1047,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Widget showActivityProgress(){
-    if(isFetchingTempComplete){
+    if(isFetchingSpo2Complete){
       return SizedBox(
         height: SizeConfig.blockSizeVertical * 15,
         width: SizeConfig.blockSizeHorizontal * 95,
@@ -1413,13 +1075,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
         appBar: AppBar(
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: (){
-              onDisconnectPressed();
-              Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-            }
+              icon: Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: (){
+                onDisconnectPressed();
+                Navigator.of(
+                  context,
+                ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+              }
           ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1453,10 +1115,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
                   SizedBox(height: 10),
                   showSpo2Progress(),
                   SizedBox(height: 10),
-                  showTempProgress(),
-                  SizedBox(height: 10),
                   showActivityProgress(),
                   SizedBox(height: 20),
+                  showTempProgress(),
+                  SizedBox(height: 10),
                   displayCloseandCancel(),
                 ],
               ),
@@ -1482,44 +1144,44 @@ class TrendProgressIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       color: Colors.grey[900],
-        child: Padding(
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label == "All files fetched"
-                ? label
-                : "Fetching $label data...",
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 10),
-          if (label != "All files fetched")
-            SizedBox(
-              height: 10, // Adjust this value to increase or decrease height
-              child: LinearProgressIndicator(
-                value: progress > 0 ? progress : null,
-                valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
-                backgroundColor: Colors.white24,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label == "All files fetched"
+                  ? label
+                  : "Fetching $label data...",
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
               ),
             ),
-          const SizedBox(height: 10),
-          Text(
-            progress > 0
-                ? "${(progress * 100).toStringAsFixed(1)}% completed"
-                : "...",
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white,
+            const SizedBox(height: 10),
+            if (label != "All files fetched")
+              SizedBox(
+                height: 10, // Adjust this value to increase or decrease height
+                child: LinearProgressIndicator(
+                  value: progress > 0 ? progress : null,
+                  valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                  backgroundColor: Colors.white24,
+                ),
+              ),
+            const SizedBox(height: 10),
+            Text(
+              progress > 0
+                  ? "${(progress * 100).toStringAsFixed(1)}% completed"
+                  : "...",
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
         ),
+      ),
     );
   }
 }
