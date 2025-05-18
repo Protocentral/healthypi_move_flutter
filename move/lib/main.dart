@@ -8,7 +8,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   runApp(
-    MaterialApp(
+     MaterialApp(
         title: 'HealthyPi',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

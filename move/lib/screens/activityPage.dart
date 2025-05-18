@@ -379,8 +379,6 @@ class _ActivityPageState extends State<ActivityPage>
           int timestamp = int.parse(row[0]);
           int count = int.parse(row[1]);
 
-          print("from file...."+ count.toString());
-
           // Convert timestamp to DateTime and group by the specified format
           var dateTime =
           DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
@@ -407,7 +405,8 @@ class _ActivityPageState extends State<ActivityPage>
       setState(() {
         ActivityTrendsData.add(ActivityTrends(formattedDateTime, stats['count']!),);
       });
-      print(" $group, Count: $stats['count']");
+      print(" $group, Count: $stats");
+
     });
 
     // Update the last aggregated values
@@ -416,6 +415,7 @@ class _ActivityPageState extends State<ActivityPage>
 
       setState(() {
         lastUpdatedTime = DateTime.parse(lastGroup);
+        Count = groupedStats[lastGroup]!['count']!;
       });
       saveValue(lastUpdatedTime, Count);
     }

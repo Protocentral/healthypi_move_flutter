@@ -971,7 +971,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                     width: 150, // Provide a fixed width for the progress bar
                                     child: LinearProgressIndicator(
                                       //value: progress.toDouble() > 0 ? progress.toDouble() : null,
-                                      value: progress.toDouble(),
+                                      value: (progress/100).toDouble(),
                                       valueColor:
                                           const AlwaysStoppedAnimation<Color>(
                                             hPi4Global.hpi4Color,
