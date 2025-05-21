@@ -7,8 +7,8 @@ class hPi4Global {
   static const String UUID_SERV_HR = "0000180d-0000-1000-8000-00805f9b34fb";
   static const String UUID_SERV_SPO2 = "00001822-0000-1000-8000-00805f9b34fb";
 
-  static const String UUID_SERV_PPG_RESP = "cd5c7491-4448-7db8-ae4c-d1da8cba36d0";
-  static const String UUID_CHAR_HRV = "cd5ca86f-4448-7db8-ae4c-d1da8cba36d0";
+  static const String UUID_SERV_PPG = "cd5c7491-4448-7db8-ae4c-d1da8cba36d0";
+  static const String UUID_CHAR_FINGERPPG = "cd5ca86f-4448-7db8-ae4c-d1da8cba36d0";
   static const String UUID_CHAR_PPG = "cd5c1525-4448-7db8-ae4c-d1da8cba36d0";
 
   static const String UUID_SERVICE_CMD = "01bf7492-970f-8d96-d44d-9023c47faddc";
@@ -17,7 +17,7 @@ class hPi4Global {
 
   static const String UUID_ECG_SERVICE = "00001122-0000-1000-8000-00805f9b34fb";
   static const String UUID_ECG_CHAR = "00001424-0000-1000-8000-00805f9b34fb";
-  static const String UUID_RESP_CHAR = "babe4a4c-7789-11ed-a1eb-0242ac120002";
+  static const String UUID_GSR_CHAR = "babe4a4c-7789-11ed-a1eb-0242ac120002";
 
   static const String UUID_SERV_STREAM_2 =
       "cd5c7491-4448-7db8-ae4c-d1da8cba36d0";

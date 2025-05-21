@@ -395,6 +395,52 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget liveViewButton(){
+    return Card(
+      color: Colors.grey[900],
+      child: Padding(
+        padding:const EdgeInsets.all(8.0),
+        child: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+              child:  ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color, // background color
+                  foregroundColor: Colors.white, // text color
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+                ),
+                onPressed: (){
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"3")),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                     // Icon(Icons.search, color: Colors.white),
+                      const Text(
+                        ' Live View ',
+                        style: TextStyle(fontSize: 16, color: Colors.white),
+                      ),
+                      Spacer(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
@@ -463,6 +509,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
                 ),
+                SizedBox(height: 10),
+                SizedBox(
+                  //height: SizeConfig.blockSizeVertical * 42,
+                  width: SizeConfig.blockSizeHorizontal * 90,
+                  child: liveViewButton(),
+                ),
+
+
               ],
             ),
           ),

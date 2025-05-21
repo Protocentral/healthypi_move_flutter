@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_syncing.dart';
+import 'package:move/screens/streamSelectionPage.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
@@ -19,11 +20,9 @@ import '../widgets/scan_result_tile.dart';
 import '../widgets/system_device_tile.dart';
 import 'scr_device.dart';
 
-//typedef LogHeader = ({int logFileID, int sessionLength});
-
 class ScrScan extends StatefulWidget {
   const ScrScan({super.key, required this.tabIndex});
-  
+
   final String tabIndex;
 
   @override
@@ -64,13 +63,54 @@ class _ScrScanState extends State<ScrScan> {
   List<int> currentFileData = [];
   List<int> logData = [];
 
+  bool _autoConnecting = false;
+
+  Future<String?> getPairedDeviceMac() async {
+    try {
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+      final File macFile = File(filePath);
+      if (!await macFile.exists()) return null;
+      return (await macFile.readAsString()).trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _tryAutoConnectToPairedDevice() async {
+    String? pairedMac = await getPairedDeviceMac();
+    if (pairedMac != null && pairedMac.isNotEmpty) {
+      setState(() => _autoConnecting = true);
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      StreamSubscription? tempSub;
+      tempSub = FlutterBluePlus.scanResults.listen((results) async {
+        for (var result in results) {
+          if (result.device.id.id == pairedMac) {
+            await FlutterBluePlus.stopScan();
+            await tempSub?.cancel();
+            setState(() => _autoConnecting = false);
+            await onConnectPressed(result.device);
+            return;
+          }
+        }
+      });
+      // Timeout fallback
+      await Future.delayed(const Duration(seconds: 10), () async {
+        await FlutterBluePlus.stopScan();
+        await tempSub?.cancel();
+        if (mounted) setState(() => _autoConnecting = false);
+      });
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
 
     _adapterStateStateSubscription = FlutterBluePlus.adapterState.listen((
-      state,
-    ) {
+        state,
+        ) {
       _adapterState = state;
       if (mounted) {
         setState(() {
@@ -80,7 +120,7 @@ class _ScrScanState extends State<ScrScan> {
     });
 
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
+          (results) {
         print("HPI: Scan Results: $results");
         if (mounted) {
           setState(() => _scanResults = results);
@@ -96,6 +136,9 @@ class _ScrScanState extends State<ScrScan> {
         setState(() => _isScanning = state);
       }
     });
+
+    _tryAutoConnectToPairedDevice();
+
   }
 
   @override
@@ -133,12 +176,6 @@ class _ScrScanState extends State<ScrScan> {
         timeout: const Duration(seconds: 15),
         withServices: [],
         withNames: ['healthypi move'],
-        /*webOptionalServices: [
-          Guid("180f"), // battery
-          Guid("180a"), // device info
-          Guid("1800"), // generic access
-          Guid("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // Nordic UART
-        ],*/
       );
     } catch (e, backtrace) {
       Snackbar.show(
@@ -199,20 +236,26 @@ class _ScrScanState extends State<ScrScan> {
       _connectionState = state;
 
       final subscription = device.mtu.listen((int mtu) {
-        // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
         print("mtu $mtu");
       });
 
-      // cleanup: cancel subscription when disconnected
       device.cancelWhenDisconnected(subscription);
 
-      // You can also manually change the mtu yourself.
       if (!kIsWeb && Platform.isAndroid) {
         device.requestMtu(512);
       }
 
       if (_connectionState == BluetoothConnectionState.connected) {
-        showPairDeviceDialog(context, device);
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        setState(() {
+
+        });
+        if(_autoConnecting == false){
+          showPairDeviceDialog(context, device);
+        }else{
+
+        }
+
         /*if(widget.tabIndex == "1"){
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -223,7 +266,14 @@ class _ScrScanState extends State<ScrScan> {
           showLoadingIndicator("Connected. Erasing the data...", context);
           await subscribeToChar(device);
           _eraseAllLogs(context, device);
-        }else{
+        }else if(widget.tabIndex == "3"){
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => LiveStreamsOptions(device: device),
+            ),
+          );
+        }
+        else{
 
         }*/
       }
@@ -275,7 +325,6 @@ class _ScrScanState extends State<ScrScan> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
           ),
           onPressed: onStopPressed,
           child: Padding(
@@ -297,7 +346,6 @@ class _ScrScanState extends State<ScrScan> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
           ),
           onPressed: onScanPressed,
           child: Padding(
@@ -320,58 +368,59 @@ class _ScrScanState extends State<ScrScan> {
   }
 
   Widget _buildScanCard(BuildContext context) {
-      return Card(
-        color: Colors.grey[800],
+    // --- Auto-Connect UI ---
+    if (_autoConnecting) {
+      return Center(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(40),
           child: Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'Select the device',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              buildScanButton(context),
-              ..._buildScanResultTiles(context),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text("Connecting to your paired device...",
+                  style: TextStyle(color: Colors.white)),
             ],
           ),
         ),
       );
-  }
+    }
+    // --- End Auto-Connect UI ---
 
-  List<Widget> _buildSystemDeviceTiles(BuildContext context) {
-    return _systemDevices
-        .map(
-          (d) => SystemDeviceTile(
-            device: d,
-            onOpen:
-                () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => DeviceScreen(device: d),
-                    settings: RouteSettings(name: '/DeviceScreen'),
-                  ),
+    return Card(
+      color: Colors.grey[800],
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Select the device',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
-            onConnect: () => onConnectPressed(d),
-          ),
-        )
-        .toList();
+                textAlign: TextAlign.center,
+              ),
+            ),
+            buildScanButton(context),
+            ..._buildScanResultTiles(context),
+          ],
+        ),
+      ),
+    );
   }
 
   List<Widget> _buildScanResultTiles(BuildContext context) {
     return _scanResults
         .map(
           (r) => ScanResultTile(
-            result: r,
-            onTap: () => onConnectPressed(r.device),
-          ),
-        )
+        result: r,
+        onTap: () => onConnectPressed(r.device),
+      ),
+    )
         .toList();
   }
 
@@ -399,35 +448,33 @@ class _ScrScanState extends State<ScrScan> {
           child: AlertDialog(
             title: Row(
               children: [
-                //Icon(Icons.check_circle, color: Colors.green),
                 SizedBox(width: 10),
                 Text('Do you wish to pair the device ?',
                   style: TextStyle(
                     fontSize: 18,
-                    //fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
               ],
             ),
             content: Text(
-              '  Please click "Yes" to pair',
+              ' Please click "Yes" to pair',
               style: TextStyle(fontSize: 16, color: Colors.white),
             ),
             actions: [
               TextButton(
                 onPressed: () async{
-                  // Write the device MAC address to a file in the application directory
                   try {
-                    // Get the app directory
                     final Directory appDocDir = await getApplicationDocumentsDirectory();
                     final String filePath = '${appDocDir.path}/paired_device_mac.txt';
-
-                    // Write the MAC address (device.id.id is the MAC in flutter_blue_plus)
                     final File macFile = File(filePath);
                     await macFile.writeAsString(device.id.id);
                     logConsole("...........Paired status saved");
-                    Navigator.pop(context); // Close the dialog
+                    SharedPreferences prefs = await SharedPreferences.getInstance();
+                    setState((){
+                      prefs.setString('pairedStatus','paired');
+                    });
+                    Navigator.pop(context);
                     if(widget.tabIndex == "1"){
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -438,15 +485,18 @@ class _ScrScanState extends State<ScrScan> {
                       showLoadingIndicator("Connected. Erasing the data...", context);
                       await subscribeToChar(device);
                       _eraseAllLogs(context, device);
-                    }else{
+                    } else if(widget.tabIndex == "3"){
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => LiveStreamsOptions(device: device),
+                        ),
+                      );
+                    }
+                    else{
 
                     }
                   } catch (e) {
-                    // Handle errors, e.g., show error message
                   }
-
-
-
                 },
                 child: Text(
                   'Yes',
@@ -459,7 +509,7 @@ class _ScrScanState extends State<ScrScan> {
               ),
               TextButton(
                 onPressed: () async {
-                  Navigator.pop(context); // Close the dialog
+                  Navigator.pop(context);
                   if(widget.tabIndex == "1"){
                     Navigator.of(context).push(
                       MaterialPageRoute(
@@ -470,7 +520,14 @@ class _ScrScanState extends State<ScrScan> {
                     showLoadingIndicator("Connected. Erasing the data...", context);
                     await subscribeToChar(device);
                     _eraseAllLogs(context, device);
-                  }else{
+                  }else if(widget.tabIndex == "3"){
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => LiveStreamsOptions(device: device),
+                      ),
+                    );
+                  }
+                  else{
 
                   }
                 },
@@ -492,12 +549,11 @@ class _ScrScanState extends State<ScrScan> {
 
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
-    // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
+        in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             await dataCharacteristic?.setNotifyValue(true);
@@ -509,19 +565,18 @@ class _ScrScanState extends State<ScrScan> {
   }
 
   Future<void> _sendCommand(
-    List<int> commandList,
-    BluetoothDevice deviceName,
-  ) async {
+      List<int> commandList,
+      BluetoothDevice deviceName,
+      ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
 
-    // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
+        in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -531,9 +586,7 @@ class _ScrScanState extends State<ScrScan> {
     }
 
     if (commandService != null && commandCharacteristic != null) {
-      // Write to the characteristic
       await commandCharacteristic?.write(commandList, withoutResponse: true);
-      //logConsole('Data written: $commandList');
     }
   }
 
@@ -559,7 +612,6 @@ class _ScrScanState extends State<ScrScan> {
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
-     // key: Snackbar.snackBarKeyB,
       child: Scaffold(
         backgroundColor: hPi4Global.appBackgroundColor,
         appBar: AppBar(
@@ -580,14 +632,13 @@ class _ScrScanState extends State<ScrScan> {
                 fit: BoxFit.fitWidth,
                 height: 30,
               ),
-
               const Text('Find Devices', style: hPi4Global.movecardTextStyle),
             ],
           ),
         ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
-            child: ListView(
+          child: ListView(
             shrinkWrap: true,
             children: <Widget>[
               Column(
