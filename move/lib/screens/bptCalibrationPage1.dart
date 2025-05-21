@@ -3,9 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:flutter/foundation.dart';
-
-import 'package:intl/intl.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/utils/extra.dart';
@@ -13,8 +10,6 @@ import 'package:move/utils/extra.dart';
 import '../globals.dart';
 import '../home.dart';
 import '../sizeConfig.dart';
-import 'package:fl_chart/fl_chart.dart';
-
 import '../utils/snackbar.dart';
 import '../widgets/scan_result_tile.dart';
 
@@ -57,6 +52,8 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   bool _showScanCard = true;
   bool _showOnSuccessCal = false;
 
+  bool startListeningFlag = false;
+
   @override
   void initState() {
     super.initState();
@@ -98,10 +95,6 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     _streamDataSubscription.cancel();
     FlutterBluePlus.stopScan();
     super.dispose();
-  }
-
-  void logConsole(String logString) async {
-    print("[HPI] $logString");
   }
 
   Future onScanPressed() async {
@@ -250,7 +243,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
   void showSuccessDialog(BuildContext context, String titleMessage, String message, Icon customIcon) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogContext) {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
@@ -278,7 +271,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             actions: [
               TextButton(
                 onPressed: () {
-                  Navigator.pop(context); // Close the dialog
+                  Navigator.pop(dialogContext); // Close the dialog
                   //sendEndCalibration(context, Connecteddevice, 'success');
                 },
                 child: Text(
@@ -304,6 +297,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
 
   Future<void> _startListeningData(BluetoothDevice deviceName) async {
     logConsole("Started listening....");
+    startListeningFlag = true;
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
       value,
     ) async {
@@ -358,42 +352,45 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     BluetoothDevice deviceName,
   ) async {
     logConsole("Send start calibration command initiated");
-    await _startListeningData(deviceName);
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandPacket = [];
-      String userInput1 = _systolicController.text;
-      String userInput2 = _diastolicController.text;
-      List<int> userCommandData = [];
-      List<int> userCommandData1 = [];
-      List<int> calIndex = [];
-      calIndex = [index];
-      // Convert the user input string to an integer list (if applicable)
-      if (userInput1.isNotEmpty) {
-        userCommandData =
-            userInput1.split(',').map((e) => int.parse(e.trim())).toList();
-      } else {
-        userCommandData = [0];
-      }
-      if (userInput2.isNotEmpty) {
-        userCommandData1 =
-            userInput2.split(',').map((e) => int.parse(e.trim())).toList();
-      } else {
-        userCommandData1 = [0];
-      }
+    if(startListeningFlag == true) {
+      _streamDataSubscription.cancel();
+    }
+      await _startListeningData(deviceName);
+      await Future.delayed(Duration(seconds: 2), () async {
+        List<int> commandPacket = [];
+        String userInput1 = _systolicController.text;
+        String userInput2 = _diastolicController.text;
+        List<int> userCommandData = [];
+        List<int> userCommandData1 = [];
+        List<int> calIndex = [];
+        calIndex = [index];
+        // Convert the user input string to an integer list (if applicable)
+        if (userInput1.isNotEmpty) {
+          userCommandData =
+              userInput1.split(',').map((e) => int.parse(e.trim())).toList();
+        } else {
+          userCommandData = [0];
+        }
+        if (userInput2.isNotEmpty) {
+          userCommandData1 =
+              userInput2.split(',').map((e) => int.parse(e.trim())).toList();
+        } else {
+          userCommandData1 = [0];
+        }
 
-      commandPacket.addAll(hPi4Global.StartBPTCal);
-      commandPacket.addAll(userCommandData);
-      commandPacket.addAll(userCommandData1);
-      commandPacket.addAll(calIndex);
+        commandPacket.addAll(hPi4Global.StartBPTCal);
+        commandPacket.addAll(userCommandData);
+        commandPacket.addAll(userCommandData1);
+        commandPacket.addAll(calIndex);
 
-      await _sendCommand(commandPacket, deviceName);
-      logConsole(commandPacket.toString());
-      setState(() {
-        _showcalibrationprogress = true;
+        await _sendCommand(commandPacket, deviceName);
+        logConsole(commandPacket.toString());
+        setState(() {
+          _showcalibrationprogress = true;
+        });
+        Navigator.pop(context);
       });
-      Navigator.pop(context);
-    });
-  }
+    }
 
   Future<void> sendEndCalibration(
       BuildContext context,
@@ -796,6 +793,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
+                              enabled: !_showcalibrationprogress,
                               keyboardType:
                                   TextInputType
                                       .number, // Sets the keyboard type for numeric input
@@ -835,6 +833,7 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                               ),
+                              enabled: !_showcalibrationprogress,
                               keyboardType:
                                   TextInputType
                                       .number, // Sets the keyboard type for numeric input
@@ -871,24 +870,29 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
                           ),
                         ),
                         onPressed: () async {
-                          FocusScope.of(context).unfocus();
-                          if (_formKey.currentState!.validate()) {
-                            showLoadingIndicator(
-                              "Sending start calibration...",
-                              context,
-                            );
-                            await FlutterBluePlus.stopScan();
-                            await subscribeToChar(Connecteddevice);
-                           // _sendCurrentDateTime(Connecteddevice);
-                            Future.delayed(Duration(seconds: 2), () async {
-                              await sendStartCalibration(
+                          if(_showcalibrationprogress == false){
+                            FocusScope.of(context).unfocus();
+                            if (_formKey.currentState!.validate()) {
+                              showLoadingIndicator(
+                                "Sending start calibration...",
                                 context,
-                                Connecteddevice,
                               );
-                            });
-                          } else {
-                            // Input is invalid, show errors
+                              await FlutterBluePlus.stopScan();
+                              await subscribeToChar(Connecteddevice);
+                              // _sendCurrentDateTime(Connecteddevice);
+                              Future.delayed(Duration(seconds: 2), () async {
+                                await sendStartCalibration(
+                                  context,
+                                  Connecteddevice,
+                                );
+                              });
+                            } else {
+                              // Input is invalid, show errors
+                            }
+                          }else{
+                            null;
                           }
+
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
@@ -1058,6 +1062,36 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
     }
   }
 
+  void logConsole(String logString) async {
+    print("AKW - " + logString);
+    debugText += logString;
+    debugText += "\n";
+  }
+
+  String debugText = "Console Inited...";
+
+  Widget _buildDebugConsole() {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: SingleChildScrollView(
+        child: SizedBox(
+          height: 150, // 8 lines of text approximately
+          width: SizeConfig.blockSizeHorizontal * 88,
+          child: SingleChildScrollView(
+            child: Text(
+              debugText,
+              style: TextStyle(
+                fontSize: 12,
+                color: hPi4Global.hpi4AppBarIconsColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
@@ -1107,6 +1141,24 @@ class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
             showCalibrationCard(),
             //SizedBox(height: 20),
             //_showCancelButton(),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Card(
+                color: Colors.grey[900],
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.max,
+                    children: <Widget>[
+                      _buildDebugConsole(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           ],
         ),
       ),

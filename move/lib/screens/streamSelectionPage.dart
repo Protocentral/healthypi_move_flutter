@@ -1,33 +1,44 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/bptCalibrationPage1.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:move/utils/extra.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/sizeConfig.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
 
-class DevicePage extends StatefulWidget {
-  const DevicePage({super.key});
+import '../home.dart';
+import '../utils/snackbar.dart';
+import 'liveStream.dart';
+
+class LiveStreamsOptions extends StatefulWidget {
+  const LiveStreamsOptions({super.key,required this.device,});
+
+  final BluetoothDevice device;
 
   @override
-  _DevicePageState createState() => _DevicePageState();
+  _LiveStreamsOptionsState createState() => _LiveStreamsOptionsState();
 }
 
-class _DevicePageState extends State<DevicePage> {
-  String selectedOption = "sync";
+class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
 
   @override
   void initState() {
     super.initState();
+
+    SystemChrome.setPreferredOrientations(
+        [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+
+    });
   }
 
   @override
@@ -55,95 +66,18 @@ class _DevicePageState extends State<DevicePage> {
 
   String debugText = "Console Inited...";
 
-  Widget _buildDebugConsole() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: SingleChildScrollView(
-        child: SizedBox(
-          height: 150, // 8 lines of text approximately
-          width: SizeConfig.blockSizeHorizontal * 88,
-          child: SingleChildScrollView(
-            child: Text(
-              debugText,
-              style: TextStyle(
-                fontSize: 12,
-                color: hPi4Global.hpi4AppBarIconsColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  // reset the stored value
-  _resetStoredValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      prefs.setString('lastSynced','0');
-      prefs.setString('latestHR','0');
-      prefs.setString('latestTemp','0');
-      prefs.setString('latestSpo2','0');
-      prefs.setString('latestActivityCount','0');
-      prefs.setString('lastUpdatedHR','0');
-      prefs.setString('lastUpdatedTemp','0');
-      prefs.setString('lastUpdatedSpo2','0');
-      prefs.setString('lastUpdatedActivity','0');
-      prefs.setString('fetchStatus','0');
-    });
-  }
-
- showConfirmationDialog(BuildContext context, String action) {
-    return showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
-          ),
-          child: AlertDialog(
-
-            title: Text('Are you sure you wish to delete all data.',
-                style:TextStyle(fontSize: 18, color: Colors.white)),
-            content: Text('This action is not reversible.',
-                style:TextStyle(fontSize: 16, color: Colors.red)),
-            actions: <Widget>[
-              TextButton(
-                child: const Text('Yes',
-                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
-                onPressed: () {
-                  if(action == "logs on the device."){
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
-                    );
-                  }else{
-                    Navigator.pop(context);
-                   // deleteAllFiles();
-                    _resetStoredValue();
-
-                  }
-                },
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(); // Close the dialog
-                },
-                child: Text(
-                  'OK',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  Future onDisconnectPressed() async {
+    try {
+      await widget.device.disconnectAndUpdateStream();
+      Snackbar.show(ABC.c, "Disconnect: Success", success: true);
+    } catch (e, backtrace) {
+      Snackbar.show(
+        ABC.c,
+        prettyException("Disconnect Error:", e),
+        success: false,
+      );
+      print("$e backtrace: $backtrace");
+    }
   }
 
   @override
@@ -153,7 +87,15 @@ class _DevicePageState extends State<DevicePage> {
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: (){
+              onDisconnectPressed();
+              Navigator.of(
+                context,
+              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            }
+        ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           mainAxisSize: MainAxisSize.max,
@@ -182,6 +124,22 @@ class _DevicePageState extends State<DevicePage> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.max,
+                              children: <Widget>[
+                                SizedBox(width: 10.0),
+                                Text(
+                                  "Connected to: " +
+                                      widget.device.remoteId.toString(),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                SizedBox(width: 10.0),
+                              ],
+                            ),
                             SizedBox(height: 20),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -196,32 +154,31 @@ class _DevicePageState extends State<DevicePage> {
                                       padding: const EdgeInsets.all(8.0),
                                       child: Column(
                                         mainAxisAlignment:
-                                            MainAxisAlignment.start,
+                                        MainAxisAlignment.start,
                                         children: <Widget>[
                                           Row(
                                             mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                            MainAxisAlignment.center,
                                             children: <Widget>[
-                                              Text(
-                                                'Device Management',
+                                              Text(' Select signal ',
                                                 style:
-                                                    hPi4Global
-                                                        .movecardTextStyle,
+                                                hPi4Global
+                                                    .movecardTextStyle,
                                               ),
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                           SizedBox(height: 10.0),
+                                          SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
+                                              hPi4Global
+                                                  .hpi4Color, // background color
                                               foregroundColor:
-                                                  Colors.white, // text color
+                                              Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                    BorderRadius.circular(20),
+                                                BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -234,7 +191,9 @@ class _DevicePageState extends State<DevicePage> {
                                                 context,
                                                 MaterialPageRoute(
                                                   builder:
-                                                      (context) => ScrDFU(),
+                                                      (context) =>
+                                                      WaveFormsPage(selectedType: "ECG",
+                                                          device: widget.device),
                                                 ),
                                               );
                                             },
@@ -246,14 +205,13 @@ class _DevicePageState extends State<DevicePage> {
                                               child: Row(
                                                 //mainAxisSize: MainAxisSize.min,
                                                 mainAxisAlignment:
-                                                    MainAxisAlignment.start,
+                                                MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.system_update,
+                                                  Icon(Symbols.cardiology,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' Update Firmware ',
+                                                    ' ECG ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
@@ -268,13 +226,13 @@ class _DevicePageState extends State<DevicePage> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
+                                              hPi4Global
+                                                  .hpi4Color, // background color
                                               foregroundColor:
-                                                  Colors.white, // text color
+                                              Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                    BorderRadius.circular(20),
+                                                BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -283,32 +241,31 @@ class _DevicePageState extends State<DevicePage> {
                                               ),
                                             ),
                                             onPressed: () {
-                                              setState(() {
-                                                selectedOption = "BPT";
-                                              });
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                          BPTCalibrationPage1(),
+                                                      WaveFormsPage(selectedType: "PPG",
+                                                          device: widget.device),
                                                 ),
                                               );
                                             },
+
                                             child: Padding(
                                               padding: const EdgeInsets.all(
                                                 8.0,
                                               ),
                                               child: Row(
+                                                //mainAxisSize: MainAxisSize.min,
                                                 mainAxisAlignment:
-                                                    MainAxisAlignment.start,
+                                                MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.sync,
+                                                  Icon(Symbols.wrist,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' BPT Calibration',
+                                                    'Wrist PPG ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
@@ -320,48 +277,103 @@ class _DevicePageState extends State<DevicePage> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
-                                          Divider( // Horizontal line
-                                            color: Colors.grey,
-                                            thickness: 0.5,
-                                            height: 20, // space above and below
-                                          ),
-                                          SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                              Colors.red, // background color
+                                              hPi4Global
+                                                  .hpi4Color, // background color
                                               foregroundColor:
                                               Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
                                                 BorderRadius.circular(20),
                                               ),
-                                              /*minimumSize: Size(
+                                              minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
                                                     100,
                                                 40,
-                                              ),*/
+                                              ),
                                             ),
                                             onPressed: () {
-                                              showConfirmationDialog(
+                                              Navigator.push(
                                                 context,
-                                                "logs on the device.",
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (context) =>
+                                                      WaveFormsPage(selectedType: "GSR",
+                                                          device: widget.device),
+                                                ),
                                               );
                                             },
+
                                             child: Padding(
                                               padding: const EdgeInsets.all(
                                                 8.0,
                                               ),
                                               child: Row(
+                                                //mainAxisSize: MainAxisSize.min,
                                                 mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.delete,
+                                                  Icon(Symbols.eda,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' Erase all logs on device ',
+                                                    ' GSR ',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                              hPi4Global
+                                                  .hpi4Color, // background color
+                                              foregroundColor:
+                                              Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(20),
+                                              ),
+                                              minimumSize: Size(
+                                                SizeConfig.blockSizeHorizontal *
+                                                    100,
+                                                40,
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (context) =>
+                                                          WaveFormsPage(selectedType: "Finger PPG",
+                                                              device: widget.device),
+                                                ),
+                                              );
+                                            },
+
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                //mainAxisSize: MainAxisSize.min,
+                                                mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(Symbols.show_chart,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    ' Finger PPG ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
