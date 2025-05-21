@@ -9,6 +9,7 @@ import 'package:move/screens/scr_scan.dart';
 import 'package:move/utils/extra.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:move/sizeConfig.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
@@ -123,6 +124,22 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisSize: MainAxisSize.max,
+                              children: <Widget>[
+                                SizedBox(width: 10.0),
+                                Text(
+                                  "Connected to: " +
+                                      widget.device.remoteId.toString(),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                SizedBox(width: 10.0),
+                              ],
+                            ),
                             SizedBox(height: 20),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -143,7 +160,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                             mainAxisAlignment:
                                             MainAxisAlignment.center,
                                             children: <Widget>[
-                                              Text(' Live View Options ',
+                                              Text(' Select signal ',
                                                 style:
                                                 hPi4Global
                                                     .movecardTextStyle,
@@ -190,8 +207,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.start,
+                                                  Icon(Symbols.cardiology,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
@@ -245,12 +261,11 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.start,
+                                                  Icon(Symbols.wrist,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
-                                                    ' PPG ',
+                                                    'Wrist PPG ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,
@@ -300,8 +315,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.start,
+                                                  Icon(Symbols.eda,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
@@ -355,8 +369,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 mainAxisAlignment:
                                                 MainAxisAlignment.start,
                                                 children: <Widget>[
-                                                  Icon(
-                                                    Icons.start,
+                                                  Icon(Symbols.show_chart,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(

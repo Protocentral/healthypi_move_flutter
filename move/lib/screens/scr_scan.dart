@@ -64,6 +64,8 @@ class _ScrScanState extends State<ScrScan> {
   List<int> logData = [];
 
   bool _autoConnecting = false;
+  bool _deviceNotFound = false;
+  String _deviceNotFoundMessage = "";
 
   Future<String?> getPairedDeviceMac() async {
     try {
@@ -80,15 +82,25 @@ class _ScrScanState extends State<ScrScan> {
   Future<void> _tryAutoConnectToPairedDevice() async {
     String? pairedMac = await getPairedDeviceMac();
     if (pairedMac != null && pairedMac.isNotEmpty) {
-      setState(() => _autoConnecting = true);
+      setState(() {
+        _autoConnecting = true;
+        _deviceNotFound = false;
+        _deviceNotFoundMessage = "";
+      });
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
       StreamSubscription? tempSub;
+      bool found = false;
       tempSub = FlutterBluePlus.scanResults.listen((results) async {
         for (var result in results) {
           if (result.device.id.id == pairedMac) {
+            found = true;
             await FlutterBluePlus.stopScan();
             await tempSub?.cancel();
-            setState(() => _autoConnecting = false);
+            if (mounted) setState(() {
+              _autoConnecting = false;
+              _deviceNotFound = false;
+              _deviceNotFoundMessage = "";
+            });
             await onConnectPressed(result.device);
             return;
           }
@@ -98,11 +110,17 @@ class _ScrScanState extends State<ScrScan> {
       await Future.delayed(const Duration(seconds: 10), () async {
         await FlutterBluePlus.stopScan();
         await tempSub?.cancel();
-        if (mounted) setState(() => _autoConnecting = false);
+        if (!found && mounted) {
+          setState(() {
+            _autoConnecting = false;
+            _deviceNotFound = true;
+            _deviceNotFoundMessage =
+            "Device not found. Please make sure your paired device is turned on and in range.";
+          });
+        }
       });
     }
   }
-
 
   @override
   void initState() {
@@ -247,16 +265,12 @@ class _ScrScanState extends State<ScrScan> {
 
       if (_connectionState == BluetoothConnectionState.connected) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
+        String? pairedStatus = "";
         setState(() {
-
+          pairedStatus = prefs.getString('pairedStatus');
         });
-        if(_autoConnecting == false){
-          showPairDeviceDialog(context, device);
-        }else{
-
-        }
-
-        /*if(widget.tabIndex == "1"){
+        if(pairedStatus == "paired"){
+          if(widget.tabIndex == "1"){
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => SyncingScreen(device: device),
@@ -264,7 +278,7 @@ class _ScrScanState extends State<ScrScan> {
           );
         }else if(widget.tabIndex == "2"){
           showLoadingIndicator("Connected. Erasing the data...", context);
-          await subscribeToChar(device);
+          //await subscribeToChar(device);
           _eraseAllLogs(context, device);
         }else if(widget.tabIndex == "3"){
           Navigator.of(context).push(
@@ -275,7 +289,10 @@ class _ScrScanState extends State<ScrScan> {
         }
         else{
 
-        }*/
+        }
+        }else{
+          showPairDeviceDialog(context, device);
+        }
       }
     });
   }
@@ -387,6 +404,47 @@ class _ScrScanState extends State<ScrScan> {
     }
     // --- End Auto-Connect UI ---
 
+    // --- Device Not Found Message UI ---
+    if (_deviceNotFound) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.redAccent, size: 50),
+              SizedBox(height: 20),
+              Text(
+                _deviceNotFoundMessage,
+                style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _deviceNotFound = false;
+                    _deviceNotFoundMessage = "";
+                  });
+                  _tryAutoConnectToPairedDevice();
+                },
+                child: Text("Try Again"),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // --- End Device Not Found Message UI ---
+
+    // ...existing code...
     return Card(
       color: Colors.grey[800],
       child: Padding(
@@ -483,7 +541,7 @@ class _ScrScanState extends State<ScrScan> {
                       );
                     }else if(widget.tabIndex == "2"){
                       showLoadingIndicator("Connected. Erasing the data...", context);
-                      await subscribeToChar(device);
+                      //await subscribeToChar(device);
                       _eraseAllLogs(context, device);
                     } else if(widget.tabIndex == "3"){
                       Navigator.of(context).push(
@@ -518,7 +576,7 @@ class _ScrScanState extends State<ScrScan> {
                     );
                   }else if(widget.tabIndex == "2"){
                     showLoadingIndicator("Connected. Erasing the data...", context);
-                    await subscribeToChar(device);
+                    //await subscribeToChar(device);
                     _eraseAllLogs(context, device);
                   }else if(widget.tabIndex == "3"){
                     Navigator.of(context).push(
@@ -547,7 +605,7 @@ class _ScrScanState extends State<ScrScan> {
     );
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async {
+ /* subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
@@ -562,7 +620,7 @@ class _ScrScanState extends State<ScrScan> {
         }
       }
     }
-  }
+  }*/
 
   Future<void> _sendCommand(
       List<int> commandList,

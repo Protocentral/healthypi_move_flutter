@@ -307,7 +307,8 @@ class ScrDFUState extends State<ScrDFU> {
       _fw_images.add(image);
     }
 
-    final _fw_config = const FirmwareUpgradeConfiguration(estimatedSwapTime: Duration(seconds: 0), byteAlignment: ImageUploadAlignment.fourByte, eraseAppSettings: true,
+    final _fw_config = const FirmwareUpgradeConfiguration(estimatedSwapTime: Duration(seconds: 0),
+        byteAlignment: ImageUploadAlignment.fourByte, eraseAppSettings: true,
     firmwareUpgradeMode: FirmwareUpgradeMode.confirmOnly );
 
     _updateManagerSubscription = updateManager.progressStream.listen((event) {
@@ -321,8 +322,6 @@ class ScrDFUState extends State<ScrDFU> {
     });
 
     updateManager.update(_fw_images, configuration: _fw_config);
-
-    
 
     //updateManager.kill();
 
@@ -358,6 +357,8 @@ class ScrDFUState extends State<ScrDFU> {
                                   "Current FW version: $_currentFWVersion",
                                 );
                               });
+                              /////disconnect here
+                              onDisconnectPressed();
                             }
                           })
                           .catchError((e) {
@@ -410,7 +411,7 @@ class ScrDFUState extends State<ScrDFU> {
       await _currentDevice.disconnectAndUpdateStream();
       if (mounted) {
         setState(() {
-          _showUpdateCard = false;
+          //_showUpdateCard = false;
           _dispConnStatus = "Disconnected";
         });
       }
@@ -571,7 +572,7 @@ class ScrDFUState extends State<ScrDFU> {
                   ),
                 ),
               ),
-              Padding(
+              /*Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: MaterialButton(
                   onPressed: () async {
@@ -595,7 +596,7 @@ class ScrDFUState extends State<ScrDFU> {
                     ),
                   ),
                 ),
-              ),
+              ),*/
             ],
           ),
         ),

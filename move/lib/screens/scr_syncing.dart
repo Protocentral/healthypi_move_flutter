@@ -1106,6 +1106,23 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     mainAxisSize: MainAxisSize.max,
                     children: <Widget>[
                       SizedBox(width: 10.0),
+                      Text(
+                        "Connected to: " +
+                            widget.device.remoteId.toString(),
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.green,
+                        ),
+                      ),
+                      SizedBox(width: 10.0),
+                    ],
+                  ),
+                  SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisSize: MainAxisSize.max,
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
                       const Text('Syncing data..', style: hPi4Global.movecardTextStyle),
                       SizedBox(width: 10.0),
                     ],

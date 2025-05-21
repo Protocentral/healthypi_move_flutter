@@ -17,6 +17,7 @@ import 'sizeConfig.dart';
 import 'screens/hrPage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -30,6 +31,12 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> _screens = [HomeScreen(), DevicePage(), SettingsPage()];
 
+  bottomBarHeight(){
+    if(Platform.isIOS){
+      return 110;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -40,7 +47,7 @@ class _HomePageState extends State<HomePage> {
         ), // sets the inactive color of the `BottomNavigationBar`
         child: Container(
           color: hPi4Global.hpi4AppBarColor,
-          height: Platform.isAndroid ? 80 : 110,
+          height: bottomBarHeight(),
           padding: const EdgeInsets.all(8.0),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10.0),
@@ -179,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.favorite_border, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Heart Rate', style: hPi4Global.movecardTextStyle),
-                      SizedBox(width: 15.0),
+                      //SizedBox(width: 15.0),
                     ],
                   ),
                   Row(
@@ -234,10 +241,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      Icon(Icons.favorite_border, color: Colors.white),
+                      Icon(Symbols.spo2, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('SpO2', style: hPi4Global.movecardTextStyle),
-                      SizedBox(width: 15.0),
+                      //SizedBox(width: 15.0),
                     ],
                   ),
                   Row(
@@ -294,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.thermostat, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Temperature', style: hPi4Global.movecardTextStyle),
-                      SizedBox(width: 15.0),
+                     // SizedBox(width: 15.0),
                     ],
                   ),
                   Row(
@@ -350,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.directions_run, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Activity', style: hPi4Global.movecardTextStyle),
-                      SizedBox(width: 15.0),
+                      //SizedBox(width: 15.0),
                     ],
                   ),
                   Row(
@@ -396,47 +403,44 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget liveViewButton(){
-    return Card(
-      color: Colors.grey[900],
-      child: Padding(
-        padding:const EdgeInsets.all(8.0),
-        child: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-              child:  ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color, // background color
-                  foregroundColor: Colors.white, // text color
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+    return Padding(
+      padding:const EdgeInsets.all(8.0),
+      child: Column(
+        children: <Widget>[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+            child:  ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: hPi4Global.hpi4Color, // background color
+                foregroundColor: Colors.white, // text color
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                onPressed: (){
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"3")),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                     // Icon(Icons.search, color: Colors.white),
-                      const Text(
-                        ' Live View ',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
-                      Spacer(),
-                    ],
-                  ),
+                //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+              ),
+              onPressed: (){
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"3")),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: <Widget>[
+                     Icon(Symbols.monitoring, color: Colors.white),
+                    const Text(
+                      ' Live View ',
+                      style: TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                    Spacer(),
+                  ],
                 ),
               ),
             ),
+          ),
 
-          ],
-        ),
+        ],
       ),
     );
   }

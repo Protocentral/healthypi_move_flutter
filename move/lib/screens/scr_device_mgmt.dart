@@ -268,53 +268,6 @@ class _DevicePageState extends State<DevicePage> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                                  Colors.red, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
-                                              ),
-                                              /*minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),*/
-                                            ),
-                                            onPressed: () {
-                                              showConfirmationDialog(
-                                                context,
-                                                "logs on the device.",
-                                              );
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
-                                              child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
-                                                children: <Widget>[
-                                                  Icon(
-                                                    Icons.delete,
-                                                    color: Colors.white,
-                                                  ),
-                                                  const Text(
-                                                    ' Erase all logs on device ',
-                                                    style: TextStyle(
-                                                      fontSize: 16,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                  Spacer(),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                          SizedBox(height: 10.0),
-                                          ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
                                                   hPi4Global
                                                       .hpi4Color, // background color
                                               foregroundColor:
@@ -356,6 +309,59 @@ class _DevicePageState extends State<DevicePage> {
                                                   ),
                                                   const Text(
                                                     ' BPT Calibration',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          Divider( // Horizontal line
+                                            color: Colors.grey,
+                                            thickness: 0.5,
+                                            height: 20, // space above and below
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                              Colors.red, // background color
+                                              foregroundColor:
+                                              Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(20),
+                                              ),
+                                              /*minimumSize: Size(
+                                                SizeConfig.blockSizeHorizontal *
+                                                    100,
+                                                40,
+                                              ),*/
+                                            ),
+                                            onPressed: () {
+                                              showConfirmationDialog(
+                                                context,
+                                                "logs on the device.",
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Icons.delete,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    ' Erase all logs on device ',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,

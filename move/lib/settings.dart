@@ -192,6 +192,19 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> deletePairedDeviceFile() async {
+    final Directory appDocDir = await getApplicationDocumentsDirectory();
+    final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+    final file = File(filePath);
+
+    if (await file.exists()) {
+      await file.delete();
+      print('File deleted');
+    } else {
+      print('File does not exist');
+    }
+  }
+
   // Load the stored value
   _resetStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -206,8 +219,18 @@ class _SettingsPageState extends State<SettingsPage> {
       prefs.setString('lastUpdatedSpo2', '0');
       prefs.setString('lastUpdatedActivity', '0');
       prefs.setString('fetchStatus', '0');
+      prefs.setString('pairedStatus', '0');
     });
   }
+
+  // Load the stored value
+  _resetStoredPairedValue() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      prefs.setString('pairedStatus', '0');
+    });
+  }
+
 
   showConfirmationDialog(BuildContext context, String action) {
     return showDialog(
@@ -220,7 +243,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           child: AlertDialog(
             title: Text(
-              'Are you sure you wish to delete all data.',
+              'Are you sure you wish to delete '+action,
               style: TextStyle(fontSize: 18, color: Colors.white),
             ),
             content: Text(
@@ -239,8 +262,16 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 onPressed: () {
                   Navigator.pop(context);
-                  deleteAllFiles();
-                  _resetStoredValue();
+                  if(action == "all data."){
+                    deleteAllFiles();
+                    _resetStoredValue();
+                  }else if(action == "paired device."){
+                    deletePairedDeviceFile();
+                    _resetStoredPairedValue();
+                  }else{
+
+                  }
+
                 },
               ),
               TextButton(
@@ -288,6 +319,99 @@ class _SettingsPageState extends State<SettingsPage> {
           Center(
             child: Column(
               children: <Widget>[
+                SizedBox(
+                  height: 10.0,
+                ),
+                Card(
+                  color: Colors.black,
+                  child:Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        //height: SizeConfig.blockSizeVertical * 20,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        child: Card(
+                          color: Colors.grey[900],
+                          child: Padding(
+                              padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+                              child: Column(
+                                  children:[
+                                    SizedBox(height:10),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red, // background color
+                                        foregroundColor: Colors.white, // text color
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+                                      ),
+                                      onPressed: () {
+                                        showConfirmationDialog(context, "all data.");
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Row(
+                                          //mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.start,
+                                          children: <Widget>[
+                                            Icon(
+                                              Icons.delete,
+                                              color: Colors.white,
+                                            ),
+                                            Text(
+                                              'Erase app data',
+                                              style: TextStyle(fontSize: 16, color: Colors.white),
+                                            ),
+                                            Spacer(),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(height:10),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red, // background color
+                                        foregroundColor: Colors.white, // text color
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+                                      ),
+                                      onPressed: () {
+                                        showConfirmationDialog(context, "paired device.");
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Row(
+                                          //mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.start,
+                                          children: <Widget>[
+                                            Icon(
+                                              Icons.delete,
+                                              color: Colors.white,
+                                            ),
+                                            Text(
+                                              'Delete paired device ',
+                                              style: TextStyle(fontSize: 16, color: Colors.white),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ]
+                              )
+
+                          ),
+                        ),
+
+                      ),
+
+                    ],
+                  ),
+                ),
+
                 Card(
                   color: Colors.black,
                   child: Padding(
@@ -415,62 +539,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       ],
                     ),
 
-                  ),
-                ),
-                Card(
-                  color: Colors.black,
-                  child:Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                  SizedBox(
-                  //height: SizeConfig.blockSizeVertical * 20,
-                  width: SizeConfig.blockSizeHorizontal * 88,
-                    child: Card(
-                          color: Colors.grey[900],
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
-                            child: Column(
-                              children:[
-                                SizedBox(height:10),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red, // background color
-                                    foregroundColor: Colors.white, // text color
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
-                                  ),
-                                  onPressed: () {
-                                    showConfirmationDialog(context, "app data.");
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(8.0),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: <Widget>[
-                                        Icon(
-                                          Icons.delete,
-                                          color: Colors.white,
-                                        ),
-                                        Text(
-                                          'Erase app data',
-                                          style: TextStyle(fontSize: 14, color: Colors.white),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ]
-                            )
-
-                          ),
-                        ),
-
-                  ),
-
-                    ],
                   ),
                 ),
 

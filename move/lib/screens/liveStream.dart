@@ -71,6 +71,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
         [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      subscribeToChar(widget.device);
     });
   }
 
@@ -159,7 +160,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
     }else{
 
     }
-
+    dataFormatBasedOnBoardsSelection();
   }
 
   void dataFormatBasedOnBoardsSelection() async {
@@ -239,7 +240,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
             ppgLineData.add(FlSpot(ppgDataCounter++, (element.toDouble())));
           });
 
-          if (ppgDataCounter >= 128 * 3) {
+          if (ppgDataCounter >= 64 * 3) {
             ppgLineData.removeAt(0);
           }
         });
@@ -294,7 +295,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
           fingerPPGLineData.add(FlSpot(fingerPPGDataCounter++, (element.toDouble())));
         });
 
-        if (fingerPPGDataCounter >= 128 * 3) {
+        if (fingerPPGDataCounter >= 64 * 3) {
           fingerPPGLineData.removeAt(0);
         }
       });
@@ -318,28 +319,28 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
     if(widget.selectedType == "ECG"){
       return Column(
         children: [
-          buildChart(50, 70, ecgLineData, Colors.green),
+          buildChart(50, 90, ecgLineData, Colors.green),
         ],
       );
     }
     else if(widget.selectedType == "PPG"){
       return Column(
         children: [
-          buildChart(50, 70, ppgLineData, Colors.green),
+          buildChart(50, 90, ppgLineData, Colors.green),
         ],
       );
     }
     else if(widget.selectedType == "GSR"){
       return Column(
         children: [
-          buildChart(50, 70, gsrLineData, Colors.green),
+          buildChart(50, 90, gsrLineData, Colors.green),
         ],
       );
     }
     else if(widget.selectedType == "Finger PPG"){
       return Column(
         children: [
-          buildChart(50, 70, fingerPPGLineData, Colors.green),
+          buildChart(50, 90, fingerPPGLineData, Colors.green),
         ],
       );
     }else{
@@ -356,9 +357,9 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
           Column(children: [
             Text(
               "Connected: " +
-                  widget.selectedType +
+                  widget.device.remoteId.toString() +
                   " ( " +
-                  widget.device.name +
+                   widget.selectedType +
                   " )",
               style: TextStyle(
                 fontSize: 12,
@@ -458,6 +459,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
         ),
         onPressed: () async {
           closeAllStreams();
+
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => LiveStreamsOptions(device: widget.device)),
           );
@@ -486,13 +488,11 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
           borderRadius: BorderRadius.circular(8.0),
         ),
         onPressed: () async {
-          subscribeToChar(widget.device);
-
           if (startStreaming == false) {
             setState(() {
               startStreaming = true;
             });
-            dataFormatBasedOnBoardsSelection();
+
           } else {
             closeAllStreams();
             ecgLineData.removeAt(0);
@@ -521,7 +521,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
           ),
           displayDeviceName(),
         ]),
-        StartAndStopButton(),
+       // StartAndStopButton(),
         displayDisconnectButton(),
       ],
     );
