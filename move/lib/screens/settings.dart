@@ -3,11 +3,11 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'screens/showTerms.dart';
-import 'screens/showPrivacy.dart';
+import 'showTerms.dart';
+import 'showPrivacy.dart';
 
-import 'globals.dart';
-import 'sizeConfig.dart';
+import '../globals.dart';
+import '../utils/sizeConfig.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:url_launcher/url_launcher.dart';
 

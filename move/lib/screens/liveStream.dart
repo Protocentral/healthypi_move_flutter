@@ -12,7 +12,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import 'ble_ctlr.dart';
 
 class WaveFormsPage extends StatefulWidget {

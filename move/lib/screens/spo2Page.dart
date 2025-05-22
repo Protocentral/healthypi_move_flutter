@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_sliders/sliders.dart' as rs;
 import '../home.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -240,6 +240,7 @@ class _SPO2PageState extends State<SPO2Page>
                           lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
                           highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
                         borderRadius: BorderRadius.all(Radius.circular(10)),
+                        animationDuration: 0,
                       ),
                     ],
 

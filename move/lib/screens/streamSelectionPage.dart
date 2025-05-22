@@ -8,7 +8,7 @@ import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
 import 'package:move/utils/extra.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:move/sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../globals.dart';
