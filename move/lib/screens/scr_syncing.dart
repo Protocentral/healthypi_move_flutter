@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../utils/extra.dart';
 import 'dart:io' show Directory, File, FileSystemEntity, Platform;

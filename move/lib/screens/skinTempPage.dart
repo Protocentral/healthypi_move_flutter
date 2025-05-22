@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../home.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
@@ -237,6 +237,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                     lowValueMapper: (TempTrends data, _) => data.minTemp,
                     highValueMapper: (TempTrends data, _) => data.maxTemp,
                     borderRadius: BorderRadius.all(Radius.circular(10)),
+                    animationDuration: 0,
                   ),
                 ],
               ),

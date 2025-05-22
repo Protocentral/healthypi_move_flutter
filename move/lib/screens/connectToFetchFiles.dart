@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 
-import '../fetchfileData.dart';
+import 'fetchfileData.dart';
 import '../home.dart';
 import 'package:provider/provider.dart';
 

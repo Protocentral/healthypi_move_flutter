@@ -9,7 +9,7 @@ import 'package:move/utils/extra.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../widgets/scan_result_tile.dart';
 

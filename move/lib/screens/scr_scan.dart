@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 import '../widgets/scan_result_tile.dart';
 import '../widgets/system_device_tile.dart';
 import 'scr_device.dart';

@@ -7,13 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:move/screens/activityPage.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
-import 'package:move/settings.dart';
+import 'package:move/screens/settings.dart';
 import 'screens/scr_scan.dart';
 import 'screens/skinTempPage.dart';
 import 'screens/spo2Page.dart';
 
 import 'globals.dart';
-import 'sizeConfig.dart';
+import 'utils/sizeConfig.dart';
 import 'screens/hrPage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';

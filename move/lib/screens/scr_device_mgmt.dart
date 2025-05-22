@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';

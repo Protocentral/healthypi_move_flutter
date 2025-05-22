@@ -44,6 +44,11 @@ class hPi4Global {
   static const List<int> getSessionCount = [0x54];
   static const List<int> getFWVersion = [0x55];
 
+  static const List<int> ECGLogCount = [0x30];
+  static const List<int> ECGLogIndex = [0x31];
+  static const List<int> FetchECGLogFile = [0x32];
+  static const List<int> ECGLogDelete = [0x33];
+
   static const List<int> HrTrend = [0x01];
   static const List<int> Spo2Trend = [0x02];
   static const List<int> TempTrend = [0x03];

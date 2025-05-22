@@ -2,12 +2,12 @@ import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/sizeConfig.dart';
+import '../utils/sizeConfig.dart';
 
 import 'package:path_provider/path_provider.dart';
-import 'globals.dart';
+import '../globals.dart';
 import 'package:flutter/material.dart';
-import 'home.dart';
+import '../home.dart';
 
 import 'dart:async';
 import 'dart:typed_data';
