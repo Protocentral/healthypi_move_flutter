@@ -65,7 +65,9 @@ class ScrDFUState extends State<ScrDFU> {
 
   bool dfuInProgress = false;
   double dfuProgress = 0;
-  double progressPercentage = 0;
+  double progressPercentage1 = 0.0;
+  double progressPercentage2 = 0.0;
+  double progressPercentage3 = 0.0;
 
   late Manifest _fw_manifest;
   bool _isManifestLoaded = false;
@@ -314,8 +316,21 @@ class ScrDFUState extends State<ScrDFU> {
     _updateManagerSubscription = updateManager.progressStream.listen((event) {
       if (mounted) {
         setState(() {
-          progressPercentage = (event.bytesSent / event.imageSize) * 100;
-          print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+          if(event.imageSize == _fw_manifest.files[0].size){
+            progressPercentage1 = (event.bytesSent / event.imageSize) * 100;
+            dfuProgress = (event.bytesSent / event.imageSize);
+            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+          }else if(event.imageSize == _fw_manifest.files[1].size){
+            progressPercentage2 = (event.bytesSent / event.imageSize) * 100;
+            dfuProgress = (event.bytesSent / event.imageSize);
+            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+          }else if(event.imageSize == _fw_manifest.files[2].size){
+            progressPercentage3 = (event.bytesSent / event.imageSize) * 100;
+            dfuProgress = (event.bytesSent / event.imageSize);
+            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
+          }else{
+
+          }
 
         });
       }
@@ -442,37 +457,18 @@ class ScrDFUState extends State<ScrDFU> {
       return Column(
         children: [
           Card(
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: <Widget>[
-                  Text("Image name: ${_fw_manifest.files[0].file}"),
-                  Text("Size: ${_fw_manifest.files[0].size}"),
-                  Text("Version: ${_fw_manifest.files[0].versionMcuboot}"),
+                  Text("Image name: ${_fw_manifest.files[0].file}", style: const TextStyle(color: Colors.white)),
+                  Text("Size: ${_fw_manifest.files[0].size}",style: const TextStyle(color: Colors.white)),
+                  Text("Version: ${_fw_manifest.files[0].versionMcuboot}",style: const TextStyle(color: Colors.white)),
                   SizedBox(
                     height: 10, // Adjust this value to increase or decrease height
                     child: LinearProgressIndicator(
-                      value: progressPercentage > 0 ? progressPercentage : null,
-                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
-                      backgroundColor: Colors.white24,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: <Widget>[
-                  Text("Image name: ${_fw_manifest.files[1].file}"),
-                  Text("Size: ${_fw_manifest.files[1].size}"),
-                  Text("Version: ${_fw_manifest.files[1].versionMcuboot}"),
-                  SizedBox(
-                    height: 10, // Adjust this value to increase or decrease height
-                    child: LinearProgressIndicator(
-                      value: progressPercentage > 0 ? progressPercentage : null,
+                      value: (progressPercentage1/100),
                       valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
                       backgroundColor: Colors.white24,
                     ),
@@ -482,17 +478,18 @@ class ScrDFUState extends State<ScrDFU> {
             ),
           ),
           Card(
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
                 children: <Widget>[
-                  Text("Image name: ${_fw_manifest.files[2].file}"),
-                  Text("Size: ${_fw_manifest.files[2].size}"),
-                  Text("Version: ${_fw_manifest.files[2].version}"),
+                  Text("Image name: ${_fw_manifest.files[2].file}",style: const TextStyle(color: Colors.white)),
+                  Text("Size: ${_fw_manifest.files[2].size}",style: const TextStyle(color: Colors.white)),
+                  Text("Version: ${_fw_manifest.files[2].version}",style: const TextStyle(color: Colors.white)),
                   SizedBox(
                     height: 10, // Adjust this value to increase or decrease height
                     child: LinearProgressIndicator(
-                      value: progressPercentage > 0 ? progressPercentage : null,
+                      value: (progressPercentage3/100),
                       valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
                       backgroundColor: Colors.white24,
                     ),
@@ -502,6 +499,28 @@ class ScrDFUState extends State<ScrDFU> {
               ),
             ),
           ),
+           Card(
+             color: Colors.grey[900],
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                children: <Widget>[
+                  Text("Image name: ${_fw_manifest.files[1].file}",style: const TextStyle(color: Colors.white)),
+                  Text("Size: ${_fw_manifest.files[1].size}",style: const TextStyle(color: Colors.white)),
+                  Text("Version: ${_fw_manifest.files[1].versionMcuboot}",style: const TextStyle(color: Colors.white)),
+                  SizedBox(
+                    height: 10, // Adjust this value to increase or decrease height
+                    child: LinearProgressIndicator(
+                      value: (progressPercentage2/100),
+                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      backgroundColor: Colors.white24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
         ],
       );
     } else {
@@ -514,16 +533,17 @@ class ScrDFUState extends State<ScrDFU> {
         //_updateAvailable == true &&
         _checkingUpdates == false) {
       return Card(
+        color: Colors.grey[900],
         child: Padding(
           padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              Text(_dispConnStatus, style: TextStyle(fontSize: 16)),
+              Text(_dispConnStatus, style: TextStyle(fontSize: 16,color: Colors.white)),
               Text(
                 "Firmware version: $_currentFWVersion",
-                style: TextStyle(fontSize: 16),
+                style: TextStyle(fontSize: 16,color: Colors.white),
               ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
@@ -536,67 +556,78 @@ class ScrDFUState extends State<ScrDFU> {
               ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Text("Loaded Firmware"),
+                child: Text("Loaded Firmware",style: TextStyle(fontSize: 14,color: Colors.white)),
               ),
               _getFirmwareInfo(),
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text(
                   "Updating FW Image:  ${(dfuProgress * 100).toStringAsFixed(0)} %",
-                  style: TextStyle(fontSize: 16, color: Colors.black),
+                  style: TextStyle(fontSize: 16, color: Colors.white),
                   textAlign: TextAlign.center,
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: MaterialButton(
+                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hPi4Global.hpi4Color, // background color
+                    foregroundColor: Colors.white, // text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
                   onPressed: () async {
                     _onLoadFirmware();
                   },
-                  color: Colors.blue,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(32.0, 16.0, 32.0, 16.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
                         Icon(Icons.upgrade, color: Colors.white),
                         const Text(
-                          ' DFU Update',
+                          ' DFU Update ',
                           style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
+                        Spacer(),
                       ],
                     ),
                   ),
                 ),
               ),
-              /*Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: MaterialButton(
-                  onPressed: () async {
-                    onDisconnectPressed();
-                  },
-                  color: Colors.red,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                child:  ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red, // background color
+                    foregroundColor: Colors.white, // text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
                   ),
+                  onPressed: () async {
+                    await onDisconnectPressed();
+                    Navigator
+                        .of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => HomePage()));
+                  },
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(32.0, 16.0, 32.0, 16.0),
+                    padding: const EdgeInsets.all(8.0),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: <Widget>[
                         Icon(Icons.stop_rounded, color: Colors.white),
                         const Text(
-                          'Disconnect',
+                          ' Disconnect ',
                           style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
+                        Spacer(),
                       ],
                     ),
                   ),
                 ),
-              ),*/
+              ),
             ],
           ),
         ),
@@ -607,6 +638,7 @@ class ScrDFUState extends State<ScrDFU> {
       return Padding(
         padding: const EdgeInsets.all(8.0),
         child: Card(
+          color: Colors.grey[900],
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
@@ -615,7 +647,7 @@ class ScrDFUState extends State<ScrDFU> {
                   padding: const EdgeInsets.all(16.0),
                   child: Text(
                     "Your device already runs the latest firmware ( $_currentFWVersion )",
-                    style: TextStyle(fontSize: 20),
+                    style: TextStyle(fontSize: 20,color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
                 ),
