@@ -6,8 +6,9 @@ import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:move/screens/scr_fetch_ecg.dart';
 import 'package:move/screens/scr_syncing.dart';
-import 'package:move/screens/streamSelectionPage.dart';
+import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
@@ -273,7 +274,7 @@ class _ScrScanState extends State<ScrScan> {
           if(widget.tabIndex == "1"){
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => SyncingScreen(device: device),
+              builder: (context) => ScrSyncing(device: device),
             ),
           );
         }else if(widget.tabIndex == "2"){
@@ -283,10 +284,16 @@ class _ScrScanState extends State<ScrScan> {
         }else if(widget.tabIndex == "3"){
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (context) => LiveStreamsOptions(device: device),
+              builder: (context) => ScrStreamsSelection(device: device),
             ),
           );
-        }
+        }else if(widget.tabIndex == "4"){
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ScrFetchECG(device: device),
+              ),
+            );
+          }
         else{
 
         }
@@ -536,7 +543,7 @@ class _ScrScanState extends State<ScrScan> {
                     if(widget.tabIndex == "1"){
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => SyncingScreen(device: device),
+                          builder: (context) => ScrSyncing(device: device),
                         ),
                       );
                     }else if(widget.tabIndex == "2"){
@@ -546,7 +553,13 @@ class _ScrScanState extends State<ScrScan> {
                     } else if(widget.tabIndex == "3"){
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => LiveStreamsOptions(device: device),
+                          builder: (context) => ScrStreamsSelection(device: device),
+                        ),
+                      );
+                    } else if(widget.tabIndex == "4"){
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ScrFetchECG(device: device),
                         ),
                       );
                     }
@@ -571,7 +584,7 @@ class _ScrScanState extends State<ScrScan> {
                   if(widget.tabIndex == "1"){
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => SyncingScreen(device: device),
+                        builder: (context) => ScrSyncing(device: device),
                       ),
                     );
                   }else if(widget.tabIndex == "2"){
@@ -581,7 +594,13 @@ class _ScrScanState extends State<ScrScan> {
                   }else if(widget.tabIndex == "3"){
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => LiveStreamsOptions(device: device),
+                        builder: (context) => ScrStreamsSelection(device: device),
+                      ),
+                    );
+                  }else if(widget.tabIndex == "4"){
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => ScrFetchECG(device: device),
                       ),
                     );
                   }

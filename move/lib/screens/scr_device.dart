@@ -9,16 +9,16 @@ import '../widgets/descriptor_tile.dart';
 import '../utils/snackbar.dart';
 import '../utils/extra.dart';
 
-class DeviceScreen extends StatefulWidget {
+class ScrDevice extends StatefulWidget {
   final BluetoothDevice device;
 
-  const DeviceScreen({super.key, required this.device});
+  const ScrDevice({super.key, required this.device});
 
   @override
-  State<DeviceScreen> createState() => _DeviceScreenState();
+  State<ScrDevice> createState() => _ScrDeviceState();
 }
 
-class _DeviceScreenState extends State<DeviceScreen> {
+class _ScrDeviceState extends State<ScrDevice> {
   int? _rssi;
   int? _mtuSize;
   BluetoothConnectionState _connectionState =

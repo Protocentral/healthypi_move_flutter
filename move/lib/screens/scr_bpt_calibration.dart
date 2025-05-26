@@ -13,14 +13,14 @@ import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../widgets/scan_result_tile.dart';
 
-class BPTCalibrationPage1 extends StatefulWidget {
-  const BPTCalibrationPage1({super.key});
+class ScrBPTCalibration extends StatefulWidget {
+  const ScrBPTCalibration({super.key});
 
   @override
-  State<BPTCalibrationPage1> createState() => _BPTCalibrationPage1State();
+  State<ScrBPTCalibration> createState() => _ScrBPTCalibrationState();
 }
 
-class _BPTCalibrationPage1State extends State<BPTCalibrationPage1> {
+class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   final TextEditingController _systolicController = TextEditingController();
   final TextEditingController _diastolicController = TextEditingController();
   final _formKey = GlobalKey<FormState>();

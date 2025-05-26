@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:move/screens/bptCalibrationPage1.dart';
+import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
 import 'package:path_provider/path_provider.dart';
@@ -15,14 +15,14 @@ import '../utils/sizeConfig.dart';
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
 
-class DevicePage extends StatefulWidget {
-  const DevicePage({super.key});
+class ScrDeviceMgmt extends StatefulWidget {
+  const ScrDeviceMgmt({super.key});
 
   @override
-  _DevicePageState createState() => _DevicePageState();
+  _ScrDeviceMgmtState createState() => _ScrDeviceMgmtState();
 }
 
-class _DevicePageState extends State<DevicePage> {
+class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
   String selectedOption = "sync";
 
   @override
@@ -291,7 +291,7 @@ class _DevicePageState extends State<DevicePage> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                          BPTCalibrationPage1(),
+                                                          ScrBPTCalibration(),
                                                 ),
                                               );
                                             },
@@ -309,6 +309,53 @@ class _DevicePageState extends State<DevicePage> {
                                                   ),
                                                   const Text(
                                                     ' BPT Calibration',
+                                                    style: TextStyle(
+                                                      fontSize: 16,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                  Spacer(),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(height: 10.0),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                              hPi4Global
+                                                  .hpi4Color, // background color
+                                              foregroundColor:
+                                              Colors.white, // text color
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                BorderRadius.circular(20),
+                                              ),
+                                              minimumSize: Size(
+                                                SizeConfig.blockSizeHorizontal *
+                                                    100,
+                                                40,
+                                              ),
+                                            ),
+                                            onPressed: () {
+                                              Navigator.of(context).pushReplacement(
+                                                MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"4")),
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                8.0,
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                MainAxisAlignment.start,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Icons.download_for_offline,
+                                                    color: Colors.white,
+                                                  ),
+                                                  const Text(
+                                                    ' Fetch Recordings',
                                                     style: TextStyle(
                                                       fontSize: 16,
                                                       color: Colors.white,

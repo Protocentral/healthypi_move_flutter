@@ -12,13 +12,13 @@ import '../globals.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
-class HRPage extends StatefulWidget {
-  const HRPage({super.key});
+class ScrHR extends StatefulWidget {
+  const ScrHR({super.key});
   @override
-  State<HRPage> createState() => _HRPageState();
+  State<ScrHR> createState() => _ScrHRState();
 }
 
-class _HRPageState extends State<HRPage> with SingleTickerProviderStateMixin {
+class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   List<String> timestamp = [];

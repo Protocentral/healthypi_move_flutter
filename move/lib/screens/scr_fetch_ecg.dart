@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:move/utils/extra.dart';
 import '../utils/sizeConfig.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +13,8 @@ import '../home.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
+
+import '../utils/snackbar.dart';
 
 typedef LogHeader =
     ({
@@ -26,21 +29,19 @@ typedef LogHeader =
       int tmYear,
     });
 
-class FetchFileData extends StatefulWidget {
-  const FetchFileData({
+class ScrFetchECG extends StatefulWidget {
+  const ScrFetchECG({
     super.key,
-    required this.connectionState,
-    required this.connectedDevice,
+    required this.device
   });
 
-  final BluetoothConnectionState connectionState;
-  final BluetoothDevice connectedDevice;
+  final BluetoothDevice device;
 
   @override
-  _FetchFileDataState createState() => _FetchFileDataState();
+  _ScrFetchECGState createState() => _ScrFetchECGState();
 }
 
-class _FetchFileDataState extends State<FetchFileData> {
+class _ScrFetchECGState extends State<ScrFetchECG> {
   bool pcConnected = false;
   bool currentFileReceivedComplete = false;
   bool fetchingFile = false;
@@ -72,24 +73,58 @@ class _FetchFileDataState extends State<FetchFileData> {
 
   final _scrollController = ScrollController();
 
+  BluetoothConnectionState _connectionState =
+      BluetoothConnectionState.disconnected;
+  bool _isConnecting = false;
+  bool _isDisconnecting = false;
+  
+  late StreamSubscription<BluetoothConnectionState>
+  _connectionStateSubscription;
+  late StreamSubscription<bool> _isConnectingSubscription;
+  late StreamSubscription<bool> _isDisconnectingSubscription;
+
+  int totalFileDataCounter = 0;
+  int checkNoOfWrites = 0;
+
   @override
   void initState() {
     tappedIndex = 0;
+    _connectionStateSubscription = widget.device.connectionState.listen((
+        state,
+        ) async {
+      _connectionState = state;
+      if (state == BluetoothConnectionState.connected) {
+        subscribeToChar(widget.device);
+        await _fetchLogCount(context);
+        await _fetchLogIndex(context);
+      }
+    });
 
-    pcConnected = true;
-    connectedToDevice = true;
+    _isConnectingSubscription = widget.device.isConnecting.listen((value) {
+      _isConnecting = value;
+      if (mounted) {
+        setState(() {});
+      }
+    });
 
-    /*WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _fetchLogCount(context);
-      await _fetchLogIndex(context);
-    });*/
+    _isDisconnectingSubscription = widget.device.isDisconnecting.listen((
+        value,
+        ) {
+      _isDisconnecting = value;
+      if (mounted) {
+        setState(() {});
+      }
+    });
 
     super.initState();
   }
 
   @override
   void dispose() async {
-    await _disconnect();
+    _connectionStateSubscription.cancel();
+    _isConnectingSubscription.cancel();
+    _isDisconnectingSubscription.cancel();
+    await onDisconnectPressed();
     super.dispose();
   }
 
@@ -107,6 +142,24 @@ class _FetchFileDataState extends State<FetchFileData> {
 
     check();
     return completer.future;
+  }
+
+  bool get isConnected {
+    return _connectionState == BluetoothConnectionState.connected;
+  }
+
+  Future onDisconnectPressed() async {
+    try {
+      await widget.device.disconnectAndUpdateStream();
+      Snackbar.show(ABC.c, "Disconnect: Success", success: true);
+    } catch (e, backtrace) {
+      Snackbar.show(
+        ABC.c,
+        prettyException("Disconnect Error:", e),
+        success: false,
+      );
+      print("$e backtrace: $backtrace");
+    }
   }
 
   bool isTransfering = false;
@@ -220,30 +273,7 @@ class _FetchFileDataState extends State<FetchFileData> {
     int sessionID,
     String formattedTime,
   ) async {
-    //listeningDataStream = true;
-    /*await Future.delayed(Duration(seconds: 1), () async {
-      // _streamData = _fble.subscribeToCharacteristic(dataCharacteristic);
-      dataCharacteristic?.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA);
-      await dataCharacteristic?.setNotifyValue(true);
-    });*/
-
-    List<BluetoothService> services =
-        await widget.connectedDevice.discoverServices();
-
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-            dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
-            break;
-          }
-        }
-      }
-    }
+    listeningDataStream = true;
 
     dataCharacteristic?.onValueReceived.listen((value) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
@@ -362,21 +392,6 @@ class _FetchFileDataState extends State<FetchFileData> {
     );
   }
 
-  Future<void> _disconnect() async {
-    //String deviceID = patchCurrentMAC;
-    fetchingFile = false;
-    try {
-      logConsole('Disconnecting ');
-      if (widget.connectionState == BluetoothConnectionState.connected) {
-        await widget.connectedDevice.disconnect();
-      }
-    } on Exception catch (e, _) {
-      logConsole("Error disconnecting from a device: $e");
-    } finally {
-      // Since [_connection] subscription is terminated, the "disconnected" state cannot be received and propagated
-    }
-  }
-
   String debugText = "Console Inited...";
 
   bool connectedToDevice = false;
@@ -387,7 +402,10 @@ class _FetchFileDataState extends State<FetchFileData> {
     //await _startListeningCommand(deviceID);
     await _startListeningData(0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
-      await _sendCommand(hPi4Global.getSessionCount);
+      List<int> commandFetchLogFile = List.empty(growable: true);
+      commandFetchLogFile.addAll(hPi4Global.ECGLogCount);
+      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+      await _sendCommand(commandFetchLogFile);
     });
     Navigator.pop(context);
   }
@@ -396,10 +414,12 @@ class _FetchFileDataState extends State<FetchFileData> {
     logConsole("Fetch logs initiated");
     showLoadingIndicator("Fetching logs...", context);
     //await _startListeningCommand(deviceID);
-    await _startListeningData(0, 0, "0");
+   // await _startListeningData(0, 0, "0");
     await Future.delayed(Duration(seconds: 2), () async {
-      await _sendCommand(hPi4Global.sessionLogIndex);
-      //await _sendCommand(hPi4Global.getSessionCount, deviceID);
+      List<int> commandFetchLogFile = List.empty(growable: true);
+      commandFetchLogFile.addAll(hPi4Global.ECGLogIndex);
+      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+      await _sendCommand(commandFetchLogFile);
     });
     Navigator.pop(context);
   }
@@ -413,7 +433,8 @@ class _FetchFileDataState extends State<FetchFileData> {
     showLoadingIndicator("Deleting log...", context);
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.sessionLogDelete);
+      commandFetchLogFile.addAll(hPi4Global.ECGLogDelete);
+      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
       commandFetchLogFile.add(sessionID & 0xFF);
       commandFetchLogFile.add((sessionID >> 8) & 0xFF);
       await _sendCommand(commandFetchLogFile);
@@ -447,34 +468,35 @@ class _FetchFileDataState extends State<FetchFileData> {
 
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
+      commandFetchLogFile.addAll(hPi4Global.FetchECGLogFile);
       commandFetchLogFile.add((sessionID >> 8) & 0xFF);
       commandFetchLogFile.add(sessionID & 0xFF);
       await _sendCommand(commandFetchLogFile);
     });
   }
 
-  Future<void> _sendCommand(List<int> commandList) async {
-    logConsole(
-      "Tx CMD $commandList 0x${hex.encode(commandList)}",
-    );
-
-    List<BluetoothService> services =
-        await widget.connectedDevice.discoverServices();
-
+  subscribeToChar(BluetoothDevice deviceName) async {
+    List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-            commandCharacteristic = characteristic;
+        in service.characteristics) {
+          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
+            dataCharacteristic = characteristic;
+            await dataCharacteristic?.setNotifyValue(true);
             break;
           }
         }
       }
     }
+  }
+
+  Future<void> _sendCommand(List<int> commandList) async {
+    logConsole(
+      "Tx CMD $commandList 0x${hex.encode(commandList)}",
+    );
 
     if (commandService != null && commandCharacteristic != null) {
       // Write to the characteristic
@@ -484,13 +506,7 @@ class _FetchFileDataState extends State<FetchFileData> {
   }
 
   Future<void> cancelAction() async {
-    /* if (_listeningCommandStream) {
-      _streamCommandSubscription.cancel();
-    }
-    if (listeningDataStream) {
-      _streamDataSubscription.cancel();
-    }*/
-    await _disconnect();
+    await onDisconnectPressed();
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
@@ -743,8 +759,8 @@ class _FetchFileDataState extends State<FetchFileData> {
                       children: [
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                hPi4Global.hpi4Color, // background color
+                            //backgroundColor: hPi4Global.hpi4Color, // background color
+                            backgroundColor: Colors.red, // background color
                             foregroundColor: Colors.white, // text color
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
