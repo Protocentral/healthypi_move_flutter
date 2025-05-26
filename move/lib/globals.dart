@@ -48,6 +48,7 @@ class hPi4Global {
   static const List<int> ECGLogIndex = [0x31];
   static const List<int> FetchECGLogFile = [0x32];
   static const List<int> ECGLogDelete = [0x33];
+  static const List<int> ECGLogWipeAll = [0x34];
 
   static const List<int> HrTrend = [0x01];
   static const List<int> Spo2Trend = [0x02];
