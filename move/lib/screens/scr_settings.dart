@@ -14,14 +14,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class SettingsPage extends StatefulWidget {
-  SettingsPage({super.key});
+class ScrSettings extends StatefulWidget {
+  ScrSettings({super.key});
 
   @override
-  _SettingsPageState createState() => _SettingsPageState();
+  _ScrSettingsState createState() => _ScrSettingsState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class _ScrSettingsState extends State<ScrSettings> {
   @override
   void initState() {
     super.initState();

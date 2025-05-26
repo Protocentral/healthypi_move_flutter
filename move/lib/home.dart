@@ -5,16 +5,16 @@ import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:move/screens/activityPage.dart';
+import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
-import 'package:move/screens/settings.dart';
+import 'package:move/screens/scr_settings.dart';
 import 'screens/scr_scan.dart';
-import 'screens/skinTempPage.dart';
-import 'screens/spo2Page.dart';
+import 'screens/scr_skin_temp.dart';
+import 'screens/scr_spo2.dart';
 
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
-import 'screens/hrPage.dart';
+import 'screens/scr_hr.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
@@ -29,7 +29,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [HomeScreen(), DevicePage(), SettingsPage()];
+  final List<Widget> _screens = [HomeScreen(), ScrDeviceMgmt(), ScrSettings()];
 
   bottomBarHeight(){
     if(Platform.isIOS){
@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             Navigator.of(
               context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => HRPage()));
+            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrHR()));
           },
           child: Card(
             color: Colors.grey[900],
@@ -229,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onTap: () {
             Navigator.of(
               context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => SPO2Page()));
+            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrSPO2()));
           },
           child: Card(
             color: Colors.grey[900],
@@ -285,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
         InkWell(
           onTap: () {
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => SkinTemperaturePage()),
+              MaterialPageRoute(builder: (_) => ScrSkinTemperature()),
             );
           },
           child: Card(
@@ -342,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
         InkWell(
           onTap: () {
             Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ActivityPage()),
+              MaterialPageRoute(builder: (_) => ScrActivity()),
             );
           },
           child: Card(

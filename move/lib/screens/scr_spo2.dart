@@ -13,12 +13,12 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 
-class SPO2Page extends StatefulWidget {
-  const SPO2Page({super.key});
+class ScrSPO2 extends StatefulWidget {
+  const ScrSPO2({super.key});
   @override
-  State<SPO2Page> createState() => _SPO2PageState();
+  State<ScrSPO2> createState() => _ScrSPO2State();
 }
-class _SPO2PageState extends State<SPO2Page>
+class _ScrSPO2State extends State<ScrSPO2>
     with SingleTickerProviderStateMixin {
 
   late TabController _tabController;

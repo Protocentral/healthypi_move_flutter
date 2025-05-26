@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:move/screens/streamSelectionPage.dart';
+import 'package:move/screens/scr_stream_selection.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -15,8 +15,8 @@ import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'ble_ctlr.dart';
 
-class WaveFormsPage extends StatefulWidget {
-  WaveFormsPage({
+class ScrLiveStream extends StatefulWidget {
+  ScrLiveStream({
     Key? key,
     required this.selectedType,
     required this.device,
@@ -26,10 +26,10 @@ class WaveFormsPage extends StatefulWidget {
   final BluetoothDevice device;
 
   @override
-  _WaveFormsPageState createState() => _WaveFormsPageState();
+  _ScrLiveStreamState createState() => _ScrLiveStreamState();
 }
 
-class _WaveFormsPageState extends State<WaveFormsPage> {
+class _ScrLiveStreamState extends State<ScrLiveStream> {
   GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey();
   Key key = UniqueKey();
 
@@ -461,7 +461,7 @@ class _WaveFormsPageState extends State<WaveFormsPage> {
           closeAllStreams();
 
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => LiveStreamsOptions(device: widget.device)),
+            MaterialPageRoute(builder: (_) => ScrStreamsSelection(device: widget.device)),
           );
         },
       ),

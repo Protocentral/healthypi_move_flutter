@@ -16,16 +16,16 @@ import '../home.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
-class SyncingScreen extends StatefulWidget {
+class ScrSyncing extends StatefulWidget {
   final BluetoothDevice device;
 
-  const SyncingScreen({super.key, required this.device});
+  const ScrSyncing({super.key, required this.device});
 
   @override
-  State<SyncingScreen> createState() => _SyncingScreenState();
+  State<ScrSyncing> createState() => _ScrSyncingState();
 }
 
-class _SyncingScreenState extends State<SyncingScreen> {
+class _ScrSyncingState extends State<ScrSyncing> {
   BluetoothConnectionState _connectionState =
       BluetoothConnectionState.disconnected;
   bool _isConnecting = false;
@@ -794,7 +794,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole("All Temperature files have been processed.");
       currentTempFileIndex--;
 
-      Future.delayed(Duration(seconds: 8), () async {
+      Future.delayed(Duration(seconds: 5), () async {
         setState(() {
           totalFileDataCounter = 0;
           isFetchingTempComplete = true;

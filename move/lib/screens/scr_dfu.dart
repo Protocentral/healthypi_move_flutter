@@ -358,7 +358,7 @@ class ScrDFUState extends State<ScrDFU> {
                                 );
                               });
                               /////disconnect here
-                              onDisconnectPressed();
+                              //onDisconnectPressed();
                             }
                           })
                           .catchError((e) {

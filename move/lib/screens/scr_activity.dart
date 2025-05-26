@@ -1,40 +1,35 @@
 import 'dart:io';
 
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:syncfusion_flutter_sliders/sliders.dart' as rs;
 import '../home.dart';
 import '../utils/sizeConfig.dart';
+import 'package:path/path.dart' as p;
+import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
-import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 
-class SkinTemperaturePage extends StatefulWidget {
-  const SkinTemperaturePage({super.key});
+class ScrActivity extends StatefulWidget {
+  const ScrActivity({super.key});
   @override
-  State<SkinTemperaturePage> createState() => _SkinTemperaturePageState();
+  State<ScrActivity> createState() => _ScrActivityState();
 }
-
-class _SkinTemperaturePageState extends State<SkinTemperaturePage>
+class _ScrActivityState extends State<ScrActivity>
     with SingleTickerProviderStateMixin {
+
   late TabController _tabController;
 
   List<String> timestamp = [];
-  List<String> minTemp = [];
-  List<String> maxTemp = [];
-  List<String> avgTemp = [];
-  List<String> latestTemp = [];
 
-  double restingTemp = 0;
-  double rangeMinTemp = 0;
-  double rangeMaxTemp = 0;
-  double averageTemp = 0;
+  int totalCount = 0;
+  int Count = 0;
   late DateTime lastUpdatedTime;
 
-  List<TempTrends> TempTrendsData = [];
+  List<ActivityTrends> ActivityTrendsData = [];
 
   @override
   void initState() {
@@ -46,15 +41,16 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
 
   @override
   void dispose() {
+    ActivityTrendsData = [];
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
-    TempTrendsData = [];
     super.dispose();
   }
 
   void _handleTabChange() {
     setState(() {
       _listCSVFiles();
+
     });
   }
 
@@ -206,46 +202,47 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
 
   Widget buildChartBlock() {
     return Padding(
-      padding: const EdgeInsets.all(2.0),
-      child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        color: Colors.grey[900],
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: dateTimeAxis(),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                 // minimum: 0,
-                 //maximum: 200,
-                  //interval: 10,
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+        padding: const EdgeInsets.all(2.0),
+        child: Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+          color: Colors.grey[900],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: SfCartesianChart(
+                  plotAreaBorderWidth: 0,
+                  primaryXAxis:  dateTimeAxis(),
+                  primaryYAxis: NumericAxis(
+                    majorGridLines: MajorGridLines(width: 0.05),
+                    //minimum: 0,
+                    //maximum: ,
+                   // interval: 1000,
+                    anchorRangeToVisiblePoints: false,
+                    labelStyle: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
+                  palette: <Color>[
+                    hPi4Global.hpi4Color,
+                  ],
+                  series: <CartesianSeries>[
+                    ColumnSeries<ActivityTrends, DateTime>(
+                      dataSource: ActivityTrendsData,
+                      xValueMapper: (ActivityTrends data, _) => data.date,
+                      yValueMapper: (ActivityTrends data, _) => data.count,
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                      animationDuration: 0,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                  ],
                 ),
-                palette: <Color>[hPi4Global.hpi4Color],
-                series: <CartesianSeries>[
-                  RangeColumnSeries<TempTrends, DateTime>(
-                    dataSource: TempTrendsData,
-                    xValueMapper: (TempTrends data, _) => data.date,
-                    lowValueMapper: (TempTrends data, _) => data.minTemp,
-                    highValueMapper: (TempTrends data, _) => data.maxTemp,
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
-                    animationDuration: 0,
-                  ),
-                ],
               ),
-            ),
-          ],
-        ),
-      ),
-    );
+            ],
+          ),
+        ));
   }
 
   String _formatDate(DateTime date) {
@@ -258,7 +255,7 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
       if (lines.length > 1) {
         return lines[1]; // Assuming the timestamp is on the second line
       }
-      return '0';
+      return 'No second line';
     } catch (e) {
       return 'Error reading file: $e';
     }
@@ -267,7 +264,6 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
   Future<void> _listCSVFiles() async {
     Directory? downloadsDirectory;
     if (Platform.isAndroid) {
-      //downloadsDirectory = Directory('/storage/emulated/0/Download');
       downloadsDirectory = await getApplicationDocumentsDirectory();
     } else if (Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
@@ -278,29 +274,16 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
       if (downloadsDir.existsSync()) {
         List<FileSystemEntity> files = downloadsDir.listSync();
 
-        List<File> csvFiles =
-            files
-                .where((file) => file is File && file.path.endsWith('.csv'))
-                .map((file) => file as File)
-                .where(
-                  (file) => p.basename(file.path).startsWith("temp_"),
-                ) // Filter by prefix
-                .toList();
-
-        List<String> fileNames =
-            csvFiles.map((file) => p.basename(file.path)).toList();
-
-        List<String> weeklyFileNames = [];
-        List<String> MonthlyFileNames = [];
-        TempTrendsData = [];
-        restingTemp = 0;
-        rangeMinTemp = 0;
-        rangeMaxTemp = 0;
-        averageTemp = 0;
+        List<File> csvFiles = files
+            .where((file) => file is File && file.path.endsWith('.csv'))
+            .map((file) => file as File)
+            .where(
+              (file) => p.basename(file.path).startsWith("activity_"),
+        ) // Filter by prefix
+            .toList();
 
         for (File file in csvFiles) {
           String timestamp = await _getSecondLineTimestamp(file);
-          //timestamps.add(timestamp);
           String timestamp1 = timestamp.split(",")[0];
           int timestamp2 = int.parse(timestamp1);
           int updatedTimestamp = timestamp2 * 1000;
@@ -310,56 +293,48 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
             updatedTimestamp,
             isUtc: true,
           );
-
           DateTime now = DateTime.now();
 
           if (_tabController.index == 0) {
+            // Group by every hour for the day
             String todayStr = _formatDate(now);
             if (_formatDate(timestampDateTime) == todayStr) {
               await processFileData(
                 fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd HH:00:00", // Group by hour
               );
-            } else {}
+            }
           } else if (_tabController.index == 1) {
+            // Group by every day for the week
             DateTime weekStart = now.subtract(Duration(days: 7));
             if (timestampDateTime.isAfter(weekStart) &&
                 timestampDateTime.isBefore(now)) {
-              weeklyFileNames.add(fileName1); // Process the file data
-            }
-            if (weeklyFileNames.isNotEmpty) {
               await processFileData(
-                fileNames: weeklyFileNames,
+                fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd", // Group by day
               );
-            } else {}
+            }
           } else if (_tabController.index == 2) {
+            // Group by every day for the month
             DateTime monthStart = now.subtract(Duration(days: 30));
-
             if (timestampDateTime.isAfter(monthStart) &&
                 timestampDateTime.isBefore(now)) {
-              MonthlyFileNames.add(fileName1);
-            }
-            if (MonthlyFileNames.isNotEmpty) {
               await processFileData(
-                fileNames: MonthlyFileNames,
+                fileNames: [fileName1],
                 groupingFormat: "yyyy-MM-dd", // Group by day
               );
-            } else {}
+            }
           }
         }
       }
     }
   }
-
-  // Save a value
-  saveValue(DateTime lastUpdatedTime, double averageTemp) async {
-    String lastDateTime = DateFormat(
-      'EEE d MMM',
-    ).format(lastUpdatedTime);
+// Save the last updated values
+  saveValue(DateTime lastUpdatedTime, int Count) async {
+    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestTemp', averageTemp.toString());
-    await prefs.setString('lastUpdatedTemp', lastDateTime.toString());
+    await prefs.setString('latestActivityCount', Count.toString());
+    await prefs.setString('lastUpdatedActivity', lastDateTime);
   }
 
   Future<void> processFileData({
@@ -368,8 +343,8 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
     groupingFormat, // Grouping format: "yyyy-MM-dd HH:00:00" for hourly, "yyyy-MM-dd" for daily
   }) async {
     Directory? downloadsDirectory;
-    Map<String, Map<String, double>> groupedStats =
-        {}; // To store grouped min and max values
+    Map<String, Map<String, int>> groupedStats =
+    {}; // To store grouped min and max values
 
     if (Platform.isAndroid) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
@@ -391,236 +366,125 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
         // Extract headers and rows
         List<String> headers = result.first.split(',');
         List<List<String>> rows =
-            result.skip(1).map((line) => line.split(',')).toList();
+        result.skip(1).map((line) => line.split(',')).toList();
 
         // Process each row
         for (var row in rows) {
-          if (row.length < 5) continue;
+          if (row.length < 2) continue;
 
           int timestamp = int.parse(row[0]);
-          double min = double.parse(row[1]);
-          double max = double.parse(row[2]);
-          double avg = double.parse(row[3]);
-          double latest = double.parse(row[4]);
+          int count = int.parse(row[1]);
 
           // Convert timestamp to DateTime and group by the specified format
           var dateTime =
-              DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
+          DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
           String groupKey = DateFormat(groupingFormat).format(dateTime);
 
           // Update min and max for the group
           if (!groupedStats.containsKey(groupKey)) {
             groupedStats[groupKey] = {
-              'min': min,
-              'max': max,
-              'avg': avg,
-              'count': 1,
-              'latest': latest,
+              'count': count,
             };
           } else {
-            groupedStats[groupKey]!['min'] =
-                groupedStats[groupKey]!['min']! < min
-                    ? groupedStats[groupKey]!['min']!
-                    : min;
-            groupedStats[groupKey]!['max'] =
-                groupedStats[groupKey]!['max']! > max
-                    ? groupedStats[groupKey]!['max']!
-                    : max;
-            //print(groupedStats[groupKey]!['min']);
-            //print(groupedStats[groupKey]!['max']);
-            groupedStats[groupKey]!['avg'] =
-                (groupedStats[groupKey]!['avg']! + avg); // Add to sum
-            groupedStats[groupKey]!['count'] =
-                groupedStats[groupKey]!['count']! + 1;
+            groupedStats[groupKey]!['count'] = (groupedStats[groupKey]!['count']! + count); // Add to sum
+            setState(() {
+             Count = groupedStats[groupKey]!['count']!;
+            });
           }
         }
       }
     }
     double average = 0;
-    double Max = 0;
-    double Min = 0;
     // Process the grouped stats and update the UI
     groupedStats.forEach((group, stats) {
       DateTime formattedDateTime = DateTime.parse(group);
       setState(() {
-        TempTrendsData.add(
-          TempTrends(
-            formattedDateTime,
-            stats['min']! / 100,
-            stats['max']! / 100,
-          ),
-        );
-        average = ((stats['avg']! / 100) / stats['count']!);
+        ActivityTrendsData.add(ActivityTrends(formattedDateTime, stats['count']!),);
       });
+      print(" $group, Count: $stats");
+
     });
 
     // Update the last aggregated values
     if (groupedStats.isNotEmpty) {
       String lastGroup = groupedStats.keys.last;
-      String avgString = average.toStringAsFixed(2);
-      double lastMin = groupedStats[lastGroup]!['min']! / 100;
-      double lastMax = groupedStats[lastGroup]!['max']! / 100;
-      double lastAvg = double.parse(avgString);
 
       setState(() {
         lastUpdatedTime = DateTime.parse(lastGroup);
-        averageTemp = lastAvg;
-        restingTemp = groupedStats[lastGroup]!['latest']! / 100;
-        rangeMinTemp = lastMin;
-        rangeMaxTemp = lastMax;
+        Count = groupedStats[lastGroup]!['count']!;
       });
-
-      String todayStr = _formatDate(DateTime.now());
-
-      /*if (_formatDate(lastUpdatedTime) == todayStr) {
-        setState(() {
-          averageTemp = lastAvg;
-          restingTemp = groupedStats[lastGroup]!['latest']! / 100;
-          rangeMinTemp = lastMin;
-          rangeMaxTemp = lastMax;
-        });
-      }*/
-
-      if (_formatDate(lastUpdatedTime) == todayStr) {
-        saveValue(lastUpdatedTime, averageTemp);
-      }
+      saveValue(lastUpdatedTime, Count);
     }
   }
 
-  Widget displayValue() {
+  Widget displayValue(){
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 20,
-          width: SizeConfig.blockSizeHorizontal * 44,
+          height: SizeConfig.blockSizeVertical * 18,
+          width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'RANGE',
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
-                  SizedBox(height: 20.0),
-                  Wrap(
-                    spacing: 10.0, // Space between items
-                    children: <Widget>[
-                      Text((rangeMinTemp.toString()=="0.0")? "--":rangeMinTemp.toString(),
-                        style: hPi4Global.moveValueTextStyle,
-                      ),
-                      Text('-', style: hPi4Global.moveValueTextStyle),
-                      Text((rangeMaxTemp.toString()=="0.0")? "--":rangeMaxTemp.toString(),
-
-                        style: hPi4Global.moveValueTextStyle,
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        "\u00b0 F",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
-                ],
-              ),
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text('Total',
+                            style: hPi4Global.movecardSubValueTextStyle),
+                        SizedBox(
+                          width: 15.0,
+                        ),
+                        //Icon(Icons.favorite_border, color: Colors.black),
+                      ],
+                    ),
+                    SizedBox(
+                      height: 20.0,
+                    ),
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text((Count.toString()=="0")? "--":Count.toString(),
+                            style: hPi4Global.moveValueTextStyle),
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: <Widget>[
+                        SizedBox(
+                          width: 10.0,
+                        ),
+                        Text("steps",
+                            style: hPi4Global.movecardSubValueTextStyle),
+                        SizedBox(
+                          width: 15.0,
+                        ),
+                        //Icon(Icons.favorite_border, color: Colors.black),
+                      ],
+                    ),
+                  ]),
             ),
           ),
-        ),
-        Column(
-          //mainAxisAlignment: MainAxisAlignment.start,
-          children: <Widget>[
-            SizedBox(
-              height: SizeConfig.blockSizeVertical * 10,
-              width: SizeConfig.blockSizeHorizontal * 44,
-              child: Card(
-                color: Colors.grey[900],
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          SizedBox(width: 10.0),
-                          Text((averageTemp.toString() =="0.0")? "--":averageTemp.toString(),
-                            style: hPi4Global.moveValueTextStyle,
-                          ),
-                          SizedBox(width: 15.0),
-                          //Icon(Icons.favorite_border, color: Colors.black),
-                        ],
-                      ),
-                      Row(
-                        children: <Widget>[
-                          SizedBox(width: 10.0),
-                          Text(
-                            'AVERAGE',
-                            style: hPi4Global.movecardSubValueTextStyle,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(
-              height: SizeConfig.blockSizeVertical * 10,
-              width: SizeConfig.blockSizeHorizontal * 44,
-              child: Card(
-                color: Colors.grey[900],
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: <Widget>[
-                      Row(
-                        children: <Widget>[
-                          SizedBox(width: 10.0),
-                          Text((restingTemp.toString()=="0.0")? "--":restingTemp.toString(),
-                            style: hPi4Global.moveValueTextStyle,
-                          ),
-                          SizedBox(width: 15.0),
-                          //Icon(Icons.favorite_border, color: Colors.black),
-                        ],
-                      ),
-                      Row(
-                        children: <Widget>[
-                          SizedBox(width: 10.0),
-                          Text(
-                            'Latest',
-                            style: hPi4Global.movecardSubValueTextStyle,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     );
   }
 
-  Widget displayCard(String tab) {
+  Widget displayCard(String tab){
       return Card(
         color: Colors.black,
         child: Padding(
@@ -639,12 +503,12 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                       Container(
                         height: SizeConfig.blockSizeVertical * 45,
                         width: SizeConfig.blockSizeHorizontal * 88,
-                        color: Colors.transparent,
-                        child: buildChartBlock(),
-                      ),
+                        color:Colors.transparent,
+                        child:buildChartBlock(),
+                      )
                     ],
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height:20),
                   displayValue(),
                 ],
               ),
@@ -652,8 +516,8 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
           ),
         ),
       );
-
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -666,25 +530,20 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => HomePage()))
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          //mainAxisSize: MainAxisSize.max,
-          children: [
-            const Text(
-              'Temperature',
-              style: TextStyle(
-                fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+            mainAxisAlignment: MainAxisAlignment.center,
+            //mainAxisSize: MainAxisSize.max,
+            children: [
+              const Text(
+                'Activity',
+                style: TextStyle(fontSize: 16, color:hPi4Global.hpi4AppBarIconsColor),
               ),
-            ),
-            SizedBox(width: 30.0),
-          ],
+              SizedBox(width:30.0),
+            ]
         ),
         centerTitle: true,
         bottom: PreferredSize(
@@ -709,7 +568,11 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white,
-                tabs: const [Text('Today'), Text('Week'), Text('Month')],
+                tabs: const [
+                  Text('Today'),
+                  Text('Week'),
+                  Text('Month')
+                ],
               ),
             ),
           ),
@@ -727,11 +590,12 @@ class _SkinTemperaturePageState extends State<SkinTemperaturePage>
       // ),
     );
   }
+
 }
 
-class TempTrends {
-  TempTrends(this.date, this.maxTemp, this.minTemp);
+
+class ActivityTrends {
+  ActivityTrends(this.date, this.count);
   final DateTime date;
-  final double maxTemp;
-  final double minTemp;
+  final int count;
 }

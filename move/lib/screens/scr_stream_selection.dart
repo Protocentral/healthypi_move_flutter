@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/screens/bptCalibrationPage1.dart';
+import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
 import 'package:move/utils/extra.dart';
@@ -16,18 +16,18 @@ import 'package:flutter/cupertino.dart';
 
 import '../home.dart';
 import '../utils/snackbar.dart';
-import 'liveStream.dart';
+import 'scr_live_stream.dart';
 
-class LiveStreamsOptions extends StatefulWidget {
-  const LiveStreamsOptions({super.key,required this.device,});
+class ScrStreamsSelection extends StatefulWidget {
+  const ScrStreamsSelection({super.key,required this.device,});
 
   final BluetoothDevice device;
 
   @override
-  _LiveStreamsOptionsState createState() => _LiveStreamsOptionsState();
+  _ScrStreamsSelectionState createState() => _ScrStreamsSelectionState();
 }
 
-class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
+class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
 
   @override
   void initState() {
@@ -192,7 +192,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                      WaveFormsPage(selectedType: "ECG",
+                                                          ScrLiveStream(selectedType: "ECG",
                                                           device: widget.device),
                                                 ),
                                               );
@@ -246,7 +246,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                      WaveFormsPage(selectedType: "PPG",
+                                                          ScrLiveStream(selectedType: "PPG",
                                                           device: widget.device),
                                                 ),
                                               );
@@ -300,7 +300,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                      WaveFormsPage(selectedType: "GSR",
+                                                          ScrLiveStream(selectedType: "GSR",
                                                           device: widget.device),
                                                 ),
                                               );
@@ -354,7 +354,7 @@ class _LiveStreamsOptionsState extends State<LiveStreamsOptions> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (context) =>
-                                                          WaveFormsPage(selectedType: "Finger PPG",
+                                                          ScrLiveStream(selectedType: "Finger PPG",
                                                               device: widget.device),
                                                 ),
                                               );
