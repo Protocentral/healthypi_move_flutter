@@ -240,6 +240,34 @@ class _ScrScanState extends State<ScrScan> {
     });
   }
 
+  redirectToScreens(BluetoothDevice device){
+    if(widget.tabIndex == "1"){
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SyncingScreen(device: device),
+        ),
+      );
+    }else if(widget.tabIndex == "2"){
+      showLoadingIndicator("Connected. Erasing the data...", context);
+      _eraseAllLogs(context, device);
+    }else if(widget.tabIndex == "3"){
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ScrStreamsSelection(device: device),
+        ),
+      );
+    }else if(widget.tabIndex == "4"){
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ScrFetchECG(device: device),
+        ),
+      );
+    }
+    else{
+
+    }
+  }
+
   bool pairedStatus = false;
 
   Future<void> onConnectPressed(BluetoothDevice device) async {
@@ -271,32 +299,7 @@ class _ScrScanState extends State<ScrScan> {
           pairedStatus = prefs.getString('pairedStatus');
         });
         if(pairedStatus == "paired"){
-          if(widget.tabIndex == "1"){
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ScrSyncing(device: device),
-            ),
-          );
-        }else if(widget.tabIndex == "2"){
-          showLoadingIndicator("Connected. Erasing the data...", context);
-          //await subscribeToChar(device);
-          _eraseAllLogs(context, device);
-        }else if(widget.tabIndex == "3"){
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => ScrStreamsSelection(device: device),
-            ),
-          );
-        }else if(widget.tabIndex == "4"){
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => ScrFetchECG(device: device),
-              ),
-            );
-          }
-        else{
-
-        }
+          redirectToScreens(device);
         }else{
           showPairDeviceDialog(context, device);
         }
@@ -540,32 +543,7 @@ class _ScrScanState extends State<ScrScan> {
                       prefs.setString('pairedStatus','paired');
                     });
                     Navigator.pop(context);
-                    if(widget.tabIndex == "1"){
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => ScrSyncing(device: device),
-                        ),
-                      );
-                    }else if(widget.tabIndex == "2"){
-                      showLoadingIndicator("Connected. Erasing the data...", context);
-                      //await subscribeToChar(device);
-                      _eraseAllLogs(context, device);
-                    } else if(widget.tabIndex == "3"){
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => ScrStreamsSelection(device: device),
-                        ),
-                      );
-                    } else if(widget.tabIndex == "4"){
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => ScrFetchECG(device: device),
-                        ),
-                      );
-                    }
-                    else{
-
-                    }
+                    redirectToScreens(device);
                   } catch (e) {
                   }
                 },
@@ -581,32 +559,7 @@ class _ScrScanState extends State<ScrScan> {
               TextButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  if(widget.tabIndex == "1"){
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => ScrSyncing(device: device),
-                      ),
-                    );
-                  }else if(widget.tabIndex == "2"){
-                    showLoadingIndicator("Connected. Erasing the data...", context);
-                    //await subscribeToChar(device);
-                    _eraseAllLogs(context, device);
-                  }else if(widget.tabIndex == "3"){
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => ScrStreamsSelection(device: device),
-                      ),
-                    );
-                  }else if(widget.tabIndex == "4"){
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => ScrFetchECG(device: device),
-                      ),
-                    );
-                  }
-                  else{
-
-                  }
+                  redirectToScreens(device);
                 },
                 child: Text(
                   'No',
