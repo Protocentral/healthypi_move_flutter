@@ -120,7 +120,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     );
                   }else{
                     Navigator.pop(context);
-                   // deleteAllFiles();
+                    // deleteAllFiles();
                     _resetStoredValue();
 
                   }
@@ -131,7 +131,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   Navigator.of(context).pop(); // Close the dialog
                 },
                 child: Text(
-                  'OK',
+                  'No',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

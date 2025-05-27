@@ -16,16 +16,16 @@ import '../home.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
-class ScrSyncing extends StatefulWidget {
+class SyncingScreen extends StatefulWidget {
   final BluetoothDevice device;
 
-  const ScrSyncing({super.key, required this.device});
+  const SyncingScreen({super.key, required this.device});
 
   @override
-  State<ScrSyncing> createState() => _ScrSyncingState();
+  State<SyncingScreen> createState() => _SyncingScreenState();
 }
 
-class _ScrSyncingState extends State<ScrSyncing> {
+class _SyncingScreenState extends State<SyncingScreen> {
   BluetoothConnectionState _connectionState =
       BluetoothConnectionState.disconnected;
   bool _isConnecting = false;
@@ -85,10 +85,12 @@ class _ScrSyncingState extends State<ScrSyncing> {
   }
 
   @override
-  void dispose() {
-    _connectionStateSubscription.cancel();
-    _isConnectingSubscription.cancel();
-    _isDisconnectingSubscription.cancel();
+  void dispose() async{
+    await _connectionStateSubscription.cancel();
+    await _isConnectingSubscription.cancel();
+    await _isDisconnectingSubscription.cancel();
+    await _streamDataSubscription.cancel();
+    await onDisconnectPressed();
     super.dispose();
   }
 
@@ -217,12 +219,8 @@ class _ScrSyncingState extends State<ScrSyncing> {
       isFetchingTemp = false;
       isFetchingActivity = false;
     });
-    Future.delayed(Duration(seconds: 2), () async {
-      await _fetchLogCount(context, widget.device, hPi4Global.HrTrend);
-    });
-    Future.delayed(Duration(seconds: 3), () async {
-      await _fetchLogIndex(context, widget.device, hPi4Global.HrTrend);
-    });
+    await _fetchLogCount(context, widget.device, hPi4Global.HrTrend);
+    await _fetchLogIndex(context, widget.device, hPi4Global.HrTrend);
   }
 
   // Function for converting little-endian bytes to integer
@@ -425,6 +423,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
 
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((value) async {
       //logConsole("Data Rx: $value");
+     // logConsole("Data Rx: "+ hex.encode(value));
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
 
@@ -441,7 +440,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
                 isFetchingHRComplete = true;
                 isFetchingHR = false;
                 isFetchingSpo2 = true;
-                Future.delayed(Duration(seconds: 2), () async {
+                Future.delayed(Duration(seconds: 0), () async {
                   await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
                   await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
                 });
@@ -454,7 +453,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
                 isFetchingSpo2Complete = true;
                 isFetchingSpo2 = false;
                 isFetchingTemp = true;
-                Future.delayed(Duration(seconds: 2), () async {
+                Future.delayed(Duration(seconds: 0), () async {
                   await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
                   await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
                 });
@@ -474,7 +473,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
                 isFetchingActivityComplete = true;
                 isFetchingTemp = true;
                 isFetchingActivity = false;
-                Future.delayed(Duration(seconds: 2), () async {
+                Future.delayed(Duration(seconds: 0), () async {
                   await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
                   await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
                 });
@@ -488,9 +487,9 @@ class _ScrSyncingState extends State<ScrSyncing> {
 
       /*** 2. Handle Log Index (header data for each trend) ***/
       else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        int trendType = bdata.getUint8(11);
+        int trendType = bdata.getUint8(13);
         int logFileID = bdata.getInt64(1, Endian.little);
-        int sessionLength = bdata.getInt16(9, Endian.little);
+        int sessionLength = bdata.getInt32(9, Endian.little);
         LogHeader header = (logFileID: logFileID, sessionLength: sessionLength);
 
         switch (trendType) {
@@ -640,7 +639,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
       logConsole("All files have been processed.");
       currentFileIndex--;
 
-      Future.delayed(Duration(seconds: 2), () async {
+      Future.delayed(Duration(seconds: 1), () async {
         setState(() {
           totalFileDataCounter = 0;
           isFetchingHRComplete = true;
@@ -651,12 +650,8 @@ class _ScrSyncingState extends State<ScrSyncing> {
         });
       });
       _checkAllFetchesComplete(deviceName);
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
-      });
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
-      });
+      await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
+      await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
     }
   }
 
@@ -713,7 +708,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
       logConsole("All spo2 files have been processed.");
       currentSpo2FileIndex--;
 
-      Future.delayed(Duration(seconds: 2), () async {
+      Future.delayed(Duration(seconds: 1), () async {
         setState(() {
           isFetchingSpo2Complete = true;
           isFetchingHR = false;
@@ -723,20 +718,16 @@ class _ScrSyncingState extends State<ScrSyncing> {
         });
       });
       _checkAllFetchesComplete(deviceName);
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogCount(
-          context,
-          deviceName,
-          hPi4Global.ActivityTrend,
-        );
-      });
-      Future.delayed(Duration(seconds: 2), () async {
-        await _fetchLogIndex(
-          context,
-          deviceName,
-          hPi4Global.ActivityTrend,
-        );
-      });
+      await _fetchLogCount(
+        context,
+        deviceName,
+        hPi4Global.ActivityTrend,
+      );
+      await _fetchLogIndex(
+        context,
+        deviceName,
+        hPi4Global.ActivityTrend,
+      );
 
     }
   }
@@ -861,7 +852,7 @@ class _ScrSyncingState extends State<ScrSyncing> {
     if (currentActivityFileIndex == logActivityHeaderList.length) {
       logConsole("All Activity files have been processed.");
       currentActivityFileIndex--;
-      Future.delayed(Duration(seconds: 2), () async {
+      Future.delayed(Duration(seconds: 1), () async {
         setState(() {
           isFetchingActivityComplete = true;
           isFetchingHR = false;
@@ -870,12 +861,8 @@ class _ScrSyncingState extends State<ScrSyncing> {
           isFetchingActivity = false;
         });
         _checkAllFetchesComplete(deviceName);
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
-        });
-        Future.delayed(Duration(seconds: 2), () async {
-          await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
-        });
+        await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
+        await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
       });
 
     }
@@ -897,12 +884,10 @@ class _ScrSyncingState extends State<ScrSyncing> {
       List<int> trendType,
       ) async {
     //logConsole("Fetch log count initiated");
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandPacket = [];
-      commandPacket.addAll(hPi4Global.getSessionCount);
-      commandPacket.addAll(trendType);
-      await _sendCommand(commandPacket, deviceName);
-    });
+    List<int> commandPacket = [];
+    commandPacket.addAll(hPi4Global.getSessionCount);
+    commandPacket.addAll(trendType);
+    await _sendCommand(commandPacket, deviceName);
   }
 
   Future<void> _fetchLogIndex(
@@ -911,13 +896,11 @@ class _ScrSyncingState extends State<ScrSyncing> {
       List<int> trendType,
       ) async {
     //logConsole("Fetch log index initiated");
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandPacket = [];
-      //List<int> type = [trendType];
-      commandPacket.addAll(hPi4Global.sessionLogIndex);
-      commandPacket.addAll(trendType);
-      await _sendCommand(commandPacket, deviceName);
-    });
+    List<int> commandPacket = [];
+    //List<int> type = [trendType];
+    commandPacket.addAll(hPi4Global.sessionLogIndex);
+    commandPacket.addAll(trendType);
+    await _sendCommand(commandPacket, deviceName);
   }
 
   Future<void> _fetchLogFile(
@@ -929,16 +912,14 @@ class _ScrSyncingState extends State<ScrSyncing> {
     //logConsole("Fetch logs file initiated for session: $sessionID, size: $sessionSize",);
     // Reset all fetch variables
     currentFileDataCounter = 0;
-    await Future.delayed(Duration(seconds: 2), () async {
-      //logConsole("Fetch logs file entered: $sessionID, size: $sessionSize");
-      List<int> commandFetchLogFile = [];
-      commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
-      commandFetchLogFile.addAll(trendType);
-      for (int shift = 0; shift <= 56; shift += 8) {
-        commandFetchLogFile.add((sessionID >> shift) & 0xFF);
-      }
-      await _sendCommand(commandFetchLogFile, deviceName);
-    });
+    logConsole("Fetch logs file entered: $sessionID, size: $sessionSize");
+    List<int> commandFetchLogFile = [];
+    commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
+    commandFetchLogFile.addAll(trendType);
+    for (int shift = 0; shift <= 56; shift += 8) {
+      commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+    }
+    await _sendCommand(commandFetchLogFile, deviceName);
   }
 
   void _checkAllFetchesComplete(BluetoothDevice deviceName) {
@@ -968,7 +949,8 @@ class _ScrSyncingState extends State<ScrSyncing> {
           ),
           //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
         ),
-        onPressed:(){
+        onPressed:() async{
+          await _streamDataSubscription.cancel();
           onDisconnectPressed();
           Navigator.of(
             context,
@@ -1076,8 +1058,9 @@ class _ScrSyncingState extends State<ScrSyncing> {
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
               icon: Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: (){
-                onDisconnectPressed();
+              onPressed: () async {
+                await onDisconnectPressed();
+                await _streamDataSubscription.cancel();
                 Navigator.of(
                   context,
                 ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));

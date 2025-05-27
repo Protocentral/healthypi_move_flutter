@@ -3,6 +3,7 @@ import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/utils/extra.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../utils/sizeConfig.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +13,7 @@ import '../home.dart';
 
 import 'dart:async';
 import 'dart:typed_data';
+import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 
 import '../utils/snackbar.dart';
@@ -102,17 +104,29 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         setState(() {});
       }
     });
-
+    requestPermissions();
     super.initState();
   }
 
   @override
   void dispose() async {
-    _connectionStateSubscription.cancel();
-    _isConnectingSubscription.cancel();
-    _isDisconnectingSubscription.cancel();
+    await _connectionStateSubscription.cancel();
+    await _isConnectingSubscription.cancel();
+    await _isDisconnectingSubscription.cancel();
+    await _streamDataSubscription.cancel();
     await onDisconnectPressed();
     super.dispose();
+  }
+
+  Future<void> requestPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.manageExternalStorage,
+      Permission.storage,
+    ].request();
+
+    if (statuses.containsValue(PermissionStatus.denied)) {
+
+    }
   }
 
   bool get isConnected {
@@ -186,7 +200,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   void startFetching() async{
     await subscribeToChar(widget.device);
-    subscribeToChar(widget.device);
     await _startListeningData();
     await _fetchLogCount(context);
     await _fetchLogIndex(context);
@@ -260,7 +273,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       mData,
     ).buffer.asByteData(WISER_FILE_HEADER_LEN);
 
-    int logNumberPoints = ((mData.length - 1) ~/ 2);
+    int logNumberPoints = ((mData.length - 1) ~/ 4);
     logConsole("File point..$logNumberPoints");
 
     //List<String> data1 = ['1', 'Bilal Saeed', '1374934', '912839812'];
@@ -273,9 +286,9 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
     for (int i = 0; i < logNumberPoints-1; i++) {
       // Extracting 16 bytes of data for the current row
-      List<int> bytes = bdata.buffer.asInt8List(i * 2, 2);
+      List<int> bytes = bdata.buffer.asInt8List(i * 4, 4);
 
-      int value1 = convertLittleEndianToInteger(bytes.sublist(0, 2));
+      int value1 = convertLittleEndianToInteger(bytes.sublist(0, 4));
 
       // Construct the row data
       List<String> dataRow = [
@@ -289,6 +302,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     String csv = const ListToCsvConverter().convert(dataList);
 
     Directory directory0 = Directory("");
+
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
       directory0 = Directory("/storage/emulated/0/Download");
@@ -530,9 +544,16 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   Future<void> cancelAction() async {
     await onDisconnectPressed();
+    await _streamDataSubscription.cancel();
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+  }
+
+  String formattedTime(int timestamp){
+    DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp*1000).toUtc();
+    String formattedDate = DateFormat('EEE d MMM h:mm a').format(date);
+    return formattedDate;
   }
 
   Widget _getSessionIDList() {
@@ -614,7 +635,14 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                           ),
                                         ],
                                       ),
-
+                                      Row(
+                                        children: [
+                                          Text(
+                                            "Recorded : "+ formattedTime(logHeaderList[index].logFileID),
+                                            style: TextStyle(fontSize: 12, color: Colors.white),
+                                          ),
+                                        ],
+                                      ),
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
@@ -704,6 +732,51 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     );
   }
 
+  showConfirmationDialog(BuildContext context) {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            textTheme: TextTheme(),
+            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+          ),
+          child: AlertDialog(
+            title: Text('Are you sure you wish to delete all data.',
+                style:TextStyle(fontSize: 18, color: Colors.white)),
+            content: Text('This action is not reversible.',
+                style:TextStyle(fontSize: 16, color: Colors.red)),
+            actions: <Widget>[
+              TextButton(
+                child: const Text('Yes',
+                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                onPressed: () async{
+                  Navigator.pop(context);
+                  await _deleteAllLog(context);
+                  await _fetchLogCount(context);
+                  await _fetchLogIndex(context);
+                },
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+                child: Text(
+                  'No',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -743,8 +816,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
           shrinkWrap: true,
           children: <Widget>[
             _getSessionIDList(),
-            /*Padding(
-              padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 32, 32, 8),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -768,9 +841,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                           ),
                         ),
                         onPressed: () async {
-                          await _deleteAllLog(context);
-                          await _fetchLogCount(context);
-                          await _fetchLogIndex(context);
+                          showConfirmationDialog(context);
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
@@ -778,7 +849,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                             //mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.start,
                             children: <Widget>[
-                              Icon(Icons.close, color: Colors.white),
+                              Icon(Icons.delete, color: Colors.white),
                               const Text(
                                 ' Delete all records ',
                                 style: TextStyle(
@@ -799,7 +870,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                   ),
                 ],
               ),
-            ),*/
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
               child: Column(

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as material;
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:http/http.dart' as http;
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:mcumgr_flutter/mcumgr_flutter.dart';
 import 'package:mcumgr_flutter/models/firmware_upgrade_mode.dart';
@@ -16,8 +17,10 @@ import 'package:mcumgr_flutter/models/image_upload_alignment.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart' as path_provider;
+import 'package:permission_handler/permission_handler.dart';
 import 'package:signal_strength_indicator/signal_strength_indicator.dart';
 import 'package:uuid/uuid.dart';
+import 'package:version/version.dart';
 
 import '../globals.dart';
 import '../home.dart';
@@ -104,7 +107,6 @@ class ScrDFUState extends State<ScrDFU> {
         setState(() {});
       }
     });
-
   }
 
   @override
@@ -528,6 +530,92 @@ class ScrDFUState extends State<ScrDFU> {
     }
   }
 
+
+  Future<List<String>> fetchTags() async {
+    final url = Uri.parse('https://api.github.com/repos/Protocentral/healthypi-move-fw/tags');
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      // Parse the JSON response
+      List<dynamic> data = json.decode(response.body);
+      // Extract the tag names from the response
+      List<String> tags = data.map((tag) => tag['name'] as String).toList();
+      //print("............."+ tags.toString());
+      return tags;
+    } else {
+      throw Exception('Failed to load tags');
+    }
+  }
+
+  String latestReleasePath = "";
+
+  Future<String> _getLatestVersion() async {
+
+    List<String> tags = await fetchTags();
+    print(tags);
+
+    String _latestFWVersion = "0.9.18";
+
+    List<String> tagsWithoutV = tags.map((tag) => tag.startsWith('v') ? tag.substring(1) : tag).toList();
+
+    // Print the new list
+    print(tagsWithoutV);
+
+    for (int i = 0; i < tagsWithoutV.length; i++) {
+      _latestFWVersion = _getAvailableLatestVersion(_latestFWVersion, tagsWithoutV[i]);
+    }
+
+    return _latestFWVersion;
+  }
+
+  String _getAvailableLatestVersion(String versionCurrent, String versionAvail) {
+    Version availVersion = Version.parse(versionAvail);
+    Version currentVersion = Version.parse(versionCurrent);
+
+    if (availVersion > currentVersion) {
+      //print("...........availble"+versionAvail);
+      return versionAvail;
+    } else {
+      //print("...........current"+versionCurrent);
+      return versionCurrent;
+    }
+  }
+
+
+  String _status = 'Click the button to download the ZIP file';
+
+  Future<void> downloadFile() async {
+    String fwVesion = await _getLatestVersion();
+    Directory  dir = Directory("");
+    if (Platform.isAndroid) {
+      // Redirects it to download folder in android
+      dir = Directory("/storage/emulated/0/Download/");
+    } else {
+      dir = await path_provider.getApplicationDocumentsDirectory();
+    }
+
+    final url = 'https://github.com/Protocentral/healthypi-move-fw/releases/latest/download/healthypi_move_update_v$fwVesion.zip'; // Replace with your URL
+    print(url);
+    final response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      final filePath = '${dir.path}/$fwVesion.zip';
+      final file = File(filePath);
+      await file.writeAsBytes(response.bodyBytes);
+      setState(() {
+        _status = 'File downloaded to: $filePath';
+      });
+    } else {
+      setState(() {
+        _status = 'Failed to download file';
+      });
+    }
+
+    print(_status);
+  }
+
+
+
   Widget _buildDeviceCard() {
     if (_showUpdateCard == true &&
         //_updateAvailable == true &&
@@ -578,6 +666,7 @@ class ScrDFUState extends State<ScrDFU> {
                     ),
                   ),
                   onPressed: () async {
+                    //await downloadFile();
                     _onLoadFirmware();
                   },
                   child: Padding(
