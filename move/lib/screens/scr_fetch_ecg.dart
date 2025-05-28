@@ -82,6 +82,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     ) async {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
+         await discoverDataChar(widget.device);
+        await _startListeningData();
         startFetching();
       }
     });
@@ -148,7 +150,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     }
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async {
+  discoverDataChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
@@ -158,7 +160,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
             in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
+            //await dataCharacteristic?.setNotifyValue(true);
             break;
           }
         }
@@ -195,8 +197,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   void startFetching() async {
-    await subscribeToChar(widget.device);
-    await _startListeningData();
+   
+    
     await _fetchLogCount(context);
     await _fetchLogIndex(context);
   }
@@ -326,87 +328,86 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     listeningDataStream = true;
     logConsole("Started listening...");
 
-    await _streamDataSubscription.cancel();
+    // Cancel previous subscription if it exists
+    try {
+      await _streamDataSubscription.cancel();
+    } catch (_) {
+      // Ignore if already cancelled or null
+    }
 
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-      value,
-    ) async {
-      logConsole("Data Rx: $value");
-      ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      int pktType = bdata.getUint8(0);
-      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
-        //int _cmdType = bdata.getUint8(1);
-        //if (_cmdType == 84) {
-        if (mounted) {
-          setState(() {
-            totalSessionCount = bdata.getUint16(3, Endian.little);
-          });
-        }
-        logConsole("Data Rx count: $totalSessionCount");
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen(
+      (value) async {
+        logConsole("Data Rx: $value");
+        final bdata = Uint8List.fromList(value).buffer.asByteData();
+        final pktType = bdata.getUint8(0);
 
-        //}
-      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        //print("Data Rx: " + value.toString());
-        logConsole("Data Rx length: ${value.length}");
+        switch (pktType) {
+          case hPi4Global.CES_CMDIF_TYPE_CMD_RSP:
+            if (mounted) {
+              setState(() {
+                totalSessionCount = bdata.getUint16(3, Endian.little);
+              });
+            }
+            logConsole("Data Rx count: $totalSessionCount");
+            break;
 
-        int logFileID = bdata.getInt64(1, Endian.little);
-        int sessionLength = bdata.getInt16(9, Endian.little);
-        int trendType = bdata.getUint8(11);
-        LogHeader header = (logFileID: logFileID, sessionLength: sessionLength);
-        logConsole("Log: " + header.toString());
+          case hPi4Global.CES_CMDIF_TYPE_LOG_IDX:
+            logConsole("Data Rx length: ${value.length}");
 
-        logHeaderList.add(header);
+            final logFileID = bdata.getInt64(1, Endian.little);
+            final sessionLength = bdata.getInt16(9, Endian.little);
+            // trendType is unused, remove if not needed
+            // final trendType = bdata.getUint8(11);
+            final header = (logFileID: logFileID, sessionLength: sessionLength);
+            logConsole("Log: $header");
 
-        if (logHeaderList.length == totalSessionCount) {
-          if (mounted) {
+            logHeaderList.add(header);
+
+            if (logHeaderList.length == totalSessionCount && mounted) {
+              setState(() {
+                logIndexReceived = true;
+              });
+            }
+            break;
+
+          case hPi4Global.CES_CMDIF_TYPE_DATA:
+            final pktPayloadSize = value.length - 1;
+            logConsole(
+              "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
+            );
+            currentFileDataCounter += pktPayloadSize;
+            _globalReceivedData += pktPayloadSize;
+            logData.addAll(value.sublist(1));
+
             setState(() {
-              logIndexReceived = true;
+              displayPercent = globalDisplayPercentOffset +
+                  (_globalReceivedData / _globalExpectedLength) * 100;
+              if (displayPercent > 100) displayPercent = 100;
             });
-          }
-        } else {}
-      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
 
-        logConsole(
-          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
-        );
-        currentFileDataCounter += pktPayloadSize;
-        _globalReceivedData += pktPayloadSize;
-        logData.addAll(value.sublist(1, value.length));
+            logConsole(
+              "File data counter: $currentFileDataCounter | Received: ${displayPercent.toStringAsFixed(2)}%",
+            );
 
-        setState(() {
-          displayPercent =
-              globalDisplayPercentOffset +
-              (_globalReceivedData / _globalExpectedLength) * 100.truncate();
-          if (displayPercent > 100) {
-            displayPercent = 100;
-          }
-        });
+            if (currentFileDataCounter >= _globalExpectedLength) {
+              logConsole("All data $currentFileDataCounter received");
 
-        logConsole(
-          "File data counter: $currentFileDataCounter | Received: $displayPercent%",
-        );
+              if (currentFileDataCounter > _globalExpectedLength) {
+                final diffData = currentFileDataCounter - _globalExpectedLength;
+                logConsole("Data received more than expected by: $diffData bytes");
+                // Optionally trim logData here if needed
+              }
 
-        if (currentFileDataCounter >= (_globalExpectedLength)) {
-          logConsole("All data $currentFileDataCounter received");
+              await _writeLogDataToFile(logData, currentFileName);
 
-          if (currentFileDataCounter > _globalExpectedLength) {
-            int diffData = currentFileDataCounter - _globalExpectedLength;
-            logConsole("Data received more than expected by: $diffData bytes");
-            //logData.removeRange(expectedLength, currentFileDataCounter);
-          }
-
-          await _writeLogDataToFile(logData, currentFileName);
-          //_streamDataSubscription.cancel();
-          //Navigator.pop(context);
-        } else {}
-
-        //_streamDataSubscription.cancel();
-      }
-    });
+              await resetFetchVariables();
+            }
+            break;
+        }
+      },
+    );
     widget.device.cancelWhenDisconnected(_streamDataSubscription);
     await dataCharacteristic!.setNotifyValue(true);
-
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -508,7 +509,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   Future<void> _fetchLogFile(int sessionID, int sessionSize) async {
-    await resetFetchVariables();
+    
     await _startListeningData();
     logConsole("Fetch logs initiated");
 
@@ -634,11 +635,10 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                       Row(
                                         children: [
                                           Text(
-                                            "Recorded : " +
-                                                formattedTime(
+                                            "Recorded : ${formattedTime(
                                                   logHeaderList[index]
                                                       .logFileID,
-                                                ),
+                                                )}",
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.white,
