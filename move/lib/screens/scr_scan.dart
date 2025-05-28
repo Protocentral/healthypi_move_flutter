@@ -97,11 +97,12 @@ class _ScrScanState extends State<ScrScan> {
             found = true;
             await FlutterBluePlus.stopScan();
             await tempSub?.cancel();
-            if (mounted) setState(() {
-              _autoConnecting = false;
-              _deviceNotFound = false;
-              _deviceNotFoundMessage = "";
-            });
+            if (mounted)
+              setState(() {
+                _autoConnecting = false;
+                _deviceNotFound = false;
+                _deviceNotFoundMessage = "";
+              });
             await onConnectPressed(result.device);
             return;
           }
@@ -116,7 +117,7 @@ class _ScrScanState extends State<ScrScan> {
             _autoConnecting = false;
             _deviceNotFound = true;
             _deviceNotFoundMessage =
-            "Device not found. Please make sure your paired device is turned on and in range.";
+                "Device not found. Please make sure your paired device is turned on and in range.";
           });
         }
       });
@@ -128,8 +129,8 @@ class _ScrScanState extends State<ScrScan> {
     super.initState();
 
     _adapterStateStateSubscription = FlutterBluePlus.adapterState.listen((
-        state,
-        ) {
+      state,
+    ) {
       _adapterState = state;
       if (mounted) {
         setState(() {
@@ -139,7 +140,7 @@ class _ScrScanState extends State<ScrScan> {
     });
 
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-          (results) {
+      (results) {
         print("HPI: Scan Results: $results");
         if (mounted) {
           setState(() => _scanResults = results);
@@ -157,7 +158,6 @@ class _ScrScanState extends State<ScrScan> {
     });
 
     _tryAutoConnectToPairedDevice();
-
   }
 
   @override
@@ -227,70 +227,45 @@ class _ScrScanState extends State<ScrScan> {
   _resetStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      prefs.setString('lastSynced','0');
-      prefs.setString('latestHR','0');
-      prefs.setString('latestTemp','0');
-      prefs.setString('latestSpo2','0');
-      prefs.setString('latestActivityCount','0');
-      prefs.setString('lastUpdatedHR','0');
-      prefs.setString('lastUpdatedTemp','0');
-      prefs.setString('lastUpdatedSpo2','0');
-      prefs.setString('lastUpdatedActivity','0');
-      prefs.setString('fetchStatus','0');
+      prefs.setString('lastSynced', '0');
+      prefs.setString('latestHR', '0');
+      prefs.setString('latestTemp', '0');
+      prefs.setString('latestSpo2', '0');
+      prefs.setString('latestActivityCount', '0');
+      prefs.setString('lastUpdatedHR', '0');
+      prefs.setString('lastUpdatedTemp', '0');
+      prefs.setString('lastUpdatedSpo2', '0');
+      prefs.setString('lastUpdatedActivity', '0');
+      prefs.setString('fetchStatus', '0');
     });
   }
 
-  redirectToScreens(BluetoothDevice device){
-    if(widget.tabIndex == "1"){
+  redirectToScreens(BluetoothDevice device) {
+    if (widget.tabIndex == "1") {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => SyncingScreen(device: device),
-        ),
+        MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
       );
-    }else if(widget.tabIndex == "2"){
+    } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
       _eraseAllLogs(context, device);
-    }else if(widget.tabIndex == "3"){
+    } else if (widget.tabIndex == "3") {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => ScrStreamsSelection(device: device),
         ),
       );
-    }else if(widget.tabIndex == "4"){
+    } else if (widget.tabIndex == "4") {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => ScrFetchECG(device: device),
-        ),
+        MaterialPageRoute(builder: (context) => ScrFetchECG(device: device)),
       );
-    }
-    else{
-
-    }
+    } else {}
   }
 
   bool pairedStatus = false;
 
   Future<void> onConnectPressed(BluetoothDevice device) async {
-    device.connectAndUpdateStream().catchError((e) {
-      Snackbar.show(
-        ABC.c,
-        prettyException("Connect Error:", e),
-        success: false,
-      );
-    });
-
     _connectionStateSubscription = device.connectionState.listen((state) async {
       _connectionState = state;
-
-      final subscription = device.mtu.listen((int mtu) {
-        print("mtu $mtu");
-      });
-
-      device.cancelWhenDisconnected(subscription);
-
-      if (!kIsWeb && Platform.isAndroid) {
-        device.requestMtu(512);
-      }
 
       if (_connectionState == BluetoothConnectionState.connected) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -298,19 +273,36 @@ class _ScrScanState extends State<ScrScan> {
         setState(() {
           pairedStatus = prefs.getString('pairedStatus');
         });
-        if(pairedStatus == "paired"){
+        if (pairedStatus == "paired") {
           redirectToScreens(device);
-        }else{
+          _connectionStateSubscription.cancel();
+        } else {
           showPairDeviceDialog(context, device);
+          _connectionStateSubscription.cancel();
         }
       }
     });
+    device.cancelWhenDisconnected(
+      _connectionStateSubscription,
+      delayed: true,
+      next: true,
+    );
+
+    await device.connect();
+
+    /*device.connectAndUpdateStream().catchError((e) {
+      Snackbar.show(
+        ABC.c,
+        prettyException("Connect Error:", e),
+        success: false,
+      );
+    });*/
   }
 
   Future<void> _eraseAllLogs(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Erase All initiated");
     await Future.delayed(Duration(seconds: 2), () async {
       List<int> commandPacket = [];
@@ -327,13 +319,11 @@ class _ScrScanState extends State<ScrScan> {
         context,
       ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
     });
-
   }
 
   Future onRefresh() {
     if (_isScanning == false) {
       onScanPressed();
-
     }
     if (mounted) {
       setState(() {});
@@ -345,7 +335,7 @@ class _ScrScanState extends State<ScrScan> {
     if (FlutterBluePlus.isScanningNow) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-        child:ElevatedButton(
+        child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: hPi4Global.hpi4Color, // background color
             foregroundColor: Colors.white, // text color
@@ -366,7 +356,7 @@ class _ScrScanState extends State<ScrScan> {
     } else {
       return Padding(
         padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-        child:  ElevatedButton(
+        child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: hPi4Global.hpi4Color, // background color
             foregroundColor: Colors.white, // text color
@@ -405,8 +395,10 @@ class _ScrScanState extends State<ScrScan> {
             children: [
               CircularProgressIndicator(),
               SizedBox(height: 20),
-              Text("Connecting to your paired device...",
-                  style: TextStyle(color: Colors.white)),
+              Text(
+                "Connecting to your paired device...",
+                style: TextStyle(color: Colors.white),
+              ),
             ],
           ),
         ),
@@ -485,15 +477,14 @@ class _ScrScanState extends State<ScrScan> {
     return _scanResults
         .map(
           (r) => ScanResultTile(
-        result: r,
-        onTap: () => onConnectPressed(r.device),
-      ),
-    )
+            result: r,
+            onTap: () => onConnectPressed(r.device),
+          ),
+        )
         .toList();
   }
 
   Future<void> disconnectDevice(BluetoothDevice device) async {
-
     try {
       // Disconnect from the given Bluetooth device
       await device.disconnect();
@@ -501,7 +492,6 @@ class _ScrScanState extends State<ScrScan> {
     } catch (e) {
       print('Error disconnecting from device: $e');
     }
-
   }
 
   showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
@@ -517,11 +507,9 @@ class _ScrScanState extends State<ScrScan> {
             title: Row(
               children: [
                 SizedBox(width: 10),
-                Text('Do you wish to pair the device ?',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.white,
-                  ),
+                Text(
+                  'Do you wish to pair the device ?',
+                  style: TextStyle(fontSize: 18, color: Colors.white),
                 ),
               ],
             ),
@@ -531,21 +519,23 @@ class _ScrScanState extends State<ScrScan> {
             ),
             actions: [
               TextButton(
-                onPressed: () async{
+                onPressed: () async {
                   try {
-                    final Directory appDocDir = await getApplicationDocumentsDirectory();
-                    final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+                    final Directory appDocDir =
+                        await getApplicationDocumentsDirectory();
+                    final String filePath =
+                        '${appDocDir.path}/paired_device_mac.txt';
                     final File macFile = File(filePath);
                     await macFile.writeAsString(device.id.id);
                     logConsole("...........Paired status saved");
-                    SharedPreferences prefs = await SharedPreferences.getInstance();
-                    setState((){
-                      prefs.setString('pairedStatus','paired');
+                    SharedPreferences prefs =
+                        await SharedPreferences.getInstance();
+                    setState(() {
+                      prefs.setString('pairedStatus', 'paired');
                     });
                     Navigator.pop(context);
                     redirectToScreens(device);
-                  } catch (e) {
-                  }
+                  } catch (e) {}
                 },
                 child: Text(
                   'Yes',
@@ -577,7 +567,7 @@ class _ScrScanState extends State<ScrScan> {
     );
   }
 
- /* subscribeToChar(BluetoothDevice deviceName) async {
+  /* subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
@@ -595,9 +585,9 @@ class _ScrScanState extends State<ScrScan> {
   }*/
 
   Future<void> _sendCommand(
-      List<int> commandList,
-      BluetoothDevice deviceName,
-      ) async {
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -606,7 +596,7 @@ class _ScrScanState extends State<ScrScan> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -649,9 +639,9 @@ class _ScrScanState extends State<ScrScan> {
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.white),
             onPressed:
-                () => Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
+                () => Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => HomePage()),
+                ),
           ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -670,13 +660,9 @@ class _ScrScanState extends State<ScrScan> {
           onRefresh: onRefresh,
           child: ListView(
             shrinkWrap: true,
-            children: <Widget>[
-              Column(
-                  children:[
+            children: <Widget>[Column(children:[
                   ]
-              ),
-              _buildScanCard(context),
-            ],
+              ), _buildScanCard(context)],
           ),
         ),
       ),

@@ -107,11 +107,15 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   @override
   void dispose() async {
-    await _connectionStateSubscription.cancel();
-    await _isConnectingSubscription.cancel();
-    await _isDisconnectingSubscription.cancel();
-    await _streamDataSubscription.cancel();
-    await onDisconnectPressed();
+    // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
+    Future.delayed(Duration.zero, () async {
+      await _connectionStateSubscription.cancel();
+      await _isConnectingSubscription.cancel();
+      await _isDisconnectingSubscription.cancel();
+      //await _streamDataSubscription.cancel();
+      await onDisconnectPressed();
+    });
+
     super.dispose();
   }
 
@@ -322,6 +326,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     listeningDataStream = true;
     logConsole("Started listening...");
 
+    await _streamDataSubscription.cancel();
+
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
       value,
     ) async {
@@ -331,9 +337,11 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
         //int _cmdType = bdata.getUint8(1);
         //if (_cmdType == 84) {
-        setState(() {
-          totalSessionCount = bdata.getUint16(3, Endian.little);
-        });
+        if (mounted) {
+          setState(() {
+            totalSessionCount = bdata.getUint16(3, Endian.little);
+          });
+        }
         logConsole("Data Rx count: $totalSessionCount");
 
         //}
@@ -350,9 +358,11 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         logHeaderList.add(header);
 
         if (logHeaderList.length == totalSessionCount) {
-          setState(() {
-            logIndexReceived = true;
-          });
+          if (mounted) {
+            setState(() {
+              logIndexReceived = true;
+            });
+          }
         } else {}
       } else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
         int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
@@ -387,14 +397,16 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
           }
 
           await _writeLogDataToFile(logData, currentFileName);
-           _streamDataSubscription.cancel();
+          //_streamDataSubscription.cancel();
           //Navigator.pop(context);
         } else {}
 
-        _streamDataSubscription.cancel();
+        //_streamDataSubscription.cancel();
       }
     });
-    //widget.device.cancelWhenDisconnected(_streamDataSubscription);
+    widget.device.cancelWhenDisconnected(_streamDataSubscription);
+    await dataCharacteristic!.setNotifyValue(true);
+
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -527,7 +539,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   Future<void> cancelAction() async {
     await onDisconnectPressed();
-    await _streamDataSubscription.cancel();
+    //await _streamDataSubscription.cancel();
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
