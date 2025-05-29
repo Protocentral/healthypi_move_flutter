@@ -234,12 +234,12 @@ class _ScrSPO2State extends State<ScrSPO2>
                       hPi4Global.hpi4Color,
                     ],
                     series: <CartesianSeries>[
-                      RangeColumnSeries<Spo2Trends, DateTime>(
+                      HiloSeries<Spo2Trends, DateTime>(
                           dataSource: Spo2TrendsData,
                           xValueMapper: (Spo2Trends data, _) => data.date,
                           lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
                           highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
-                        borderRadius: BorderRadius.all(Radius.circular(10)),
+                        borderWidth: 7,
                         animationDuration: 0,
                       ),
                     ],
@@ -390,7 +390,7 @@ class _ScrSPO2State extends State<ScrSPO2>
         rangeMaxSpo2 = maxSpo2;
 
       });
-      print("$range: $group, Min: $minSpo2, Max: $maxSpo2");
+     // print("$range: $group, Min: $minSpo2, Max: $maxSpo2");
     });
 
     if (groupedData.isNotEmpty) {
@@ -399,10 +399,11 @@ class _ScrSPO2State extends State<ScrSPO2>
         lastUpdatedTime = DateTime.parse(lastGroup);
       });
 
-      String todayStr = _formatDate(DateTime.now());
+     /* String todayStr = _formatDate(DateTime.now());
       if (_formatDate(lastUpdatedTime) == todayStr) {
         saveValue(lastUpdatedTime);
-      }
+      }*/
+      saveValue(lastUpdatedTime);
     }
   }
 
@@ -418,73 +419,6 @@ class _ScrSPO2State extends State<ScrSPO2>
     }
   }
 
-  /*Future<void> getFileData(String fileName) async {
-    Directory? downloadsDirectory;
-    String myData = '';
-
-    if (Platform.isAndroid) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    }
-
-    if (downloadsDirectory != null) {
-      String filePath = '${downloadsDirectory.path}/$fileName'; // Replace 'your_file.csv' with your actual file name
-      File csvFile = File(filePath);
-
-
-      if (await csvFile.exists()) {
-        String fileContent = await csvFile.readAsString();
-        setState(() {
-          myData = fileContent;
-        });
-      }
-    }
-
-    CalculateLasthourMinMax(myData);
-
-    List<String> result = myData.split('\n');
-    print(result);
-    timestamp = result.map((f) => f.split(",")[0]).toList();
-
-    avgSpo2 = result.map((f) => f.split(",")[1]).toList();
-
-    for(int i = 1; i< timestamp.length; i++){
-      int tempTimeStamp = 0;
-      int tempTimeStamp1 = 0;
-      int tempAvgSpo2 = 0;
-      int tempMinSpo2 = 0;
-      int tempMaxSpo2 = 0;
-
-
-      tempTimeStamp = int.parse(timestamp[i]);
-      tempTimeStamp1 = tempTimeStamp*1000;
-      tempAvgSpo2 = int.parse(avgSpo2[i]);
-
-      //DateTime getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
-     var getUTCTime = DateTime.fromMillisecondsSinceEpoch(tempTimeStamp1).toUtc();
-      // Format the DateTime to remove the 'Z' and make it human-readable
-      String formattedDate = DateFormat("yyyy-MM-dd HH:mm:ss").format(getUTCTime);
-      // Parse the formatted date string back into a DateTime object
-      DateTime formattedDateTime = DateTime.parse(formattedDate);
-
-
-      setState((){
-        //print(DateTime.fromMillisecondsSinceEpoch(Spo2TimeStamp1).toString());
-        Spo2TrendsData.add(Spo2Trends(formattedDateTime,
-            tempAvgSpo2-1, tempAvgSpo2));
-        if( i == timestamp.length-1){
-          lastUpdatedTime = formattedDateTime;
-          averageSpo2 = tempAvgSpo2;
-          rangeMinSpo2 = tempMinSpo2;
-          rangeMaxSpo2 = tempMaxSpo2;
-
-        }
-      });
-    }
-    _saveValue();
-  }*/
-
   // Save a value
   saveValue(DateTime lastUpdatedTime) async {
     String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
@@ -493,52 +427,6 @@ class _ScrSPO2State extends State<ScrSPO2>
     await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());
   }
 
-  /*void CalculateLasthourMinMax(String fileContent) {
-    // Split file content into rows
-    List<String> rows = fileContent.split('\n');
-    List<int> timestamps = [];
-    List<int> values = [];
-
-    // Parse the rows into timestamps and values
-    for (String row in rows) {
-      if (row.trim().isNotEmpty) {
-        try {
-          List<String> parts = row.split(',');
-          if (parts.length == 2) {
-            int timestamp = int.parse(parts[0].trim()); // Trim whitespace
-            int value = int.parse(parts[1].trim());    // Trim whitespace
-            timestamps.add(timestamp);
-            values.add(value);
-          }
-        } catch (e) {
-          print('Skipping invalid row: $row. Error: $e');
-        }
-      }
-    }
-
-    // Get current timestamp and calculate one hour ago
-    int currentTime = DateTime.now().millisecondsSinceEpoch;
-    int oneHourAgo = currentTime - (60 * 60 * 1000);
-
-    // Filter the data for the last one hour
-    List<int> lastHourValues = [];
-    for (int i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] >= oneHourAgo) {
-        lastHourValues.add(values[i]);
-      }
-    }
-
-    // Calculate the minimum and maximum values
-    if (lastHourValues.isNotEmpty) {
-      int minValue = lastHourValues.reduce((a, b) => a < b ? a : b);
-      int maxValue = lastHourValues.reduce((a, b) => a > b ? a : b);
-
-      print('Minimum SpO2 in the last one hour: $minValue');
-      print('Maximum SpO2 in the last one hour: $maxValue');
-    } else {
-      print('No data available for the last one hour.');
-    }
-  }*/
 
   Widget displayValue(){
     return Row(

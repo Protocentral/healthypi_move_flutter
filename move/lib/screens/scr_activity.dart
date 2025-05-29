@@ -229,13 +229,13 @@ class _ScrActivityState extends State<ScrActivity>
                     hPi4Global.hpi4Color,
                   ],
                   series: <CartesianSeries>[
-                    ColumnSeries<ActivityTrends, DateTime>(
+                    HiloSeries<ActivityTrends, DateTime>(
                       dataSource: ActivityTrendsData,
                       xValueMapper: (ActivityTrends data, _) => data.date,
-                      yValueMapper: (ActivityTrends data, _) => data.count,
-                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                      lowValueMapper: (ActivityTrends data, _) => data.min,
+                      highValueMapper: (ActivityTrends data, _) => data.count,
+                      borderWidth: 7,
                       animationDuration: 0,
-                      color: hPi4Global.hpi4Color,
                     ),
                   ],
                 ),
@@ -399,9 +399,9 @@ class _ScrActivityState extends State<ScrActivity>
     groupedStats.forEach((group, stats) {
       DateTime formattedDateTime = DateTime.parse(group);
       setState(() {
-        ActivityTrendsData.add(ActivityTrends(formattedDateTime, stats['count']!),);
+        ActivityTrendsData.add(ActivityTrends(formattedDateTime,0,stats['count']!),);
       });
-      print(" $group, Count: $stats");
+     // print(" $group, Count: $stats");
 
     });
 
@@ -595,7 +595,8 @@ class _ScrActivityState extends State<ScrActivity>
 
 
 class ActivityTrends {
-  ActivityTrends(this.date, this.count);
+  ActivityTrends(this.date,this.min,this.count);
   final DateTime date;
+  final int min;
   final int count;
 }

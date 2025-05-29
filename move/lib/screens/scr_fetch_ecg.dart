@@ -197,8 +197,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   void startFetching() async {
-   
-    
     await _fetchLogCount(context);
     await _fetchLogIndex(context);
   }
@@ -512,7 +510,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     
     await _startListeningData();
     logConsole("Fetch logs initiated");
-
     isTransfering = true;
     //await _startListeningCommand(deviceID);
     // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
@@ -540,7 +537,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   Future<void> cancelAction() async {
     await onDisconnectPressed();
-    //await _streamDataSubscription.cancel();
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));

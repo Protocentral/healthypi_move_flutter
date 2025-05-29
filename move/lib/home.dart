@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
+import 'package:path_provider/path_provider.dart';
 import 'screens/scr_scan.dart';
 import 'screens/scr_skin_temp.dart';
 import 'screens/scr_spo2.dart';
@@ -444,6 +445,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  void logConsole(String logString) async {
+    print("AKW - $logString");
+  }
+
 
   @override
   Widget build(BuildContext context) {

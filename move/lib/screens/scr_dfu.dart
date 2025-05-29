@@ -76,14 +76,12 @@ class ScrDFUState extends State<ScrDFU> {
   bool _isManifestLoaded = false;
 
   final UpdateManagerFactory _managerFactory =
-        mcumgr.FirmwareUpdateManagerFactory();
+  mcumgr.FirmwareUpdateManagerFactory();
 
   @override
   void initState() {
-    super.initState();
-
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
+          (results) {
         if (mounted) {
           setState(() => _scanResults = results);
         }
@@ -100,25 +98,43 @@ class ScrDFUState extends State<ScrDFU> {
     });
 
     _adapterStateStateSubscription = FlutterBluePlus.adapterState.listen((
-      state,
-    ) {
+        state,
+        ) {
       _adapterState = state;
       if (mounted) {
         setState(() {});
       }
     });
+
+    requestPermissions();
+    super.initState();
   }
 
   @override
   Future<void> dispose() async {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    FlutterBluePlus.stopScan();
+    Future.delayed(Duration.zero, () async {
+      _scanResultsSubscription.cancel();
+      _isScanningSubscription.cancel();
+      FlutterBluePlus.stopScan();
+      await onDisconnectPressed();
+    });
+
     super.dispose();
   }
 
   void logConsole(String logString) async {
     print("[HPI] $logString");
+  }
+
+  Future<void> requestPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.manageExternalStorage,
+      Permission.storage,
+    ].request();
+
+    if (statuses.containsValue(PermissionStatus.denied)) {
+
+    }
   }
 
   Future _onScanPressed() async {
@@ -233,30 +249,56 @@ class ScrDFUState extends State<ScrDFU> {
   void _onLoadFirmware() async {
     Uint8List? zipFile;
     List<mcumgr.Image>? firmwareImages;
+    late final destinationDir;
+    late final firmwareFile;
 
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['zip'],
-    );
-    if (result == null) {
-      return;
+    if(fwFilePath == ""){
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['zip'],
+      );
+      if (result == null) {
+        return;
+      }
+
+      final firstResult = result.files.first;
+      final file = File(firstResult.path!);
+      final Uint8List firmwareFileData = await file.readAsBytes();
+
+      final prefix = 'firmware_${Uuid().v4()}';
+      final systemTempDir = await path_provider.getTemporaryDirectory();
+
+      final tempDir = Directory('${systemTempDir.path}/$prefix');
+      await tempDir.create();
+
+      firmwareFile = File('${tempDir.path}/firmware.zip');
+      await firmwareFile.writeAsBytes(firmwareFileData);
+
+      destinationDir = Directory('${tempDir.path}/firmware');
+      await destinationDir.create();
+
+
+    }else{
+      showLoadingIndicator("Checking for firmware...", context);
+
+      final file = File(fwFilePath);
+      final Uint8List firmwareFileData = await file.readAsBytes();
+
+      final prefix = 'firmware_${Uuid().v4()}';
+      final systemTempDir = await path_provider.getTemporaryDirectory();
+
+      final tempDir = Directory('${systemTempDir.path}/$prefix');
+      await tempDir.create();
+
+      final firmwareFile = File('${tempDir.path}/firmware.zip');
+      await firmwareFile.writeAsBytes(firmwareFileData);
+
+      destinationDir = Directory('${tempDir.path}/firmware');
+      await destinationDir.create();
+
+      Navigator.pop(context);
     }
 
-    final firstResult = result.files.first;
-    final file = File(firstResult.path!);
-    final Uint8List firmwareFileData = await file.readAsBytes();
-
-    final prefix = 'firmware_${Uuid().v4()}';
-    final systemTempDir = await path_provider.getTemporaryDirectory();
-
-    final tempDir = Directory('${systemTempDir.path}/$prefix');
-    await tempDir.create();
-
-    final firmwareFile = File('${tempDir.path}/firmware.zip');
-    await firmwareFile.writeAsBytes(firmwareFileData);
-
-    final destinationDir = Directory('${tempDir.path}/firmware');
-    await destinationDir.create();
     try {
       await ZipFile.extractToDirectory(
         zipFile: firmwareFile,
@@ -295,7 +337,7 @@ class ScrDFUState extends State<ScrDFU> {
       if (mounted) {
         setState(() {
           print("DFU state: ${event.toString()}");
-          
+
         });
       }
     });
@@ -313,7 +355,7 @@ class ScrDFUState extends State<ScrDFU> {
 
     final _fw_config = const FirmwareUpgradeConfiguration(estimatedSwapTime: Duration(seconds: 0),
         byteAlignment: ImageUploadAlignment.fourByte, eraseAppSettings: true,
-    firmwareUpgradeMode: FirmwareUpgradeMode.confirmOnly );
+        firmwareUpgradeMode: FirmwareUpgradeMode.confirmOnly );
 
     _updateManagerSubscription = updateManager.progressStream.listen((event) {
       if (mounted) {
@@ -361,30 +403,29 @@ class ScrDFUState extends State<ScrDFU> {
               for (BluetoothService service in services) {
                 if (service.uuid == Guid("180a")) {
                   for (BluetoothCharacteristic characteristic
-                      in service.characteristics) {
+                  in service.characteristics) {
                     if (characteristic.uuid == Guid("2a26")) {
                       deviceFWCharacteristic = characteristic;
                       characteristic
                           .read()
                           .then((value) {
-                            if (mounted) {
-                              setState(() {
-                                _currentFWVersion = String.fromCharCodes(value);
-                                logConsole(
-                                  "Current FW version: $_currentFWVersion",
-                                );
-                              });
-                              /////disconnect here
-                              //onDisconnectPressed();
-                            }
-                          })
-                          .catchError((e) {
-                            Snackbar.show(
-                              ABC.c,
-                              prettyException("Read Error:", e),
-                              success: false,
+                        if (mounted) {
+                          setState(() {
+                            _currentFWVersion = String.fromCharCodes(value);
+                            logConsole(
+                              "Current FW version: $_currentFWVersion",
                             );
                           });
+
+                        }
+                      })
+                          .catchError((e) {
+                        Snackbar.show(
+                          ABC.c,
+                          prettyException("Read Error:", e),
+                          success: false,
+                        );
+                      });
                       break;
                     }
                   }
@@ -395,6 +436,25 @@ class ScrDFUState extends State<ScrDFU> {
         });
       }
     });
+  }
+
+  void showLoadingIndicator(String text, BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8.0)),
+            ),
+            backgroundColor: Colors.black87,
+            content: LoadingIndicator(text: text),
+          ),
+        );
+      },
+    );
   }
 
   void _onConnectPressed(BluetoothDevice device) {
@@ -447,10 +507,10 @@ class ScrDFUState extends State<ScrDFU> {
     return _scanResults
         .map(
           (r) => ScanResultTile(
-            result: r,
-            onTap: () => _onConnectPressed(r.device),
-          ),
-        )
+        result: r,
+        onTap: () => _onConnectPressed(r.device),
+      ),
+    )
         .toList();
   }
 
@@ -501,8 +561,8 @@ class ScrDFUState extends State<ScrDFU> {
               ),
             ),
           ),
-           Card(
-             color: Colors.grey[900],
+          Card(
+            color: Colors.grey[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -583,6 +643,7 @@ class ScrDFUState extends State<ScrDFU> {
 
 
   String _status = 'Click the button to download the ZIP file';
+  String fwFilePath = "";
 
   Future<void> downloadFile() async {
     String fwVesion = await _getLatestVersion();
@@ -604,6 +665,7 @@ class ScrDFUState extends State<ScrDFU> {
       await file.writeAsBytes(response.bodyBytes);
       setState(() {
         _status = 'File downloaded to: $filePath';
+        fwFilePath = filePath;
       });
     } else {
       setState(() {
@@ -613,8 +675,6 @@ class ScrDFUState extends State<ScrDFU> {
 
     print(_status);
   }
-
-
 
   Widget _buildDeviceCard() {
     if (_showUpdateCard == true &&
@@ -666,7 +726,7 @@ class ScrDFUState extends State<ScrDFU> {
                     ),
                   ),
                   onPressed: () async {
-                    //await downloadFile();
+                    await downloadFile();
                     _onLoadFirmware();
                   },
                   child: Padding(
@@ -812,3 +872,4 @@ class ScrDFUState extends State<ScrDFU> {
     );
   }
 }
+
