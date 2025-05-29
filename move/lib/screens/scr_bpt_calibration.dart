@@ -56,7 +56,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   @override
   void initState() {
-    super.initState();
 
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
       (results) {
@@ -83,17 +82,21 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         setState(() {});
       }
     });
+    super.initState();
   }
 
   @override
   void dispose() {
     // Dispose the controller when the widget is removed from the widget tree
-    _systolicController.dispose();
-    _diastolicController.dispose();
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    _streamDataSubscription.cancel();
-    FlutterBluePlus.stopScan();
+    Future.delayed(Duration.zero, () async {
+      _systolicController.dispose();
+      _diastolicController.dispose();
+      _scanResultsSubscription.cancel();
+      _isScanningSubscription.cancel();
+      FlutterBluePlus.stopScan();
+      await onDisconnectPressed();
+    });
+
     super.dispose();
   }
 
@@ -232,7 +235,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 
   Future<void> sendSetCalibrationCommand(BluetoothDevice device) async {
-    await Future.delayed(Duration(seconds: 2), () async {
+    await Future.delayed(Duration.zero, () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.SetBPTCalMode);
       await _sendCommand(commandPacket, device);
@@ -356,7 +359,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       _streamDataSubscription.cancel();
     }
       await _startListeningData(deviceName);
-      await Future.delayed(Duration(seconds: 2), () async {
+      await Future.delayed(Duration.zero, () async {
         List<int> commandPacket = [];
         String userInput1 = _systolicController.text;
         String userInput2 = _diastolicController.text;
@@ -397,7 +400,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       BluetoothDevice deviceName,
       ) async {
     logConsole("Send end calibration command initiated");
-    await Future.delayed(Duration(seconds: 2), () async {
+    await Future.delayed(Duration.zero, () async {
       List<int> commandPacket = [];
       commandPacket.addAll(hPi4Global.EndBPTCal);
       await _sendCommand(commandPacket, deviceName);
@@ -638,7 +641,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   ),
                   onPressed: () async{
                     sendEndCalibration(context, Connecteddevice);
-                    Future.delayed(Duration(seconds: 2), () async {
+                    Future.delayed(Duration.zero, () async {
                       Navigator.of(
                         context,
                       ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
@@ -702,7 +705,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   ),
                   onPressed: () async{
                     sendEndCalibration(context, Connecteddevice);
-                    Future.delayed(Duration(seconds: 2), () async {
+                    Future.delayed(Duration.zero, () async {
                       await onDisconnectPressed();
                       Navigator.of(
                         context,
@@ -880,7 +883,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                               await FlutterBluePlus.stopScan();
                               await subscribeToChar(Connecteddevice);
                               // _sendCurrentDateTime(Connecteddevice);
-                              Future.delayed(Duration(seconds: 2), () async {
+                              Future.delayed(Duration.zero, () async {
                                 await sendStartCalibration(
                                   context,
                                   Connecteddevice,
@@ -1020,7 +1023,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                   ),
                                   onPressed: () async{
                                     sendEndCalibration(context, Connecteddevice);
-                                    Future.delayed(Duration(seconds: 2), () async {
+                                    Future.delayed(Duration.zero, () async {
                                       await onDisconnectPressed();
                                       Navigator.of(
                                         context,

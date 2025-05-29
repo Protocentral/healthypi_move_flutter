@@ -219,8 +219,8 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 primaryXAxis: dateTimeAxis(),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
-                 // minimum: 0,
-                 //maximum: 200,
+                  // minimum: 0,
+                  //maximum: 200,
                   //interval: 10,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
@@ -231,12 +231,13 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 ),
                 palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  RangeColumnSeries<TempTrends, DateTime>(
+                  HiloSeries<TempTrends, DateTime>(
                     dataSource: TempTrendsData,
                     xValueMapper: (TempTrends data, _) => data.date,
                     lowValueMapper: (TempTrends data, _) => data.minTemp,
                     highValueMapper: (TempTrends data, _) => data.maxTemp,
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    //borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderWidth: 7,
                     animationDuration: 0,
                   ),
                 ],
@@ -279,16 +280,16 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
         List<FileSystemEntity> files = downloadsDir.listSync();
 
         List<File> csvFiles =
-            files
-                .where((file) => file is File && file.path.endsWith('.csv'))
-                .map((file) => file as File)
-                .where(
-                  (file) => p.basename(file.path).startsWith("temp_"),
-                ) // Filter by prefix
-                .toList();
+        files
+            .where((file) => file is File && file.path.endsWith('.csv'))
+            .map((file) => file as File)
+            .where(
+              (file) => p.basename(file.path).startsWith("temp_"),
+        ) // Filter by prefix
+            .toList();
 
         List<String> fileNames =
-            csvFiles.map((file) => p.basename(file.path)).toList();
+        csvFiles.map((file) => p.basename(file.path)).toList();
 
         List<String> weeklyFileNames = [];
         List<String> MonthlyFileNames = [];
@@ -369,7 +370,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }) async {
     Directory? downloadsDirectory;
     Map<String, Map<String, double>> groupedStats =
-        {}; // To store grouped min and max values
+    {}; // To store grouped min and max values
 
     if (Platform.isAndroid) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
@@ -391,7 +392,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
         // Extract headers and rows
         List<String> headers = result.first.split(',');
         List<List<String>> rows =
-            result.skip(1).map((line) => line.split(',')).toList();
+        result.skip(1).map((line) => line.split(',')).toList();
 
         // Process each row
         for (var row in rows) {
@@ -405,7 +406,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
 
           // Convert timestamp to DateTime and group by the specified format
           var dateTime =
-              DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
+          DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
           String groupKey = DateFormat(groupingFormat).format(dateTime);
 
           // Update min and max for the group
@@ -419,17 +420,17 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
             };
           } else {
             groupedStats[groupKey]!['min'] =
-                groupedStats[groupKey]!['min']! < min
-                    ? groupedStats[groupKey]!['min']!
-                    : min;
+            groupedStats[groupKey]!['min']! < min
+                ? groupedStats[groupKey]!['min']!
+                : min;
             groupedStats[groupKey]!['max'] =
-                groupedStats[groupKey]!['max']! > max
-                    ? groupedStats[groupKey]!['max']!
-                    : max;
+            groupedStats[groupKey]!['max']! > max
+                ? groupedStats[groupKey]!['max']!
+                : max;
             //print(groupedStats[groupKey]!['min']);
             //print(groupedStats[groupKey]!['max']);
             groupedStats[groupKey]!['avg'] =
-                (groupedStats[groupKey]!['avg']! + avg); // Add to sum
+            (groupedStats[groupKey]!['avg']! + avg); // Add to sum
             groupedStats[groupKey]!['count'] =
                 groupedStats[groupKey]!['count']! + 1;
           }
@@ -621,37 +622,37 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }
 
   Widget displayCard(String tab) {
-      return Card(
-        color: Colors.black,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        height: SizeConfig.blockSizeVertical * 45,
-                        width: SizeConfig.blockSizeHorizontal * 88,
-                        color: Colors.transparent,
-                        child: buildChartBlock(),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 20),
-                  displayValue(),
-                ],
-              ),
-            ],
-          ),
+    return Card(
+      color: Colors.black,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      height: SizeConfig.blockSizeVertical * 45,
+                      width: SizeConfig.blockSizeHorizontal * 88,
+                      color: Colors.transparent,
+                      child: buildChartBlock(),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 20),
+                displayValue(),
+              ],
+            ),
+          ],
         ),
-      );
+      ),
+    );
 
   }
 
@@ -669,8 +670,8 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed:
               () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,

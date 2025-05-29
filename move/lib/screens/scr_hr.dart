@@ -231,12 +231,12 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                 ),
                 palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  RangeColumnSeries<HRTrends, DateTime>(
+                  HiloSeries<HRTrends, DateTime>(
                     dataSource: hrTrendsData,
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                    borderWidth: 7,
                     animationDuration: 0,
                   ),
                 ],
@@ -465,9 +465,10 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
       String todayStr = _formatDate(DateTime.now());
 
-      if (_formatDate(lastUpdatedTime) == todayStr) {
+      /*if (_formatDate(lastUpdatedTime) == todayStr) {
         saveValue(lastUpdatedTime, averageHR);
-      }
+      }*/
+      saveValue(lastUpdatedTime, averageHR);
     }
   }
 

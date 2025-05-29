@@ -23,10 +23,7 @@ typedef LogHeader = ({int logFileID, int sessionLength});
 class ScrFetchECG extends StatefulWidget {
   final BluetoothDevice device;
 
-  const ScrFetchECG({
-    super.key,
-    required this.device
-  });
+  const ScrFetchECG({super.key, required this.device});
 
   @override
   _ScrFetchECGState createState() => _ScrFetchECGState();
@@ -81,10 +78,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     tappedIndex = 0;
 
     _connectionStateSubscription = widget.device.connectionState.listen((
-        state,
-        ) async {
+      state,
+    ) async {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
+         await discoverDataChar(widget.device);
+        await _startListeningData();
         startFetching();
       }
     });
@@ -97,8 +96,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     });
 
     _isDisconnectingSubscription = widget.device.isDisconnecting.listen((
-        value,
-        ) {
+      value,
+    ) {
       _isDisconnecting = value;
       if (mounted) {
         setState(() {});
@@ -110,23 +109,23 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
   @override
   void dispose() async {
-    await _connectionStateSubscription.cancel();
-    await _isConnectingSubscription.cancel();
-    await _isDisconnectingSubscription.cancel();
-    await _streamDataSubscription.cancel();
-    await onDisconnectPressed();
+    // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
+    Future.delayed(Duration.zero, () async {
+      await _connectionStateSubscription.cancel();
+      await _isConnectingSubscription.cancel();
+      await _isDisconnectingSubscription.cancel();
+      //await _streamDataSubscription.cancel();
+      await onDisconnectPressed();
+    });
+
     super.dispose();
   }
 
   Future<void> requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.manageExternalStorage,
-      Permission.storage,
-    ].request();
+    Map<Permission, PermissionStatus> statuses =
+        await [Permission.manageExternalStorage, Permission.storage].request();
 
-    if (statuses.containsValue(PermissionStatus.denied)) {
-
-    }
+    if (statuses.containsValue(PermissionStatus.denied)) {}
   }
 
   bool get isConnected {
@@ -151,17 +150,17 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     }
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async {
+  discoverDataChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
+            //await dataCharacteristic?.setNotifyValue(true);
             break;
           }
         }
@@ -170,9 +169,9 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   Future<void> _sendCommand(
-      List<int> commandList,
-      BluetoothDevice deviceName,
-      ) async {
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -182,7 +181,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -197,15 +196,15 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     }
   }
 
-
-  void startFetching() async{
-    await subscribeToChar(widget.device);
-    await _startListeningData();
+  void startFetching() async {
     await _fetchLogCount(context);
     await _fetchLogIndex(context);
   }
 
-  Future waitWhile(bool Function() test, [Duration pollInterval = Duration.zero]) {
+  Future waitWhile(
+    bool Function() test, [
+    Duration pollInterval = Duration.zero,
+  ]) {
     var completer = Completer();
     check() {
       if (!test()) {
@@ -263,10 +262,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
   }
 
-  Future<void> _writeLogDataToFile(
-    List<int> mData,
-    int sessionID,
-  ) async {
+  Future<void> _writeLogDataToFile(List<int> mData, int sessionID) async {
     logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(
@@ -284,16 +280,14 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
     dataList.add(header);
 
-    for (int i = 0; i < logNumberPoints-1; i++) {
+    for (int i = 0; i < logNumberPoints - 1; i++) {
       // Extracting 16 bytes of data for the current row
       List<int> bytes = bdata.buffer.asInt8List(i * 4, 4);
 
       int value1 = convertLittleEndianToInteger(bytes.sublist(0, 4));
 
       // Construct the row data
-      List<String> dataRow = [
-        value1.toString(),
-      ];
+      List<String> dataRow = [value1.toString()];
       dataList.add(dataRow);
     }
 
@@ -328,102 +322,90 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   bool logIndexReceived = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
-
   Future<void> _startListeningData() async {
     listeningDataStream = true;
     logConsole("Started listening...");
 
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((value) async {
-      logConsole("Data Rx: $value");
-      ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      int pktType = bdata.getUint8(0);
-      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
-        //int _cmdType = bdata.getUint8(1);
-        //if (_cmdType == 84) {
-        setState(() {
-          totalSessionCount = bdata.getUint16(3, Endian.little);
-        });
-        logConsole("Data Rx count: $totalSessionCount");
+    // Cancel previous subscription if it exists
+    try {
+      await _streamDataSubscription.cancel();
+    } catch (_) {
+      // Ignore if already cancelled or null
+    }
 
-        //}
-      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        //print("Data Rx: " + value.toString());
-        logConsole("Data Rx length: ${value.length}");
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen(
+      (value) async {
+        logConsole("Data Rx: $value");
+        final bdata = Uint8List.fromList(value).buffer.asByteData();
+        final pktType = bdata.getUint8(0);
 
-        int logFileID = bdata.getInt64(1, Endian.little);
-        int sessionLength = bdata.getInt16(9, Endian.little);
-        int trendType = bdata.getUint8(11);
-        LogHeader header = (logFileID: logFileID, sessionLength: sessionLength);
-        logConsole("Log: " + header.toString());
+        switch (pktType) {
+          case hPi4Global.CES_CMDIF_TYPE_CMD_RSP:
+            if (mounted) {
+              setState(() {
+                totalSessionCount = bdata.getUint16(3, Endian.little);
+              });
+            }
+            logConsole("Data Rx count: $totalSessionCount");
+            break;
 
-        logHeaderList.add(header);
+          case hPi4Global.CES_CMDIF_TYPE_LOG_IDX:
+            logConsole("Data Rx length: ${value.length}");
 
-        if (logHeaderList.length == totalSessionCount) {
-          setState(() {
-            logIndexReceived = true;
-          });
+            final logFileID = bdata.getInt64(1, Endian.little);
+            final sessionLength = bdata.getInt16(9, Endian.little);
+            // trendType is unused, remove if not needed
+            // final trendType = bdata.getUint8(11);
+            final header = (logFileID: logFileID, sessionLength: sessionLength);
+            logConsole("Log: $header");
 
-          logConsole("All logs received. Cancel subscription");
-        } else {}
-      } else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1; //((value[1] << 8) + value[2]);
+            logHeaderList.add(header);
 
-        logConsole(
-          "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
-        );
-        currentFileDataCounter += pktPayloadSize;
-        _globalReceivedData += pktPayloadSize;
-        logData.addAll(value.sublist(1, value.length));
+            if (logHeaderList.length == totalSessionCount && mounted) {
+              setState(() {
+                logIndexReceived = true;
+              });
+            }
+            break;
 
-        setState(() {
-          displayPercent = globalDisplayPercentOffset +
-              (_globalReceivedData / _globalExpectedLength) * 100.truncate();
-          if (displayPercent > 100) {
-            displayPercent = 100;
-          }
-        });
-
-        logConsole(
-          "File data counter: $currentFileDataCounter | Received: $displayPercent%",
-        );
-
-        if (currentFileDataCounter >= (_globalExpectedLength)) {
-          logConsole(
-            "All data $currentFileDataCounter received",
-          );
-
-          if (currentFileDataCounter > _globalExpectedLength) {
-            int diffData = currentFileDataCounter - _globalExpectedLength;
+          case hPi4Global.CES_CMDIF_TYPE_DATA:
+            final pktPayloadSize = value.length - 1;
             logConsole(
-              "Data received more than expected by: $diffData bytes",
+              "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
             );
-            //logData.removeRange(expectedLength, currentFileDataCounter);
-          }
+            currentFileDataCounter += pktPayloadSize;
+            _globalReceivedData += pktPayloadSize;
+            logData.addAll(value.sublist(1));
 
-          await _writeLogDataToFile(logData, currentFileName);
+            setState(() {
+              displayPercent = globalDisplayPercentOffset +
+                  (_globalReceivedData / _globalExpectedLength) * 100;
+              if (displayPercent > 100) displayPercent = 100;
+            });
 
-          //Navigator.pop(context);
+            logConsole(
+              "File data counter: $currentFileDataCounter | Received: ${displayPercent.toStringAsFixed(2)}%",
+            );
 
-          setState(() {
-            isTransfering = false;
-            isFetchIconTap = false;
-            // Reset all fetch variables
-            displayPercent = 0;
-            globalDisplayPercentOffset = 0;
-            currentFileDataCounter = 0;
-            _globalReceivedData = 0;
-            currentFileName = 0;
-            currentFileReceivedComplete = false;
-            logData.clear();
-          });
+            if (currentFileDataCounter >= _globalExpectedLength) {
+              logConsole("All data $currentFileDataCounter received");
 
+              if (currentFileDataCounter > _globalExpectedLength) {
+                final diffData = currentFileDataCounter - _globalExpectedLength;
+                logConsole("Data received more than expected by: $diffData bytes");
+                // Optionally trim logData here if needed
+              }
 
-        }else{
+              await _writeLogDataToFile(logData, currentFileName);
 
+              await resetFetchVariables();
+            }
+            break;
         }
-      }
-    });
+      },
+    );
     widget.device.cancelWhenDisconnected(_streamDataSubscription);
+    await dataCharacteristic!.setNotifyValue(true);
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -454,26 +436,42 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     showLoadingIndicator("Fetching logs count...", context);
     //await _startListeningCommand(deviceID);
     //await _startListeningData(0, 0, "0");
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.ECGLogCount);
-      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
-      await _sendCommand(commandFetchLogFile, widget.device);
-    });
+
+    List<int> commandFetchLogFile = List.empty(growable: true);
+    commandFetchLogFile.addAll(hPi4Global.ECGLogCount);
+    commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+    await _sendCommand(commandFetchLogFile, widget.device);
+
     Navigator.pop(context);
+  }
+
+  Future<void> resetFetchVariables() async {
+    // Reset all fetch variables
+    setState(() {
+      isTransfering = false;
+      isFetchIconTap = false;
+      // Reset all fetch variables
+      displayPercent = 0;
+      globalDisplayPercentOffset = 0;
+      currentFileDataCounter = 0;
+      _globalReceivedData = 0;
+      currentFileName = 0;
+      currentFileReceivedComplete = false;
+      logData.clear();
+    });
   }
 
   Future<void> _fetchLogIndex(BuildContext context) async {
     logConsole("Fetch logs initiated");
     showLoadingIndicator("Fetching logs...", context);
     //await _startListeningCommand(deviceID);
-   // await _startListeningData(0, 0, "0");
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.ECGLogIndex);
-      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
-      await _sendCommand(commandFetchLogFile,widget.device);
-    });
+    // await _startListeningData(0, 0, "0");
+
+    List<int> commandFetchLogFile = List.empty(growable: true);
+    commandFetchLogFile.addAll(hPi4Global.ECGLogIndex);
+    commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+    await _sendCommand(commandFetchLogFile, widget.device);
+
     Navigator.pop(context);
   }
 
@@ -484,74 +482,69 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   ) async {
     logConsole("Deleted logs initiated");
     showLoadingIndicator("Deleting log...", context);
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.ECGLogDelete);
-      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
-      commandFetchLogFile.add(sessionID & 0xFF);
-      commandFetchLogFile.add((sessionID >> 8) & 0xFF);
-      await _sendCommand(commandFetchLogFile, widget.device);
-    });
+
+    List<int> commandFetchLogFile = List.empty(growable: true);
+    commandFetchLogFile.addAll(hPi4Global.ECGLogDelete);
+    commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+    commandFetchLogFile.add(sessionID & 0xFF);
+    commandFetchLogFile.add((sessionID >> 8) & 0xFF);
+    await _sendCommand(commandFetchLogFile, widget.device);
+
     Navigator.pop(context);
     //await _fetchLogIndex(widget.currentDevice.id, context);
   }
 
-  Future<void> _deleteAllLog(
-      BuildContext context,
-      ) async {
+  Future<void> _deleteAllLog(BuildContext context) async {
     logConsole("Deleted logs initiated");
     showLoadingIndicator("Deleting log...", context);
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.ECGLogWipeAll);
-      await _sendCommand(commandFetchLogFile, widget.device);
-    });
+
+    List<int> commandFetchLogFile = List.empty(growable: true);
+    commandFetchLogFile.addAll(hPi4Global.ECGLogWipeAll);
+    await _sendCommand(commandFetchLogFile, widget.device);
+
     Navigator.pop(context);
     //await _fetchLogIndex(widget.currentDevice.id, context);
   }
 
-    Future<void> _fetchLogFile(
-    int sessionID,
-    int sessionSize,
-  ) async {
+  Future<void> _fetchLogFile(int sessionID, int sessionSize) async {
+    
+    await _startListeningData();
     logConsole("Fetch logs initiated");
     isTransfering = true;
     //await _startListeningCommand(deviceID);
     // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
-   // await _startListeningData((sessionSize * 2), sessionID);
+    // await _startListeningData((sessionSize * 2), sessionID);
 
     // Reset all fetch variables
     currentFileDataCounter = 0;
     currentFileReceivedComplete = false;
 
-    setState((){
+    setState(() {
       _globalExpectedLength = sessionSize;
       currentFileName = sessionID;
     });
 
     logData.clear();
 
-    await Future.delayed(Duration(seconds: 2), () async {
-      List<int> commandFetchLogFile = List.empty(growable: true);
-      commandFetchLogFile.addAll(hPi4Global.FetchECGLogFile);
-      commandFetchLogFile.addAll(hPi4Global.ECGRecord);
-      for (int shift = 0; shift <= 56; shift += 8) {
-        commandFetchLogFile.add((sessionID >> shift) & 0xFF);
-      }
-      await _sendCommand(commandFetchLogFile, widget.device);
-    });
+    List<int> commandFetchLogFile = List.empty(growable: true);
+    commandFetchLogFile.addAll(hPi4Global.FetchECGLogFile);
+    commandFetchLogFile.addAll(hPi4Global.ECGRecord);
+    for (int shift = 0; shift <= 56; shift += 8) {
+      commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+    }
+    await _sendCommand(commandFetchLogFile, widget.device);
   }
 
   Future<void> cancelAction() async {
     await onDisconnectPressed();
-    await _streamDataSubscription.cancel();
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
   }
 
-  String formattedTime(int timestamp){
-    DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp*1000).toUtc();
+  String formattedTime(int timestamp) {
+    DateTime date =
+        DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
     String formattedDate = DateFormat('EEE d MMM h:mm a').format(date);
     return formattedDate;
   }
@@ -586,7 +579,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
           ),
         )
         : SizedBox(
-         // height: 400,
+          // height: 400,
           child: Scrollbar(
             //isAlwaysShown: true,
             controller: _scrollController,
@@ -601,10 +594,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                   children: <Widget>[
                     Text(
                       "Session logs on device ",
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: Colors.white,
-                      ),
+                      style: TextStyle(fontSize: 20, color: Colors.white),
                       textAlign: TextAlign.center,
                     ),
                     SizedBox(height: 15.0),
@@ -631,15 +621,24 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                         children: [
                                           Text(
                                             "Session ID: ${logHeaderList[index].logFileID}",
-                                            style: TextStyle(fontSize: 12, color: Colors.white),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ],
                                       ),
                                       Row(
                                         children: [
                                           Text(
-                                            "Recorded : "+ formattedTime(logHeaderList[index].logFileID),
-                                            style: TextStyle(fontSize: 12, color: Colors.white),
+                                            "Recorded : ${formattedTime(
+                                                  logHeaderList[index]
+                                                      .logFileID,
+                                                )}",
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -655,7 +654,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                                     isFetchIconTap = true;
                                                     tappedIndex = index;
                                                   });
-                                                  _fetchLogFile(logHeaderList[index].logFileID, logHeaderList[index].sessionLength);
+                                                  _fetchLogFile(
+                                                    logHeaderList[index]
+                                                        .logFileID,
+                                                    logHeaderList[index]
+                                                        .sessionLength,
+                                                  );
                                                 },
                                                 icon: Icon(
                                                   Icons.download_rounded,
@@ -682,8 +686,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                                     width: 150,
                                                     child:
                                                         LinearProgressIndicator(
-                                                          backgroundColor: Colors.blueGrey[100],
-                                                          color: hPi4Global.hpi4Color,
+                                                          backgroundColor:
+                                                              Colors
+                                                                  .blueGrey[100],
+                                                          color:
+                                                              hPi4Global
+                                                                  .hpi4Color,
                                                           value:
                                                               (displayPercent /
                                                                   100),
@@ -693,8 +701,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                                         ),
                                                   ),
                                                 ),
-                                                Text("${displayPercent.truncate()} %",
-                                                    style: TextStyle(fontSize: 12, color: Colors.white),
+                                                Text(
+                                                  "${displayPercent.truncate()} %",
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.white,
+                                                  ),
                                                 ),
                                               ],
                                             ),
@@ -742,15 +754,25 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
-            title: Text('Are you sure you wish to delete all data.',
-                style:TextStyle(fontSize: 18, color: Colors.white)),
-            content: Text('This action is not reversible.',
-                style:TextStyle(fontSize: 16, color: Colors.red)),
+            title: Text(
+              'Are you sure you wish to delete all data.',
+              style: TextStyle(fontSize: 18, color: Colors.white),
+            ),
+            content: Text(
+              'This action is not reversible.',
+              style: TextStyle(fontSize: 16, color: Colors.red),
+            ),
             actions: <Widget>[
               TextButton(
-                child: const Text('Yes',
-                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
-                onPressed: () async{
+                child: const Text(
+                  'Yes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+                onPressed: () async {
                   Navigator.pop(context);
                   await _deleteAllLog(context);
                   await _fetchLogCount(context);
@@ -785,7 +807,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         backgroundColor: hPi4Global.hpi4AppBarColor,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:() async{
+          onPressed: () async {
             await cancelAction();
             Navigator.of(
               context,
@@ -860,7 +882,10 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                               Spacer(),
                               const Text(
                                 ' >',
-                                style: TextStyle(fontSize: 16, color: Colors.white),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
@@ -915,7 +940,10 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                               Spacer(),
                               const Text(
                                 ' >',
-                                style: TextStyle(fontSize: 16, color: Colors.white),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                ),
                               ),
                             ],
                           ),
@@ -926,10 +954,8 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                 ],
               ),
             ),
-
           ],
         ),
-
       ),
     );
   }
