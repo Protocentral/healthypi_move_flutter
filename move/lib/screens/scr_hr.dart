@@ -52,7 +52,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       getFileType: (file) => "hr",
     );
 
-    _loadDeviceData();
+    _loadData();
   }
 
   @override
@@ -67,7 +67,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
   void _handleTabChange() {
     setState(() {
-      _loadDeviceData();
+      _loadData();
     });
   }
 
@@ -317,7 +317,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   // Example usage for HR data:
   late CsvDataManager<HRTrends> hrDataManager;
 
-  Future<void> _loadDeviceData() async {
+  Future<void> _loadData() async {
     List<HRTrends> data = await hrDataManager.getDataObjects();
     if (data.isEmpty) {
       print('No valid HR data found in CSV files.');
@@ -327,21 +327,34 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       hrTrendsData = data;
     });
 
-    //Print the loaded data for debugging
-    for (var trend in hrTrendsData) {
+    // Get the weekly HR trends for the current week
+    DateTime today = DateTime.now();
+    List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
+      today,
+    );
+    for (var trend in weeklyHRTrends) {
       print(
-        'Loaded HR trend: ${trend.date}, Min: ${trend.minHR}, Max: ${trend.maxHR}',
+        'Date: ${trend.date.weekday}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
       );
     }
 
-    // Print today's data for debugging
-    DateTime today = DateTime.now();
-    DateTime startOfDay = DateTime(today.year, today.month, today.day);
-    DateTime endOfDay = startOfDay.add(Duration(days: 1)).subtract(Duration(seconds: 1));
-    List<HRTrends> todayData = hrTrendsData.where((trend) {
-      return trend.date.isAfter(startOfDay) && trend.date.isBefore(endOfDay);
-    }).toList();
-    
+    // Get the hourly HR trends for today
+    List<HourlyTrend> hourlyHRTrends = await hrDataManager.getHourlyTrendForToday();
+    for (var trend in hourlyHRTrends) {
+      print(
+        'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+      );
+    }
+
+    // Get the monthly HR trends for the current month
+    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
+      today,
+    );
+    for (var trend in monthlyHRTrends) {
+      print(
+        'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+      );
+    }
   }
 
   // Save a value

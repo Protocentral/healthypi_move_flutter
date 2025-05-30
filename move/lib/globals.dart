@@ -1,7 +1,54 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
+class HRTrend {
+  HRTrend(this.date, this.maxHR, this.minHR);
+  final DateTime date;
+  final int maxHR;
+  final int minHR;
+}
 
+class HourlyTrend {
+  final int hour;
+  final double min;
+  final double max;
+  final double avg;
+
+  HourlyTrend({
+    required this.hour,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
+class WeeklyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  WeeklyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
+class MonthlyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  MonthlyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
 
 class hPi4Global {
   static const String UUID_SERV_DIS = "0000180a-0000-1000-8000-00805f9b34fb";
