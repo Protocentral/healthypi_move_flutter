@@ -58,6 +58,52 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     });
   }
 
+  Future<List<List<dynamic>>> readAllHRDataSorted(List<File> csvFiles) async {
+  List<List<dynamic>> allRows = [];
+
+  for (File file in csvFiles) {
+    try {
+      List<String> lines = await file.readAsLines();
+      if (lines.length <= 1) continue; // Skip files with no data rows
+
+      // Skip header, process each data row
+      for (int i = 1; i < lines.length; i++) {
+        String line = lines[i].trim();
+        if (line.isEmpty) continue;
+        List<String> parts = line.split(',');
+        if (parts.length < 5) continue; // Skip incomplete rows
+
+        // Parse timestamp as int for sorting
+        int? timestamp = int.tryParse(parts[0]);
+        if (timestamp == null) continue;
+
+        // Store as [timestamp, minHR, maxHR, avgHR, latestHR]
+        List<dynamic> row = [
+          timestamp,
+          int.tryParse(parts[1]) ?? 0,
+          int.tryParse(parts[2]) ?? 0,
+          int.tryParse(parts[3]) ?? 0,
+          int.tryParse(parts[4]) ?? 0,
+        ];
+        allRows.add(row);
+
+        // Debug print for each row conversion
+        print('Parsed row from file ${file.path}: $row');
+      }
+    } catch (e) {
+      // Optionally handle file read errors
+      print('Error reading file ${file.path}: $e');
+      continue;
+    }
+  }
+
+  // Sort all rows by timestamp (ascending)
+  allRows.sort((a, b) => a[0].compareTo(b[0]));
+
+  return allRows;
+}
+
+
   dateTimeAxis() {
     if (_tabController.index == 0) {
       return DateTimeAxis(
@@ -259,90 +305,108 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
   Future<void> _listCSVFiles() async {
     Directory? downloadsDirectory;
-    if (Platform.isAndroid) {
-      //downloadsDirectory = Directory('/storage/emulated/0/Download');
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
     }
-    if (downloadsDirectory != null) {
-      String downloadsPath = downloadsDirectory.path;
-      Directory downloadsDir = Directory(downloadsPath);
-      if (downloadsDir.existsSync()) {
-        List<FileSystemEntity> files = downloadsDir.listSync();
+    if (downloadsDirectory == null) return;
 
-        List<File> csvFiles =
-            files
-                .where((file) => file is File && file.path.endsWith('.csv'))
-                .map((file) => file as File)
-                .where(
-                  (file) => p.basename(file.path).startsWith("hr_"),
-                ) // Filter by prefix
-                .toList();
+    String downloadsPath = downloadsDirectory.path;
+    Directory downloadsDir = Directory(downloadsPath);
+    if (!downloadsDir.existsSync()) return;
 
-        List<String> weeklyFileNames = [];
-        List<String> MonthlyFileNames = [];
-        hrTrendsData = [];
-        restingHR = 0;
-        rangeMinHR = 0;
-        rangeMaxHR = 0;
-        averageHR = 0;
+    List<FileSystemEntity> files = downloadsDir.listSync();
+    List<File> csvFiles = files
+        .where((file) => file is File && file.path.endsWith('.csv'))
+        .map((file) => file as File)
+        .where((file) => p.basename(file.path).startsWith("hr_"))
+        .toList();
 
-        for (File file in csvFiles) {
-          String timestamp = await _getSecondLineTimestamp(file);
-          String timestamp1 = timestamp.split(",")[0];
-          int timestamp2 = int.parse(timestamp1);
-          int updatedTimestamp = timestamp2 * 1000;
-          String fileName1 = p.basename(file.path);
-
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-            updatedTimestamp,
-            isUtc: true,
-          );
-          DateTime now = DateTime.now();
-          if (_tabController.index == 0) {
-            String todayStr = _formatDate(now);
-
-            if (_formatDate(timestampDateTime) == todayStr) {
-              await processFileData(
-                fileNames: [fileName1],
-                groupingFormat: "yyyy-MM-dd HH:00:00", // Group by hour
-              ); // Group by hour)
-            } else {}
-          } else if (_tabController.index == 1) {
-            // Calculate the start of the week (7 days ago)
-            DateTime weekStart = now.subtract(Duration(days: 7));
-            if (timestampDateTime.isAfter(weekStart) &&
-                timestampDateTime.isBefore(now)) {
-              weeklyFileNames.add(fileName1); // Process the file data
-            }
-            // Pass the list of weekly files to the function
-            if (weeklyFileNames.isNotEmpty) {
-              await processFileData(
-                fileNames: weeklyFileNames,
-                groupingFormat: "yyyy-MM-dd", // Group by day
-              ); // Process the list of weekly files
-            } else {
-              //print("No valid files found for the past week.");
-            }
-          } else if (_tabController.index == 2) {
-            // Calculate the start of the week (7 days ago)
-            DateTime monthStart = now.subtract(Duration(days: 30));
-            // Check if the file's timestamp is within the past 7 days
-            if (timestampDateTime.isAfter(monthStart) &&
-                timestampDateTime.isBefore(now)) {
-              MonthlyFileNames.add(fileName1);
-            }
-            if (MonthlyFileNames.isNotEmpty) {
-              await processFileData(
-                fileNames: MonthlyFileNames,
-                groupingFormat: "yyyy-MM-dd", // Group by day
-              ); // Process the list of weekly files
-            } else {}
+    for (File file in csvFiles) {
+      int size = await file.length();
+      print('File: ${p.basename(file.path)}, Size: $size bytes');
+      final regex = RegExp(r'hr_(\d+)\.csv');
+      final match = regex.firstMatch(p.basename(file.path));
+      if (match != null) {
+        final timestampStr = match.group(1);
+        if (timestampStr != null) {
+          final timestamp = int.tryParse(timestampStr);
+          if (timestamp != null) {
+            final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+            print('Filename timestamp: $timestampStr, DateTime: $date');
           }
         }
       }
     }
+
+    // Read and process the CSV files
+    List<List<dynamic>> allRows = await readAllHRDataSorted(csvFiles);
+    if (allRows.isEmpty) {
+      print('No valid HR data found in CSV files.');
+      return;
+    }
+
+    // Print the total number of rows read
+    print('Total rows read from HR data: ${allRows.length}');
+
+    //Print all rows for debugging
+    for (var row in allRows) {
+      print('Row: $row');
+    }
+
+    /*List<String> weeklyFileNames = [];
+    List<String> monthlyFileNames = [];
+    hrTrendsData = [];
+    restingHR = 0;
+    rangeMinHR = 0;
+    rangeMaxHR = 0;
+    averageHR = 0;
+
+    DateTime now = DateTime.now();
+    String todayStr = _formatDate(now);
+    DateTime weekStart = now.subtract(Duration(days: 7));
+    DateTime monthStart = now.subtract(Duration(days: 30));
+
+    for (File file in csvFiles) {
+      String timestamp = await _getSecondLineTimestamp(file);
+      String timestamp1 = timestamp.split(",")[0];
+      int timestamp2 = int.tryParse(timestamp1) ?? 0;
+      int updatedTimestamp = timestamp2 * 1000;
+      String fileName1 = p.basename(file.path);
+
+      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
+        updatedTimestamp,
+        isUtc: true,
+      );
+
+      if (_tabController.index == 0) {
+        if (_formatDate(timestampDateTime) == todayStr) {
+          await processFileData(
+            fileNames: [fileName1],
+            groupingFormat: "yyyy-MM-dd HH:00:00",
+          );
+        }
+      } else if (_tabController.index == 1) {
+        if (timestampDateTime.isAfter(weekStart) && timestampDateTime.isBefore(now)) {
+          weeklyFileNames.add(fileName1);
+        }
+      } else if (_tabController.index == 2) {
+        if (timestampDateTime.isAfter(monthStart) && timestampDateTime.isBefore(now)) {
+          monthlyFileNames.add(fileName1);
+        }
+      }
+    }
+
+    if (_tabController.index == 1 && weeklyFileNames.isNotEmpty) {
+      await processFileData(
+        fileNames: weeklyFileNames,
+        groupingFormat: "yyyy-MM-dd",
+      );
+    } else if (_tabController.index == 2 && monthlyFileNames.isNotEmpty) {
+      await processFileData(
+        fileNames: monthlyFileNames,
+        groupingFormat: "yyyy-MM-dd",
+      );
+    }*/
   }
 
   Future<String> _getSecondLineTimestamp(File file) async {
@@ -719,3 +783,4 @@ class HRTrends {
   final int maxHR;
   final int minHR;
 }
+
