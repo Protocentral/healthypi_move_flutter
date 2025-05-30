@@ -85,6 +85,7 @@ class CsvDataManager<T> {
           int ts = int.tryParse(row[0].toString()) ?? 0;
           DateTime dt = DateTime.fromMillisecondsSinceEpoch(
             ts * 1000,
+            isUtc: true
           ); // Assuming timestamp is in seconds
           return dt.isAfter(start.subtract(const Duration(milliseconds: 1))) &&
               dt.isBefore(end.add(const Duration(milliseconds: 1)));
@@ -149,6 +150,7 @@ class CsvDataManager<T> {
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
+
       DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
       DateTime hour = DateTime(dt.year, dt.month, dt.day, dt.hour);
 
@@ -194,7 +196,7 @@ class CsvDataManager<T> {
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
-      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
       DateTime day = DateTime(dt.year, dt.month, dt.day);
 
       double value =
@@ -242,7 +244,7 @@ class CsvDataManager<T> {
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
-      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
       DateTime day = DateTime(dt.year, dt.month, dt.day);
 
       double value =
