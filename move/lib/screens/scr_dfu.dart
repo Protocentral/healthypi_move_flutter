@@ -55,7 +55,8 @@ class ScrDFUState extends State<ScrDFU> {
   late BluetoothCharacteristic deviceFWCharacteristic;
 
   String _currentFWVersion = "";
-  bool _updateAvailable = false;
+  String _latestFWVersion = "";
+  String _updateAvailable = "None";
   bool _showUpdateCard = false;
   bool _checkingUpdates = false;
 
@@ -695,7 +696,7 @@ class ScrDFUState extends State<ScrDFU> {
     Version currentVersion = Version.parse(versionCurrent);
 
     if (availVersion > currentVersion) {
-      //print("...........availble"+versionAvail);
+     // print("...........availble"+versionAvail);
       return versionAvail;
     } else {
       //print("...........current"+versionCurrent);
@@ -704,10 +705,25 @@ class ScrDFUState extends State<ScrDFU> {
   }
 
 
+  String _CompareFWVersion(String versionCurrent, String versionAvail) {
+    Version availVersion = Version.parse(versionAvail);
+    Version currentVersion = Version.parse(versionCurrent);
+
+    if (availVersion > currentVersion) {
+      // print("...........availble"+versionAvail);
+      return "Available";
+    } else if(availVersion == currentVersion || availVersion < currentVersion) {
+      return "Updated";
+    }else {
+      return "None";
+    }
+  }
+
+
   String _status = 'Click the button to download the ZIP file';
   String fwFilePath = "";
 
-  Future<void> downloadFile() async {
+  Future<String> downloadFile() async {
     String fwVesion = await _getLatestVersion();
     Directory  dir = Directory("");
     if (Platform.isAndroid) {
@@ -728,42 +744,61 @@ class ScrDFUState extends State<ScrDFU> {
       setState(() {
         _status = 'File downloaded to: $filePath';
         fwFilePath = filePath;
+        _latestFWVersion = fwVesion;
       });
     } else {
       setState(() {
         _status = 'Failed to download file';
       });
     }
-
     print(_status);
+    return fwVesion;
   }
 
-  Widget _buildDeviceCard() {
-    if (_showUpdateCard == true &&
-        //_updateAvailable == true &&
-        _checkingUpdates == false) {
+
+  Widget disconnectButton(){
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+      child:  ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red, // background color
+          foregroundColor: Colors.white, // text color
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        onPressed: () async {
+          await onDisconnectPressed();
+          Navigator
+              .of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => HomePage()));
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(Icons.stop_rounded, color: Colors.white),
+              const Text(
+                ' Disconnect ',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
+              Spacer(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget loadLatestFWAvailable(){
+    if(_updateAvailable == "Available" && _showUpdateCard == true){
       return Card(
         color: Colors.grey[900],
         child: Padding(
-          padding: const EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(8.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
-              Text(_dispConnStatus, style: TextStyle(fontSize: 16,color: Colors.white)),
-              Text(
-                "Firmware version: $_currentFWVersion",
-                style: TextStyle(fontSize: 16,color: Colors.white),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ),
               Padding(
                 padding: const EdgeInsets.all(8.0),
                 child: Text("Loaded Firmware",style: TextStyle(fontSize: 14,color: Colors.white)),
@@ -788,7 +823,7 @@ class ScrDFUState extends State<ScrDFU> {
                     ),
                   ),
                   onPressed: () async {
-                    await downloadFile();
+                    //await downloadFile();
                     _onLoadFirmware();
                   },
                   child: Padding(
@@ -807,45 +842,12 @@ class ScrDFUState extends State<ScrDFU> {
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                child:  ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red, // background color
-                    foregroundColor: Colors.white, // text color
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  onPressed: () async {
-                    await onDisconnectPressed();
-                    Navigator
-                        .of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => HomePage()));
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(Icons.stop_rounded, color: Colors.white),
-                        const Text(
-                          ' Disconnect ',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                        Spacer(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              disconnectButton(),
             ],
           ),
         ),
       );
-    } else if (_showUpdateCard == true &&
-        _updateAvailable == false &&
-        _checkingUpdates == false) {
+    }else if(_updateAvailable == "Not Available" && _showUpdateCard == true){
       return Padding(
         padding: const EdgeInsets.all(8.0),
         child: Card(
@@ -863,8 +865,88 @@ class ScrDFUState extends State<ScrDFU> {
                   ),
                 ),
                 Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+                disconnectButton(),
               ],
             ),
+          ),
+        ),
+      );
+    }else{
+      return Container();
+    }
+  }
+
+  Widget _buildDeviceCard() {
+    if (_showUpdateCard == true) {
+      return Card(
+        color: Colors.grey[900],
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: <Widget>[
+              Text(_dispConnStatus, style: TextStyle(fontSize: 16,color: Colors.white)),
+              Text(
+                "Firmware version: $_currentFWVersion",
+                style: TextStyle(fontSize: 16,color: Colors.white),
+              ),
+              Text(
+                "Latest version: $_latestFWVersion",
+                style: TextStyle(fontSize: 16,color: Colors.white),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hPi4Global.hpi4Color, // background color
+                    foregroundColor: Colors.white, // text color
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  onPressed: () async {
+                    String checkfw = await downloadFile();
+                    String resultfw =  _CompareFWVersion(_currentFWVersion, checkfw);
+                    print("...........availble"+ resultfw);
+                    if(resultfw == "Available"){
+                      setState((){
+                        _updateAvailable = "Available";
+                      });
+                    }else{
+                      setState((){
+                        _updateAvailable = "Not Available";
+                      });
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(Icons.check, color: Colors.white),
+                        const Text(
+                          ' Check Latest Firmware ',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
+                        Spacer(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+              ),
+              loadLatestFWAvailable(),
+
+            ],
           ),
         ),
       );
