@@ -340,6 +340,16 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     }
   }*/
 
+  double borderWidth(){
+    if (_tabController.index == 0){
+      return 8;
+    }else if(_tabController.index == 1){
+      return 20;
+    }else{
+      return 7;
+    }
+  }
+
   Widget buildChartBlock() {
     return Padding(
       padding: const EdgeInsets.all(2.0),
@@ -367,12 +377,13 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                 ),
                 palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  HiloSeries<HRTrends, DateTime>(
+                  RangeColumnSeries<HRTrends, DateTime>(
                     dataSource: hrTrendsData,
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
-                    borderWidth: 7,
+                    borderWidth: borderWidth(),
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
                     animationDuration: 0,
                   ),
                 ],
@@ -399,7 +410,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     }
 
     setState(() {
-      hrTrendsData = data;
+      //hrTrendsData = data;
     });
 
     DateTime today = DateTime.now();
@@ -420,6 +431,12 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         today,
       );
 
+      setState((){
+        rangeMinHR = dailyStats['min']!.toInt();
+        rangeMaxHR = dailyStats['max']!.toInt();
+        averageHR = dailyStats['avg']!.toInt();
+      });
+
       print('Daily Stats: $dailyStats');
 
     }else if(_tabController.index == 1){
@@ -434,7 +451,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
             HRTrends(
               trend.date,
               trend.max.toInt(),
-              trend.max.toInt(),
+              trend.min.toInt(),
             ),
           );
         });
@@ -449,7 +466,11 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         today,
       );
 
-
+      setState((){
+        rangeMinHR = weeklyStats['min']!.toInt();
+        rangeMaxHR = weeklyStats['max']!.toInt();
+        averageHR = weeklyStats['avg']!.toInt();
+      });
 
       print('Weekly Stats: $weeklyStats');
 
@@ -459,6 +480,17 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         today,
       );
       for (var trend in monthlyHRTrends) {
+
+        setState((){
+          hrTrendsData.add(
+            HRTrends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+        });
+
         print(
           'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
         );
@@ -467,6 +499,12 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       Map<String, double> monthlyStats = await hrDataManager.getMonthlyStatistics(
         today,
       );
+
+      setState((){
+        rangeMinHR = monthlyStats['min']!.toInt();
+        rangeMaxHR = monthlyStats['max']!.toInt();
+        averageHR = monthlyStats['avg']!.toInt();
+      });
 
       print('Monthly Stats: $monthlyStats');
     }
