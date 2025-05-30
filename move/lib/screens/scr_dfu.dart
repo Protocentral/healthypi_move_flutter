@@ -78,6 +78,66 @@ class ScrDFUState extends State<ScrDFU> {
   final UpdateManagerFactory _managerFactory =
   mcumgr.FirmwareUpdateManagerFactory();
 
+  bool _autoConnecting = false;
+  bool _deviceNotFound = false;
+  String _deviceNotFoundMessage = "";
+
+  Future<String?> getPairedDeviceMac() async {
+    try {
+      final Directory appDocDir = await path_provider.getApplicationDocumentsDirectory();
+      final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+      final File macFile = File(filePath);
+      if (!await macFile.exists()) return null;
+      return (await macFile.readAsString()).trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _tryAutoConnectToPairedDevice() async {
+    String? pairedMac = await getPairedDeviceMac();
+    if (pairedMac != null && pairedMac.isNotEmpty) {
+      setState(() {
+        _autoConnecting = true;
+        _deviceNotFound = false;
+        _deviceNotFoundMessage = "";
+      });
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      StreamSubscription? tempSub;
+      bool found = false;
+      tempSub = FlutterBluePlus.scanResults.listen((results) async {
+        for (var result in results) {
+          if (result.device.id.id == pairedMac) {
+            found = true;
+            await FlutterBluePlus.stopScan();
+            await tempSub?.cancel();
+            if (mounted)
+              setState(() {
+                _autoConnecting = false;
+                _deviceNotFound = false;
+                _deviceNotFoundMessage = "";
+              });
+            await onConnectPressed(result.device);
+            return;
+          }
+        }
+      });
+      // Timeout fallback
+      await Future.delayed(const Duration(seconds: 10), () async {
+        await FlutterBluePlus.stopScan();
+        await tempSub?.cancel();
+        if (!found && mounted) {
+          setState(() {
+            _autoConnecting = false;
+            _deviceNotFound = true;
+            _deviceNotFoundMessage =
+            "Device not found. Please make sure your paired device is turned on and in range.";
+          });
+        }
+      });
+    }
+  }
+
   @override
   void initState() {
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
@@ -250,7 +310,7 @@ class ScrDFUState extends State<ScrDFU> {
     Uint8List? zipFile;
     List<mcumgr.Image>? firmwareImages;
     late final destinationDir;
-    late final firmwareFile;
+    late final firmwareGHFile;
 
     if(fwFilePath == ""){
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -271,8 +331,8 @@ class ScrDFUState extends State<ScrDFU> {
       final tempDir = Directory('${systemTempDir.path}/$prefix');
       await tempDir.create();
 
-      firmwareFile = File('${tempDir.path}/firmware.zip');
-      await firmwareFile.writeAsBytes(firmwareFileData);
+      firmwareGHFile = File('${tempDir.path}/firmware.zip');
+      await  firmwareGHFile.writeAsBytes(firmwareFileData);
 
       destinationDir = Directory('${tempDir.path}/firmware');
       await destinationDir.create();
@@ -290,8 +350,8 @@ class ScrDFUState extends State<ScrDFU> {
       final tempDir = Directory('${systemTempDir.path}/$prefix');
       await tempDir.create();
 
-      final firmwareFile = File('${tempDir.path}/firmware.zip');
-      await firmwareFile.writeAsBytes(firmwareFileData);
+      firmwareGHFile = File('${tempDir.path}/firmware.zip');
+      await  firmwareGHFile.writeAsBytes(firmwareFileData);
 
       destinationDir = Directory('${tempDir.path}/firmware');
       await destinationDir.create();
@@ -301,10 +361,11 @@ class ScrDFUState extends State<ScrDFU> {
 
     try {
       await ZipFile.extractToDirectory(
-        zipFile: firmwareFile,
+        zipFile:  firmwareGHFile,
         destinationDir: destinationDir,
       );
-    } catch (e) {
+    } catch (e, stack) {
+      print("Unzipping failed: $e\n$stack");  // <--- Add this
       throw Exception('Failed to unzip firmware');
     }
 
@@ -393,6 +454,7 @@ class ScrDFUState extends State<ScrDFU> {
         setState(() {
           logConsole("Device connection state: $state");
           if (state == BluetoothConnectionState.connected) {
+
             _currentDevice.discoverServices().then((services) {
               if (mounted) {
                 setState(() {
@@ -457,7 +519,7 @@ class ScrDFUState extends State<ScrDFU> {
     );
   }
 
-  void _onConnectPressed(BluetoothDevice device) {
+  Future<void> onConnectPressed(BluetoothDevice device) async {
     logConsole("Connecting to device: ${device.platformName}");
     if (mounted) {
       setState(() {
@@ -508,7 +570,7 @@ class ScrDFUState extends State<ScrDFU> {
         .map(
           (r) => ScanResultTile(
         result: r,
-        onTap: () => _onConnectPressed(r.device),
+        onTap: () => onConnectPressed(r.device),
       ),
     )
         .toList();
@@ -650,7 +712,7 @@ class ScrDFUState extends State<ScrDFU> {
     Directory  dir = Directory("");
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
-      dir = Directory("/storage/emulated/0/Download/");
+      dir = Directory("/storage/emulated/0/Download");
     } else {
       dir = await path_provider.getApplicationDocumentsDirectory();
     }

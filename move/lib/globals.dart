@@ -1,6 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
+class HRTrend {
+  HRTrend(this.date, this.maxHR, this.minHR);
+  final DateTime date;
+  final int maxHR;
+  final int minHR;
+}
+
+class HourlyTrend {
+  final DateTime hour;
+  final double min;
+  final double max;
+  final double avg;
+
+  HourlyTrend({
+    required this.hour,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
+class WeeklyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  WeeklyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
+class MonthlyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  MonthlyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
 class hPi4Global {
   static const String UUID_SERV_DIS = "0000180a-0000-1000-8000-00805f9b34fb";
   static const String UUID_SERV_BATT = "0000180f-0000-1000-8000-00805f9b34fb";
@@ -8,12 +57,14 @@ class hPi4Global {
   static const String UUID_SERV_SPO2 = "00001822-0000-1000-8000-00805f9b34fb";
 
   static const String UUID_SERV_PPG = "cd5c7491-4448-7db8-ae4c-d1da8cba36d0";
-  static const String UUID_CHAR_FINGERPPG = "cd5ca86f-4448-7db8-ae4c-d1da8cba36d0";
+  static const String UUID_CHAR_FINGERPPG =
+      "cd5ca86f-4448-7db8-ae4c-d1da8cba36d0";
   static const String UUID_CHAR_PPG = "cd5c1525-4448-7db8-ae4c-d1da8cba36d0";
 
   static const String UUID_SERVICE_CMD = "01bf7492-970f-8d96-d44d-9023c47faddc";
   static const String UUID_CHAR_CMD = "01bf1528-970f-8d96-d44d-9023c47faddc";
-  static const String UUID_CHAR_CMD_DATA = "01bf1527-970f-8d96-d44d-9023c47faddc";
+  static const String UUID_CHAR_CMD_DATA =
+      "01bf1527-970f-8d96-d44d-9023c47faddc";
 
   static const String UUID_ECG_SERVICE = "00001122-0000-1000-8000-00805f9b34fb";
   static const String UUID_ECG_CHAR = "00001424-0000-1000-8000-00805f9b34fb";
@@ -31,11 +82,19 @@ class hPi4Global {
   //static const String UUID_CHAR_HIST = "01bf1525-970f-8d96-d44d-9023c47faddc";
   static const String UUID_CHAR_ACT = "000000a2-0000-1000-8000-00805f9b34fb";
   static const String UUID_CHAR_BATT = "00002a19-0000-1000-8000-00805f9b34fb";
-  static const String UUID_DIS_FW_REVISION = "00002a26-0000-1000-8000-00805f9b34fb";
-  static const String UUID_SERV_HEALTH_THERM = "00001809-0000-1000-8000-00805f9b34fb";
+  static const String UUID_DIS_FW_REVISION =
+      "00002a26-0000-1000-8000-00805f9b34fb";
+  static const String UUID_SERV_HEALTH_THERM =
+      "00001809-0000-1000-8000-00805f9b34fb";
 
   static const String UUID_SERV_SMP = "8d53dc1d-1db7-4cd3-868b-8a527460aa84";
   static const String UUID_CHAR_SMP = "da2e7828-fbce-4e01-ae9e-261174997c48";
+
+  static const int HPI_TREND_TYPE_HR = 0x01;
+  static const int HPI_TREND_TYPE_SPO2 = 0x02;
+  static const int HPI_TREND_TYPE_TEMP = 0x03;
+  static const int HPI_TREND_TYPE_ACTIVITY = 0x04;
+  static const int HPI_TREND_TYPE_ECG = 0x05;
 
   static const List<int> sessionLogIndex = [0x50];
   static const List<int> sessionFetchLogFile = [0x51];
@@ -63,43 +122,78 @@ class hPi4Global {
 
   static const List<int> WISER_CMD_SET_DEVICE_TIME = [0x41];
 
-  static const List<int> StartBPTCal= [0x61];
-  static const List<int> SetBPTCalMode= [0x60];
-  static const List<int> EndBPTCal= [0x62];
+  static const List<int> StartBPTCal = [0x61];
+  static const List<int> SetBPTCalMode = [0x60];
+  static const List<int> EndBPTCal = [0x62];
 
-  static const TextStyle eventStyle =
-      TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
-  static const TextStyle cardTextStyle =
-      TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white);
-  static const TextStyle cardValueTextStyle =
-      TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white);
+  static const TextStyle eventStyle = TextStyle(
+    fontSize: 30,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
+  static const TextStyle cardTextStyle = TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
+  static const TextStyle cardValueTextStyle = TextStyle(
+    fontSize: 30,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
 
-  static const TextStyle movecardTextStyle =
-  TextStyle(fontSize: 16, color: Colors.white);
-  static const TextStyle movecardValueTextStyle =
-  TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white);
-  static const TextStyle moveValueTextStyle =
-  TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white);
-  static const TextStyle movecardSubValueTextStyle =
-  TextStyle(fontSize: 12, color: Colors.white);
+  static const TextStyle movecardTextStyle = TextStyle(
+    fontSize: 16,
+    color: Colors.white,
+  );
+  static const TextStyle movecardValueTextStyle = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
+  static const TextStyle moveValueTextStyle = TextStyle(
+    fontSize: 28,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
+  static const TextStyle movecardSubValueTextStyle = TextStyle(
+    fontSize: 12,
+    color: Colors.white,
+  );
 
-  static const TextStyle movecardSubValue1TextStyle =
-  TextStyle(fontSize: 14, color: Colors.white);
+  static const TextStyle movecardSubValue1TextStyle = TextStyle(
+    fontSize: 14,
+    color: Colors.white,
+  );
 
-  static const TextStyle movecardSubValue2TextStyle =
-  TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
+  static const TextStyle movecardSubValue2TextStyle = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
 
-  static const TextStyle subValueWhiteTextStyle =
-  TextStyle(fontSize: 12, color: Colors.white);
+  static const TextStyle subValueWhiteTextStyle = TextStyle(
+    fontSize: 12,
+    color: Colors.white,
+  );
 
-  static const TextStyle cardBlackTextStyle = TextStyle(fontSize: 20, color: Colors.black);
+  static const TextStyle cardBlackTextStyle = TextStyle(
+    fontSize: 20,
+    color: Colors.black,
+  );
 
-  static const TextStyle cardWhiteTextStyle = TextStyle(fontSize: 20, color: Colors.white);
+  static const TextStyle cardWhiteTextStyle = TextStyle(
+    fontSize: 20,
+    color: Colors.white,
+  );
 
-  static const TextStyle eventsWhite =
-      TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white);
+  static const TextStyle eventsWhite = TextStyle(
+    fontSize: 14,
+    fontWeight: FontWeight.bold,
+    color: Colors.white,
+  );
 
- //static const Color hpi4Color = Color(0xFFFFD551);
+  //static const Color hpi4Color = Color(0xFFFFD551);
 
   static const Color hpi4Color = Color(0xFFFF6D00);
 
@@ -152,9 +246,10 @@ class BatteryLevelPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    Paint getPaint(
-        {Color color = Colors.black,
-        PaintingStyle style = PaintingStyle.stroke}) {
+    Paint getPaint({
+      Color color = Colors.black,
+      PaintingStyle style = PaintingStyle.stroke,
+    }) {
       return Paint()
         ..color = color
         ..strokeWidth = 1.0
@@ -164,13 +259,15 @@ class BatteryLevelPainter extends CustomPainter {
     final double batteryRight = size.width - 4.0;
 
     final RRect batteryOutline = RRect.fromLTRBR(
-        0.0, 0.0, batteryRight, size.height, Radius.circular(3.0));
+      0.0,
+      0.0,
+      batteryRight,
+      size.height,
+      Radius.circular(3.0),
+    );
 
     // Battery body
-    canvas.drawRRect(
-      batteryOutline,
-      getPaint(),
-    );
+    canvas.drawRRect(batteryOutline, getPaint());
 
     // Battery nub
     canvas.drawRect(
@@ -179,8 +276,14 @@ class BatteryLevelPainter extends CustomPainter {
     );
 
     // Fill rect
-    canvas.clipRect(Rect.fromLTWH(
-        0.0, 0.0, batteryRight * _batteryLevel / 100.0, size.height));
+    canvas.clipRect(
+      Rect.fromLTWH(
+        0.0,
+        0.0,
+        batteryRight * _batteryLevel / 100.0,
+        size.height,
+      ),
+    );
 
     Color indicatorColor;
     if (_batteryLevel < 15) {
@@ -192,9 +295,15 @@ class BatteryLevelPainter extends CustomPainter {
     }
 
     canvas.drawRRect(
-        RRect.fromLTRBR(0.5, 0.5, batteryRight - 0.5, size.height - 0.5,
-            Radius.circular(3.0)),
-        getPaint(style: PaintingStyle.fill, color: indicatorColor));
+      RRect.fromLTRBR(
+        0.5,
+        0.5,
+        batteryRight - 0.5,
+        size.height - 0.5,
+        Radius.circular(3.0),
+      ),
+      getPaint(style: PaintingStyle.fill, color: indicatorColor),
+    );
   }
 
   @override
@@ -215,38 +324,40 @@ class LoadingIndicator extends StatelessWidget {
     var displayedText = text;
 
     return Container(
-        padding: EdgeInsets.all(16),
-        color: Colors.black.withOpacity(0.7),
-        child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _getLoadingIndicator(),
-              _getHeading(context),
-              _getText(displayedText)
-            ]));
+      padding: EdgeInsets.all(16),
+      color: Colors.black.withOpacity(0.7),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _getLoadingIndicator(),
+          _getHeading(context),
+          _getText(displayedText),
+        ],
+      ),
+    );
   }
 
   Padding _getLoadingIndicator() {
     return Padding(
-        padding: EdgeInsets.only(bottom: 16),
-        child: Container(
-            child: SpinKitCircle(
-              color: Colors.blue,
-              size: 32.0,
-            ),
-            width: 32,
-            height: 32));
+      padding: EdgeInsets.only(bottom: 16),
+      child: Container(
+        child: SpinKitCircle(color: Colors.blue, size: 32.0),
+        width: 32,
+        height: 32,
+      ),
+    );
   }
 
   Widget _getHeading(context) {
     return Padding(
-        padding: EdgeInsets.only(bottom: 4),
-        child: Text(
-          'Please wait…',
-          style: TextStyle(color: Colors.white, fontSize: 16),
-          textAlign: TextAlign.center,
-        ));
+      padding: EdgeInsets.only(bottom: 4),
+      child: Text(
+        'Please wait…',
+        style: TextStyle(color: Colors.white, fontSize: 16),
+        textAlign: TextAlign.center,
+      ),
+    );
   }
 
   Text _getText(String displayedText) {
