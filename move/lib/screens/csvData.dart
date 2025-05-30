@@ -29,6 +29,7 @@ class CsvDataManager<T> {
     if (Platform.isAndroid || Platform.isIOS) {
       downloadsDirectory = await getApplicationDocumentsDirectory();
     }
+
     if (downloadsDirectory == null) return [];
 
     String downloadsPath = downloadsDirectory.path;
@@ -85,7 +86,7 @@ class CsvDataManager<T> {
           int ts = int.tryParse(row[0].toString()) ?? 0;
           DateTime dt = DateTime.fromMillisecondsSinceEpoch(
             ts * 1000,
-            isUtc: true
+            isUtc: true,
           ); // Assuming timestamp is in seconds
           return dt.isAfter(start.subtract(const Duration(milliseconds: 1))) &&
               dt.isBefore(end.add(const Duration(milliseconds: 1)));
@@ -267,45 +268,168 @@ class CsvDataManager<T> {
     return monthlyTrends;
   }
 
+  /// Get activity trends for a specific day in ActivityDailyTrend format
+  Future<List<ActivityDailyTrend>> getActivityDailyTrend(DateTime day) async {
+    DateTime start = DateTime(day.year, day.month, day.day);
+    DateTime end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
+
+    List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
+
+    List<ActivityDailyTrend> activityTrends = [];
+
+    for (var row in rows) {
+      int ts = int.tryParse(row[0].toString()) ?? 0; // Timestamp
+      DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
+        ts * 1000,
+        isUtc: true,
+      );
+      int steps = int.tryParse(row[1].toString()) ?? 0; // Steps data
+
+      activityTrends.add(ActivityDailyTrend(date: timestamp, steps: steps));
+    }
+
+    return activityTrends;
+  }
+
+  /// Get activity trends for a specific week in ActivityWeeklyTrend format
+  /// This method aggregates daily steps data into weekly trends.
+  Future<List<ActivityWeeklyTrend>> getActivityWeeklyTrend(
+    DateTime dateInWeek,
+  ) async {
+    DateTime startOfWeek = dateInWeek.subtract(
+      Duration(days: dateInWeek.weekday - 1),
+    );
+    startOfWeek = DateTime(
+      startOfWeek.year,
+      startOfWeek.month,
+      startOfWeek.day,
+    );
+    DateTime endOfWeek = startOfWeek
+        .add(const Duration(days: 7))
+        .subtract(const Duration(milliseconds: 1));
+
+    List<List<dynamic>> rows = await _getRowsByTimestampRange(
+      startOfWeek,
+      endOfWeek,
+    );
+
+    Map<DateTime, int> weeklySteps = {};
+
+    for (var row in rows) {
+      int ts = int.tryParse(row[0].toString()) ?? 0; // Timestamp
+      DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
+        ts * 1000,
+        isUtc: true,
+      );
+      int steps = int.tryParse(row[1].toString()) ?? 0; // Steps data
+
+      DateTime day = DateTime(timestamp.year, timestamp.month, timestamp.day);
+      weeklySteps.update(day, (value) => value + steps, ifAbsent: () => steps);
+    }
+
+    List<ActivityWeeklyTrend> weeklyTrends = [];
+    weeklySteps.forEach((day, steps) {
+      weeklyTrends.add(ActivityWeeklyTrend(date: day, steps: steps));
+    });
+
+    return weeklyTrends;
+  }
+
+  /// Get activity trends for a specific month in ActivityMonthlyTrend format
+  /// This method aggregates daily steps data into monthly trends.
+  /// This method assumes that the data is stored in a similar format as the weekly trends.
+
+  Future<List<ActivityMonthlyTrend>> getActivityMonthlyTrend(
+    DateTime dateInMonth,
+  ) async {
+    DateTime startOfMonth = DateTime(dateInMonth.year, dateInMonth.month, 1);
+    DateTime endOfMonth =
+        (dateInMonth.month < 12)
+            ? DateTime(
+              dateInMonth.year,
+              dateInMonth.month + 1,
+              1,
+            ).subtract(const Duration(milliseconds: 1))
+            : DateTime(
+              dateInMonth.year + 1,
+              1,
+              1,
+            ).subtract(const Duration(milliseconds: 1));
+
+    List<List<dynamic>> rows = await _getRowsByTimestampRange(
+      startOfMonth,
+      endOfMonth,
+    );
+
+    Map<DateTime, int> monthlySteps = {};
+
+    for (var row in rows) {
+      int ts = int.tryParse(row[0].toString()) ?? 0; // Timestamp
+      DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
+        ts * 1000,
+        isUtc: true,
+      );
+      int steps = int.tryParse(row[1].toString()) ?? 0; // Steps data
+
+      DateTime day = DateTime(timestamp.year, timestamp.month, timestamp.day);
+      monthlySteps.update(day, (value) => value + steps, ifAbsent: () => steps);
+    }
+
+    List<ActivityMonthlyTrend> monthlyTrends = [];
+    monthlySteps.forEach((day, steps) {
+      monthlyTrends.add(ActivityMonthlyTrend(date: day, steps: steps));
+    });
+
+    return monthlyTrends;
+  }
+
   /// Get min, max, and average statistics for a specific day
   Future<Map<String, double>> getDailyStatistics(DateTime day) async {
     List<HourlyTrend> dailyTrends = await getHourlyTrendForToday();
-    double min = dailyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
-    double max = dailyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
-    double avg = dailyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / dailyTrends.length;
+    double min = dailyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = dailyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        dailyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        dailyTrends.length;
 
-    return {
-      'min': min,
-      'max': max,
-      'avg': avg,
-    };
+    return {'min': min, 'max': max, 'avg': avg};
   }
 
   /// Get min, max, and average statistics for a specific week
   Future<Map<String, double>> getWeeklyStatistics(DateTime dateInWeek) async {
     List<WeeklyTrend> weeklyTrends = await getWeeklyTrend(dateInWeek);
-    double min = weeklyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
-    double max = weeklyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
-    double avg = weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / weeklyTrends.length;
+    double min = weeklyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = weeklyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        weeklyTrends.length;
 
-    return {
-      'min': min,
-      'max': max,
-      'avg': avg,
-    };
+    return {'min': min, 'max': max, 'avg': avg};
   }
 
   /// Get min, max, and average statistics for a specific month
   Future<Map<String, double>> getMonthlyStatistics(DateTime dateInMonth) async {
     List<MonthlyTrend> monthlyTrends = await getMonthlyTrend(dateInMonth);
-    double min = monthlyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
-    double max = monthlyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
-    double avg = monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / monthlyTrends.length;
+    double min = monthlyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = monthlyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        monthlyTrends.length;
 
-    return {
-      'min': min,
-      'max': max,
-      'avg': avg,
-    };
+    return {'min': min, 'max': max, 'avg': avg};
   }
 }

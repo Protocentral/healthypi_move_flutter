@@ -50,6 +50,27 @@ class MonthlyTrend {
   });
 }
 
+class ActivityDailyTrend {
+  final DateTime date;
+  final int steps;
+
+  ActivityDailyTrend({required this.date, required this.steps});
+}
+
+class ActivityWeeklyTrend {
+  final DateTime date;
+  final int steps;
+
+  ActivityWeeklyTrend({required this.date, required this.steps});
+}
+
+class ActivityMonthlyTrend {
+  final DateTime date;
+  final int steps;
+
+  ActivityMonthlyTrend({required this.date, required this.steps});
+}
+
 class hPi4Global {
   static const String UUID_SERV_DIS = "0000180a-0000-1000-8000-00805f9b34fb";
   static const String UUID_SERV_BATT = "0000180f-0000-1000-8000-00805f9b34fb";
