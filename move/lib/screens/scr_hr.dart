@@ -293,7 +293,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
-                    borderWidth: 7,
+                    borderWidth: 3,
                     animationDuration: 0,
                   ),
                 ],

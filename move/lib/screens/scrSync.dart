@@ -313,7 +313,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
   Future<void> _writeSpo2LogDataToFile(
     List<int> mData,
     int sessionID,
-    String headerName,
   ) async {
     // logConsole("Log data size: ${mData.length}");
 
@@ -325,7 +324,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
     List<String> header = [];
 
     header.add("Timestamp");
-    header.add(headerName);
+    if (isFetchingSpo2) {
+      header.add("SPO2");
+    } else {
+      header.add("Count");
+    }
     dataList.add(header);
 
     for (int i = 0; i < logNumberPoints; i++) {
@@ -424,7 +427,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
       value,
     ) async {
-      logConsole("Data Rx: $value");
+      //logConsole("Data Rx: $value");
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
 
@@ -480,7 +483,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
         case 03: // Temp
           tempSessionCount = sessionCount;
-          if (tempSessionCount == 0) isFetchingTempComplete = true;
+          if (tempSessionCount == 0)
+            isFetchingTempComplete = true;
           break;
 
         case 04: // Activity
@@ -591,7 +595,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
         _fetchNextLogFile,
       );
     } else if (isFetchingSpo2) {
-      //_processDataChunk(logSpo2HeaderList, currentSpo2FileIndex, spo2ProgressPercent, _writeSpo2LogDataToFile, _fetchNextSpo2LogFile);
+      _processDataChunk(
+          logSpo2HeaderList,
+          currentSpo2FileIndex,
+          spo2ProgressPercent,
+          _writeSpo2LogDataToFile,
+          _fetchNextSpo2LogFile);
     } else if (isFetchingTemp) {
       _processDataChunk(
         logTempHeaderList,
@@ -601,7 +610,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
         _fetchNextTempLogFile,
       );
     } else if (isFetchingActivity) {
-      //_processDataChunk(logActivityHeaderList, currentActivityFileIndex, activityProgressPercent, _writeSpo2LogDataToFile, _fetchNextActivityLogFile);
+      _processDataChunk(
+          logActivityHeaderList,
+          currentActivityFileIndex,
+          activityProgressPercent,
+          _writeSpo2LogDataToFile,
+          _fetchNextActivityLogFile);
     }
   }
 
