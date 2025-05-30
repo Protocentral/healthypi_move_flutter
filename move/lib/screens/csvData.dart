@@ -146,12 +146,13 @@ class CsvDataManager<T> {
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
 
-    Map<int, List<double>> hourlyData = {};
+    Map<DateTime, List<double>> hourlyData = {};
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
-      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
-      int hour = dt.hour;
+
+      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+      DateTime hour = DateTime(dt.year, dt.month, dt.day, dt.hour);
 
       double value =
           double.tryParse(row[1].toString()) ??
@@ -268,7 +269,7 @@ class CsvDataManager<T> {
 
   /// Get min, max, and average statistics for a specific day
   Future<Map<String, double>> getDailyStatistics(DateTime day) async {
-    List<WeeklyTrend> dailyTrends = await getWeeklyTrend(day);
+    List<HourlyTrend> dailyTrends = await getHourlyTrendForToday();
     double min = dailyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
     double max = dailyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
     double avg = dailyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / dailyTrends.length;

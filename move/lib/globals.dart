@@ -9,7 +9,7 @@ class HRTrend {
 }
 
 class HourlyTrend {
-  final int hour;
+  final DateTime hour;
   final double min;
   final double max;
   final double avg;
