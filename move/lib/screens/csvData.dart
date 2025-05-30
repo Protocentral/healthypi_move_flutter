@@ -208,7 +208,8 @@ class CsvDataManager<T> {
     dailyData.forEach((day, values) {
       double min = values.reduce((a, b) => a < b ? a : b);
       double max = values.reduce((a, b) => a > b ? a : b);
-      double avg = (values.reduce((a, b) => a + b) / values.length).floorToDouble();
+      double avg =
+          (values.reduce((a, b) => a + b) / values.length).floorToDouble();
 
       weeklyTrends.add(WeeklyTrend(date: day, min: min, max: max, avg: avg));
     });
@@ -255,11 +256,54 @@ class CsvDataManager<T> {
     dailyData.forEach((day, values) {
       double min = values.reduce((a, b) => a < b ? a : b);
       double max = values.reduce((a, b) => a > b ? a : b);
-      double avg = (values.reduce((a, b) => a + b) / values.length).floorToDouble();
+      double avg =
+          (values.reduce((a, b) => a + b) / values.length).floorToDouble();
 
       monthlyTrends.add(MonthlyTrend(date: day, min: min, max: max, avg: avg));
     });
 
     return monthlyTrends;
+  }
+
+  /// Get min, max, and average statistics for a specific day
+  Future<Map<String, double>> getDailyStatistics(DateTime day) async {
+    List<WeeklyTrend> dailyTrends = await getWeeklyTrend(day);
+    double min = dailyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
+    double max = dailyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
+    double avg = dailyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / dailyTrends.length;
+
+    return {
+      'min': min,
+      'max': max,
+      'avg': avg,
+    };
+  }
+
+  /// Get min, max, and average statistics for a specific week
+  Future<Map<String, double>> getWeeklyStatistics(DateTime dateInWeek) async {
+    List<WeeklyTrend> weeklyTrends = await getWeeklyTrend(dateInWeek);
+    double min = weeklyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
+    double max = weeklyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
+    double avg = weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / weeklyTrends.length;
+
+    return {
+      'min': min,
+      'max': max,
+      'avg': avg,
+    };
+  }
+
+  /// Get min, max, and average statistics for a specific month
+  Future<Map<String, double>> getMonthlyStatistics(DateTime dateInMonth) async {
+    List<MonthlyTrend> monthlyTrends = await getMonthlyTrend(dateInMonth);
+    double min = monthlyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b);
+    double max = monthlyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b);
+    double avg = monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / monthlyTrends.length;
+
+    return {
+      'min': min,
+      'max': max,
+      'avg': avg,
+    };
   }
 }

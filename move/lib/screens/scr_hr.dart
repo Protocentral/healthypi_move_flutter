@@ -339,7 +339,8 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     }
 
     // Get the hourly HR trends for today
-    List<HourlyTrend> hourlyHRTrends = await hrDataManager.getHourlyTrendForToday();
+    List<HourlyTrend> hourlyHRTrends =
+        await hrDataManager.getHourlyTrendForToday();
     for (var trend in hourlyHRTrends) {
       print(
         'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
@@ -355,6 +356,21 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
       );
     }
+
+    // Call functions to get the weekly, hourly, and monthly min, max and average statistics
+    Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
+      today,
+    );
+
+    Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
+      today,
+    );
+    Map<String, double> monthlyStats = await hrDataManager.getMonthlyStatistics(
+      today,
+    );
+    print('Weekly Stats: $weeklyStats');
+    print('Daily Stats: $dailyStats');
+    print('Monthly Stats: $monthlyStats');
   }
 
   // Save a value
