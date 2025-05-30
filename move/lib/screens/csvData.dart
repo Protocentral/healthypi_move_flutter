@@ -77,29 +77,39 @@ class CsvDataManager<T> {
   }
 
   /// Helper to filter rows by timestamp range (inclusive)
-  Future<List<List<dynamic>>> _getRowsByTimestampRange(DateTime start, DateTime end) async {
+  Future<List<List<dynamic>>> _getRowsByTimestampRange(
+    DateTime start,
+    DateTime end,
+  ) async {
     List<File> csvFiles = await listCsvFiles();
     List<List<dynamic>> allRows = await readAllDataSorted(csvFiles);
     return allRows.where((row) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
       DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts);
-      return dt.isAfter(start.subtract(const Duration(milliseconds: 1))) && dt.isBefore(end.add(const Duration(milliseconds: 1)));
+      return dt.isAfter(start.subtract(const Duration(milliseconds: 1))) &&
+          dt.isBefore(end.add(const Duration(milliseconds: 1)));
     }).toList();
   }
 
   /// Get data objects for a specific day
   Future<List<T>> getDataForDay(DateTime day) async {
     DateTime start = DateTime(day.year, day.month, day.day);
-    DateTime end = start.add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1));
+    DateTime end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
     return rows.map(fromRow).toList();
   }
 
   /// Get data objects for a specific week (starting from the provided date's week)
   Future<List<T>> getDataForWeek(DateTime dateInWeek) async {
-    DateTime start = dateInWeek.subtract(Duration(days: dateInWeek.weekday - 1));
+    DateTime start = dateInWeek.subtract(
+      Duration(days: dateInWeek.weekday - 1),
+    );
     start = DateTime(start.year, start.month, start.day);
-    DateTime end = start.add(const Duration(days: 7)).subtract(const Duration(milliseconds: 1));
+    DateTime end = start
+        .add(const Duration(days: 7))
+        .subtract(const Duration(milliseconds: 1));
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
     return rows.map(fromRow).toList();
   }
@@ -107,12 +117,19 @@ class CsvDataManager<T> {
   /// Get data objects for a specific month
   Future<List<T>> getDataForMonth(DateTime month) async {
     DateTime start = DateTime(month.year, month.month, 1);
-    DateTime end = (month.month < 12)
-        ? DateTime(month.year, month.month + 1, 1).subtract(const Duration(milliseconds: 1))
-        : DateTime(month.year + 1, 1, 1).subtract(const Duration(milliseconds: 1));
+    DateTime end =
+        (month.month < 12)
+            ? DateTime(
+              month.year,
+              month.month + 1,
+              1,
+            ).subtract(const Duration(milliseconds: 1))
+            : DateTime(
+              month.year + 1,
+              1,
+              1,
+            ).subtract(const Duration(milliseconds: 1));
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
     return rows.map(fromRow).toList();
   }
-
-  
 }

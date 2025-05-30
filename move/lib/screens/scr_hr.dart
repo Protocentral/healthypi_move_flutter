@@ -317,8 +317,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   // Example usage for HR data:
   late CsvDataManager<HRTrends> hrDataManager;
 
-  
-
   Future<void> _loadDeviceData() async {
     List<HRTrends> data = await hrDataManager.getDataObjects();
     if (data.isEmpty) {
@@ -331,20 +329,19 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
     //Print the loaded data for debugging
     for (var trend in hrTrendsData) {
-      print('Loaded HR trend: ${trend.date}, Min: ${trend.minHR}, Max: ${trend.maxHR}');
+      print(
+        'Loaded HR trend: ${trend.date}, Min: ${trend.minHR}, Max: ${trend.maxHR}',
+      );
     }
-  }
 
-  Future<String> _getSecondLineTimestamp(File file) async {
-    try {
-      List<String> lines = await file.readAsLines();
-      if (lines.length > 1) {
-        return lines[1]; // Assuming the timestamp is on the second line
-      }
-      return '0';
-    } catch (e) {
-      return 'Error reading file: $e';
-    }
+    // Print today's data for debugging
+    DateTime today = DateTime.now();
+    DateTime startOfDay = DateTime(today.year, today.month, today.day);
+    DateTime endOfDay = startOfDay.add(Duration(days: 1)).subtract(Duration(seconds: 1));
+    List<HRTrends> todayData = hrTrendsData.where((trend) {
+      return trend.date.isAfter(startOfDay) && trend.date.isBefore(endOfDay);
+    }).toList();
+    
   }
 
   // Save a value

@@ -63,8 +63,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
   @override
   void initState() {
     _connectionStateSubscription = widget.device.connectionState.listen((
-        state,
-        ) async {
+      state,
+    ) async {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
         await discoverDataChar(widget.device);
@@ -81,8 +81,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
     });
 
     _isDisconnectingSubscription = widget.device.isDisconnecting.listen((
-        value,
-        ) {
+      value,
+    ) {
       _isDisconnecting = value;
       if (mounted) {
         setState(() {});
@@ -93,7 +93,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   @override
-  void dispose() async{
+  void dispose() async {
     // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
     Future.delayed(Duration.zero, () async {
       await _connectionStateSubscription.cancel();
@@ -134,7 +134,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
             dataCharacteristic = characteristic;
             //await dataCharacteristic?.setNotifyValue(true);
@@ -154,9 +154,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _sendCurrentDateTime(
-      BluetoothDevice deviceName,
-      String selectedOption,
-      ) async {
+    BluetoothDevice deviceName,
+    String selectedOption,
+  ) async {
     List<int> commandDateTimePacket = [];
 
     var dt = DateTime.now();
@@ -183,13 +183,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
     commandDateTimePacket.addAll(cmdByteList);
     //logConsole("Sending DateTime Command: $commandDateTimePacket");
     await _sendCommand(commandDateTimePacket, deviceName);
-
   }
 
   Future<void> _sendCommand(
-      List<int> commandList,
-      BluetoothDevice deviceName,
-      ) async {
+    List<int> commandList,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
 
     List<BluetoothService> services = await deviceName.discoverServices();
@@ -199,7 +198,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
         commandService = service;
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
             commandCharacteristic = characteristic;
             break;
@@ -214,7 +213,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  void startFetching() async{
+  void startFetching() async {
     _sendCurrentDateTime(widget.device, "Sync");
     _saveValue();
     setState(() {
@@ -233,17 +232,14 @@ class _SyncingScreenState extends State<SyncingScreen> {
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
   }
 
-  Future<void> _writeLogDataToFile(
-      List<int> mData,
-      int sessionID,
-      ) async {
+  Future<void> _writeLogDataToFile(List<int> mData, int sessionID) async {
     // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
     //logConsole("writing to file - hex: " +  hex.encode(mData));
 
-    int logNumberPoints = ((mData.length - 1) ~/ 16);
+    int logNumberPoints = ((mData.length) ~/ 16);
 
     //logConsole("log no of point: " +  logNumberPoints.toString());
 
@@ -315,10 +311,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _writeSpo2LogDataToFile(
-      List<int> mData,
-      int sessionID,
-      String headerName,
-      ) async {
+    List<int> mData,
+    int sessionID,
+    String headerName,
+  ) async {
     // logConsole("Log data size: ${mData.length}");
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
@@ -376,7 +372,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     await file.writeAsString(csv);
 
     logConsole("File exported successfully!");
-
   }
 
   double hrProgressPercent = 0.0; // 0.0 to 1.0
@@ -395,7 +390,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   bool isFetchingActivityComplete = false;
 
   bool isFetchingTodayHR = false;
-  bool isFetchingTodayTemp= false;
+  bool isFetchingTodayTemp = false;
   bool isFetchingTodaySpo2 = false;
   bool isFetchingTodayActivity = false;
 
@@ -413,7 +408,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
   int currentTempFileIndex = 0; // Track the current Temp file being fetched
   int currentSpo2FileIndex = 0; // Track the current SpO2 file being fetched
   int currentActivityFileIndex =
-  0; // Track the current Activity file being fetched
+      0; // Track the current Activity file being fetched
 
   Future<void> _startListeningData() async {
     listeningDataStream = true;
@@ -426,145 +421,28 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Ignore if already cancelled or null
     }
 
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((value) async {
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
+      value,
+    ) async {
       logConsole("Data Rx: $value");
-     // logConsole("Data Rx: "+ hex.encode(value));
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
 
-      /*** 1. Handle Command Response (session counts) ***/
-      if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
-        int trendCode = bdata.getUint8(2);
-        int sessionCount = bdata.getUint16(3, Endian.little);
+      switch (pktType) {
+        case hPi4Global.CES_CMDIF_TYPE_CMD_RSP:
+          _handleCommandResponse(bdata);
+          break;
 
-        setState(() {
-          switch (trendCode) {
-            case 01: // HR
-              hrSessionCount = sessionCount;
-              if (hrSessionCount == 0) {
-                isFetchingHRComplete = true;
-                isFetchingHR = false;
-                isFetchingSpo2 = true;
-                Future.delayed(Duration.zero, () async {
-                  await _fetchLogCount(context, widget.device, hPi4Global.Spo2Trend);
-                  await _fetchLogIndex(context, widget.device, hPi4Global.Spo2Trend);
-                });
-              }
-              break;
+        case hPi4Global.CES_CMDIF_TYPE_LOG_IDX:
+          _handleLogIndex(bdata);
+          break;
 
-            case 02: // SpO2
-              spo2SessionCount = sessionCount;
-              if (spo2SessionCount == 0) {
-                isFetchingSpo2Complete = true;
-                isFetchingSpo2 = false;
-                isFetchingTemp = true;
-                Future.delayed(Duration.zero, () async {
-                  await _fetchLogCount(context, widget.device, hPi4Global.ActivityTrend);
-                  await _fetchLogIndex(context, widget.device, hPi4Global.ActivityTrend);
-                });
-              }
-              break;
+        case hPi4Global.CES_CMDIF_TYPE_DATA:
+          _handleLogData(value);
+          break;
 
-            case 03: // Temp
-              tempSessionCount = sessionCount;
-              if (tempSessionCount == 0) {
-                isFetchingTempComplete = true;
-              }
-              break;
-
-            case 04: // Activity
-              activitySessionCount = sessionCount;
-              if (activitySessionCount == 0) {
-                isFetchingActivityComplete = true;
-                isFetchingTemp = true;
-                isFetchingActivity = false;
-                Future.delayed(Duration.zero, () async {
-                  await _fetchLogCount(context, widget.device, hPi4Global.TempTrend);
-                  await _fetchLogIndex(context, widget.device, hPi4Global.TempTrend);
-                });
-              }
-              break;
-          }
-        });
-
-        _checkAllFetchesComplete(widget.device);
-      }
-
-      /*** 2. Handle Log Index (header data for each trend) ***/
-      else if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
-        int trendType = bdata.getUint8(13);
-        int logFileID = bdata.getInt64(1, Endian.little);
-        int sessionLength = bdata.getInt32(9, Endian.little);
-        LogHeader header = (logFileID: logFileID, sessionLength: sessionLength);
-
-        switch (trendType) {
-          case 01:
-            logHeaderList.add(header);
-            if (logHeaderList.length == hrSessionCount) _fetchNextLogFile(widget.device);
-            break;
-
-          case 02:
-            logSpo2HeaderList.add(header);
-            if (logSpo2HeaderList.length == spo2SessionCount) _fetchNextSpo2LogFile(widget.device);
-            break;
-
-          case 03:
-            logTempHeaderList.add(header);
-            if (logTempHeaderList.length == tempSessionCount) _fetchNextTempLogFile(widget.device);
-            break;
-
-          case 04:
-            logActivityHeaderList.add(header);
-            if (logActivityHeaderList.length == activitySessionCount) _fetchNextActivityLogFile(widget.device);
-            break;
-        }
-      }
-
-      /*** 3. Handle Log Data (actual binary chunks per log file) ***/
-      else if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1;
-        currentFileDataCounter += pktPayloadSize;
-        checkNoOfWrites += 1;
-
-        logConsole("Data Counter $currentFileDataCounter");
-
-        if (isFetchingHR) {
-          logData.addAll(value.sublist(1));
-          _handleDataChunkForTrend(
-            logHeaderList,
-            currentFileIndex,
-                (progress) => setState(() => hrProgressPercent = progress),
-                (header) => _writeLogDataToFile(logData, header.logFileID),
-                () => _fetchNextLogFile(widget.device),
-          );
-        } else if (isFetchingSpo2) {
-          logData.addAll(value.sublist(1));
-          _handleDataChunkForTrend(
-            logSpo2HeaderList,
-            currentSpo2FileIndex,
-                (progress) => setState(() => spo2ProgressPercent = progress),
-                (header) => _writeSpo2LogDataToFile(logData, header.logFileID, "SPO2"),
-                () => _fetchNextSpo2LogFile(widget.device),
-          );
-        } else if (isFetchingTemp) {
-          logData.addAll(value.sublist(1));
-          _handleDataChunkForTrend(
-            logTempHeaderList,
-            currentTempFileIndex,
-                (progress) => setState(() => tempProgressPercent = progress),
-                (header) => _writeLogDataToFile(logData, header.logFileID),
-                () => _fetchNextTempLogFile(widget.device),
-          );
-        } else if (isFetchingActivity) {
-          logData.addAll(value.sublist(1));
-          _handleDataChunkForTrend(
-            logActivityHeaderList,
-            currentActivityFileIndex,
-                (progress) => setState(() => activityProgressPercent = progress),
-                (header) => _writeSpo2LogDataToFile(logData, header.logFileID, "Count"),
-                () => _fetchNextActivityLogFile(widget.device),
-          );
-        }
+        default:
+          logConsole("Unknown packet type: $pktType");
       }
     });
 
@@ -572,24 +450,201 @@ class _SyncingScreenState extends State<SyncingScreen> {
     await dataCharacteristic!.setNotifyValue(true);
   }
 
+  void _handleCommandResponse(ByteData bdata) {
+    int trendCode = bdata.getUint8(2);
+    int sessionCount = bdata.getUint16(3, Endian.little);
 
-  Future<void> _handleDataChunkForTrend(
-      List<LogHeader> headerList,
-      int currentIndex,
-      Function(double) updateProgress,
-      Future<void> Function(LogHeader) writeToFile,
-      Function fetchNext,
-      ) async {
-    if (currentIndex >= headerList.length) return;
+    setState(() {
+      switch (trendCode) {
+        case 01: // HR
+          hrSessionCount = sessionCount;
+          _updateFetchingState(
+            hrSessionCount,
+            hPi4Global.Spo2Trend,
+            isFetchingHR,
+            isFetchingHRComplete,
+            isFetchingSpo2,
+          );
+          break;
+
+        case 02: // SpO2
+          spo2SessionCount = sessionCount;
+          _updateFetchingState(
+            spo2SessionCount,
+            hPi4Global.ActivityTrend,
+            isFetchingSpo2,
+            isFetchingSpo2Complete,
+            isFetchingTemp,
+          );
+          break;
+
+        case 03: // Temp
+          tempSessionCount = sessionCount;
+          if (tempSessionCount == 0) isFetchingTempComplete = true;
+          break;
+
+        case 04: // Activity
+          activitySessionCount = sessionCount;
+          _updateFetchingState(
+            activitySessionCount,
+            hPi4Global.TempTrend,
+            isFetchingActivity,
+            isFetchingActivityComplete,
+            isFetchingTemp,
+          );
+          break;
+      }
+    });
+
+    _checkAllFetchesComplete(widget.device);
+  }
+
+  void _updateFetchingState(
+    int sessionCount,
+    List<int> nextTrend,
+    bool currentFetching,
+    bool currentComplete,
+    bool nextFetching,
+  ) {
+    if (sessionCount == 0) {
+      currentComplete = true;
+      currentFetching = false;
+      nextFetching = true;
+      Future.delayed(Duration.zero, () async {
+        await _fetchLogCount(context, widget.device, nextTrend);
+        await _fetchLogIndex(context, widget.device, nextTrend);
+      });
+    }
+  }
+
+  void _handleLogIndex(ByteData bdata) {
+    int trendType = bdata.getUint8(13);
+    int logFileID = bdata.getInt64(1, Endian.little);
+    int sessionLength = bdata.getInt32(9, Endian.little);
+    LogHeader header = (logFileID: logFileID, sessionLength: sessionLength);
+
+    switch (trendType) {
+      case hPi4Global.HPI_TREND_TYPE_HR:
+        _processLogHeader(
+          logHeaderList,
+          hrSessionCount,
+          _fetchNextLogFile,
+          header,
+        );
+        break;
+
+      case hPi4Global.HPI_TREND_TYPE_SPO2:
+        _processLogHeader(
+          logSpo2HeaderList,
+          spo2SessionCount,
+          _fetchNextSpo2LogFile,
+          header,
+        );
+        break;
+
+      case hPi4Global.HPI_TREND_TYPE_TEMP:
+        _processLogHeader(
+          logTempHeaderList,
+          tempSessionCount,
+          _fetchNextTempLogFile,
+          header,
+        );
+        break;
+
+      case hPi4Global.HPI_TREND_TYPE_ACTIVITY:
+        _processLogHeader(
+          logActivityHeaderList,
+          activitySessionCount,
+          _fetchNextActivityLogFile,
+          header,
+        );
+        break;
+    }
+  }
+
+  void _processLogHeader(
+    List<LogHeader> headerList,
+    int sessionCount,
+    Function fetchNextFile,
+    LogHeader header,
+  ) {
+    headerList.add(header);
+    if (headerList.length == sessionCount) fetchNextFile(widget.device);
+  }
+
+  void _handleLogData(List<int> value) {
+    int pktPayloadSize = value.length - 1;
+    currentFileDataCounter += pktPayloadSize;
+    checkNoOfWrites += 1;
+
+    logConsole("Data Counter $currentFileDataCounter");
+
+    List<int> dataChunk = value.sublist(1);
+    logData.addAll(dataChunk);
+
+    if (isFetchingHR) {
+      _processDataChunk(
+        logHeaderList,
+        currentFileIndex,
+        hrProgressPercent,
+        _writeLogDataToFile,
+        _fetchNextLogFile,
+      );
+    } else if (isFetchingSpo2) {
+      //_processDataChunk(logSpo2HeaderList, currentSpo2FileIndex, spo2ProgressPercent, _writeSpo2LogDataToFile, _fetchNextSpo2LogFile);
+    } else if (isFetchingTemp) {
+      _processDataChunk(
+        logTempHeaderList,
+        currentTempFileIndex,
+        tempProgressPercent,
+        _writeLogDataToFile,
+        _fetchNextTempLogFile,
+      );
+    } else if (isFetchingActivity) {
+      //_processDataChunk(logActivityHeaderList, currentActivityFileIndex, activityProgressPercent, _writeSpo2LogDataToFile, _fetchNextActivityLogFile);
+    }
+  }
+
+  void _processDataChunk(
+    List<LogHeader> headerList,
+    int currentIndex,
+    double progressPercent,
+    Future<void> Function(List<int>, int) writeToFile,
+    Function fetchNextFile,
+  ) {
+    _handleDataChunkForTrend(
+      headerList,
+      currentIndex,
+      (progress) => setState(() => progressPercent = progress),
+      (header) => writeToFile(logData, header.logFileID),
+      fetchNextFile,
+    );
+  }
+
+  void _handleDataChunkForTrend(
+    List<LogHeader> headerList,
+    int currentIndex,
+    void Function(double) updateProgress,
+    Future<void> Function(LogHeader) writeToFile,
+    Function fetchNextFile,
+  ) async {
+    if (headerList.isEmpty || currentIndex >= headerList.length) return;
+
     final header = headerList[currentIndex];
-    int expectedSize = header.sessionLength;
-    double progress = currentFileDataCounter / expectedSize;
+    final sessionLength = header.sessionLength;
+
+    // Calculate progress
+    double progress =
+        sessionLength > 0 ? currentFileDataCounter / sessionLength : 0.0;
+    if (progress > 1.0) progress = 1.0;
     updateProgress(progress);
 
-    if (currentFileDataCounter >= expectedSize - 1) {
+    // If all data received for this file
+    if (currentFileDataCounter >= sessionLength) {
       await writeToFile(header);
-      await resetFetchVariables();
-      fetchNext();
+      currentFileDataCounter = 0;
+      logData.clear();
+      fetchNextFile(widget.device);
     }
   }
 
@@ -606,8 +661,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's file detected with ID $logFileID. Always downloading...",);
-        if(isFetchingTodayHR == false){
+        logConsole(
+          "Today's file detected with ID $logFileID. Always downloading...",
+        );
+        if (isFetchingTodayHR == false) {
           await _fetchLogFile(
             deviceName,
             logFileID,
@@ -674,7 +731,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         logConsole(
           "Today's Spo2 file detected with ID $logFileID. Always downloading...",
         );
-        if(isFetchingTodaySpo2 == false){
+        if (isFetchingTodaySpo2 == false) {
           await _fetchLogFile(
             deviceName,
             logFileID,
@@ -685,7 +742,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         setState(() {
           isFetchingTodaySpo2 = true;
         });
-
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "spo2");
         if (fileExists) {
@@ -700,7 +756,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
             logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
             hPi4Global.Spo2Trend,
           );
-          break;// Exit the loop to fetch the current file
+          break; // Exit the loop to fetch the current file
         }
       }
 
@@ -723,17 +779,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
       _checkAllFetchesComplete(deviceName);
       await listSpo2CSVFiles();
-      await _fetchLogCount(
-        context,
-        deviceName,
-        hPi4Global.ActivityTrend,
-      );
-      await _fetchLogIndex(
-        context,
-        deviceName,
-        hPi4Global.ActivityTrend,
-      );
-
+      await _fetchLogCount(context, deviceName, hPi4Global.ActivityTrend);
+      await _fetchLogIndex(context, deviceName, hPi4Global.ActivityTrend);
     }
   }
 
@@ -750,9 +797,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
       String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
 
       if (fileDate == todayDate) {
-        logConsole("Today's Temp file detected with ID $logFileID. Always downloading...",
+        logConsole(
+          "Today's Temp file detected with ID $logFileID. Always downloading...",
         );
-        if(isFetchingTodayTemp == false){
+        if (isFetchingTodayTemp == false) {
           await _fetchLogFile(
             deviceName,
             logFileID,
@@ -763,7 +811,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         setState(() {
           isFetchingTodayTemp = true;
         });
-
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "temp");
 
@@ -802,7 +849,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         await listTempCSVFiles();
         _checkAllFetchesComplete(deviceName);
       });
-
     }
   }
 
@@ -822,7 +868,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         logConsole(
           "Today's Activity file detected with ID $logFileID. Always downloading...",
         );
-        if(isFetchingTodayActivity == false){
+        if (isFetchingTodayActivity == false) {
           await _fetchLogFile(
             deviceName,
             logFileID,
@@ -833,7 +879,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         setState(() {
           isFetchingTodayActivity = true;
         });
-
       } else {
         bool fileExists = await _doesFileExistByType(logFileID, "activity");
 
@@ -858,7 +903,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     if (currentActivityFileIndex == logActivityHeaderList.length) {
       logConsole("All Activity files have been processed.");
       currentActivityFileIndex--;
-      Future.delayed(Duration(seconds:1), () async {
+      Future.delayed(Duration(seconds: 1), () async {
         setState(() {
           isFetchingActivityComplete = true;
           isFetchingHR = false;
@@ -871,7 +916,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
         await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
         await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
       });
-
     }
   }
 
@@ -886,10 +930,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _fetchLogCount(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      List<int> trendType,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+    List<int> trendType,
+  ) async {
     //logConsole("Fetch log count initiated");
     List<int> commandPacket = [];
     commandPacket.addAll(hPi4Global.getSessionCount);
@@ -898,10 +942,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _fetchLogIndex(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      List<int> trendType,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+    List<int> trendType,
+  ) async {
     //logConsole("Fetch log index initiated");
     List<int> commandPacket = [];
     //List<int> type = [trendType];
@@ -923,11 +967,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _fetchLogFile(
-      BluetoothDevice deviceName,
-      int sessionID,
-      int sessionSize,
-      List<int> trendType,
-      ) async {
+    BluetoothDevice deviceName,
+    int sessionID,
+    int sessionSize,
+    List<int> trendType,
+  ) async {
     //logConsole("Fetch logs file initiated for session: $sessionID, size: $sessionSize",);
     // Reset all fetch variables
     await _startListeningData();
@@ -954,10 +998,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  Widget displayCloseandCancel(){
+  Widget displayCloseandCancel() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-      child:  ElevatedButton(
+      child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.red,
           foregroundColor: Colors.white,
@@ -966,7 +1010,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           ),
           //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
         ),
-        onPressed:() async{
+        onPressed: () async {
           onDisconnectPressed();
           Navigator.of(
             context,
@@ -988,77 +1032,80 @@ class _SyncingScreenState extends State<SyncingScreen> {
         ),
       ),
     );
-
   }
 
-  Widget showHRProgress(){
+  Widget showHRProgress() {
     return SizedBox(
       height: SizeConfig.blockSizeVertical * 15,
       width: SizeConfig.blockSizeHorizontal * 95,
       child: TrendProgressIndicator(
-        progress: (isFetchingHR)
-            ? hrProgressPercent
-            : (isFetchingHRComplete)
-            ? 1.0
-            : 0.0,
-        label: "Heart rate" ,
+        progress:
+            (isFetchingHR)
+                ? hrProgressPercent
+                : (isFetchingHRComplete)
+                ? 1.0
+                : 0.0,
+        label: "Heart rate",
       ),
     );
   }
 
-  Widget showSpo2Progress(){
-    if(isFetchingHRComplete){
+  Widget showSpo2Progress() {
+    if (isFetchingHRComplete) {
       return SizedBox(
         height: SizeConfig.blockSizeVertical * 15,
         width: SizeConfig.blockSizeHorizontal * 95,
         child: TrendProgressIndicator(
-          progress: (isFetchingSpo2)
-              ? spo2ProgressPercent
-              : (isFetchingSpo2Complete)
-              ? 1.0
-              : 0.0,
-          label: "Spo2" ,
+          progress:
+              (isFetchingSpo2)
+                  ? spo2ProgressPercent
+                  : (isFetchingSpo2Complete)
+                  ? 1.0
+                  : 0.0,
+          label: "Spo2",
         ),
       );
-    }else{
+    } else {
       return Container();
     }
   }
 
-  Widget showTempProgress(){
-    if(isFetchingActivityComplete){
+  Widget showTempProgress() {
+    if (isFetchingActivityComplete) {
       return SizedBox(
         height: SizeConfig.blockSizeVertical * 15,
         width: SizeConfig.blockSizeHorizontal * 95,
         child: TrendProgressIndicator(
-          progress: (isFetchingTemp)
-              ? tempProgressPercent
-              : (isFetchingTempComplete)
-              ? 1.0
-              : 0.0,
-          label: "Temperature" ,
+          progress:
+              (isFetchingTemp)
+                  ? tempProgressPercent
+                  : (isFetchingTempComplete)
+                  ? 1.0
+                  : 0.0,
+          label: "Temperature",
         ),
       );
-    }else{
+    } else {
       return Container();
     }
   }
 
-  Widget showActivityProgress(){
-    if(isFetchingSpo2Complete){
+  Widget showActivityProgress() {
+    if (isFetchingSpo2Complete) {
       return SizedBox(
         height: SizeConfig.blockSizeVertical * 15,
         width: SizeConfig.blockSizeHorizontal * 95,
         child: TrendProgressIndicator(
-          progress: (isFetchingActivity)
-              ? activityProgressPercent
-              : (isFetchingActivityComplete)
-              ? 1.0
-              : 0.0,
-          label: "Activity" ,
+          progress:
+              (isFetchingActivity)
+                  ? activityProgressPercent
+                  : (isFetchingActivityComplete)
+                  ? 1.0
+                  : 0.0,
+          label: "Activity",
         ),
       );
-    }else{
+    } else {
       return Container();
     }
   }
@@ -1072,13 +1119,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
         appBar: AppBar(
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () async {
-                await onDisconnectPressed();
-                Navigator.of(
-                  context,
-                ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-              }
+            icon: Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () async {
+              await onDisconnectPressed();
+              Navigator.of(
+                context,
+              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            },
           ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1092,7 +1139,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
             ],
           ),
         ),
-        body:  ListView(
+        body: ListView(
           children: [
             Center(
               child: Column(
@@ -1104,12 +1151,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text(
-                        "Connected to: " +
-                            widget.device.remoteId.toString(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.green,
-                        ),
+                        "Connected to: " + widget.device.remoteId.toString(),
+                        style: TextStyle(fontSize: 16, color: Colors.green),
                       ),
                       SizedBox(width: 10.0),
                     ],
@@ -1120,7 +1163,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     mainAxisSize: MainAxisSize.max,
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      const Text('Syncing data..', style: hPi4Global.movecardTextStyle),
+                      const Text(
+                        'Syncing data..',
+                        style: hPi4Global.movecardTextStyle,
+                      ),
                       SizedBox(width: 10.0),
                     ],
                   ),
@@ -1164,9 +1210,7 @@ class TrendProgressIndicator extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              label == "All files fetched"
-                  ? label
-                  : "Fetching $label data...",
+              label == "All files fetched" ? label : "Fetching $label data...",
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -1179,7 +1223,9 @@ class TrendProgressIndicator extends StatelessWidget {
                 height: 10, // Adjust this value to increase or decrease height
                 child: LinearProgressIndicator(
                   value: progress > 0 ? progress : null,
-                  valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    hPi4Global.hpi4Color,
+                  ),
                   backgroundColor: Colors.white24,
                 ),
               ),
@@ -1188,10 +1234,7 @@ class TrendProgressIndicator extends StatelessWidget {
               progress > 0
                   ? "${(progress * 100).toStringAsFixed(1)}% completed"
                   : "...",
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.white,
-              ),
+              style: const TextStyle(fontSize: 14, color: Colors.white),
             ),
           ],
         ),

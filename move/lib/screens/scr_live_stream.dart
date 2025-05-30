@@ -16,11 +16,8 @@ import '../utils/sizeConfig.dart';
 import 'ble_ctlr.dart';
 
 class ScrLiveStream extends StatefulWidget {
-  ScrLiveStream({
-    Key? key,
-    required this.selectedType,
-    required this.device,
-  }) : super();
+  ScrLiveStream({Key? key, required this.selectedType, required this.device})
+    : super();
 
   final String selectedType;
   final BluetoothDevice device;
@@ -67,8 +64,10 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
   void initState() {
     super.initState();
 
-    SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       subscribeToChar(widget.device);
@@ -96,13 +95,13 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
 
   subscribeToChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
-    if(widget.selectedType == "ECG"){
+    if (widget.selectedType == "ECG") {
       // Find a service and characteristic by UUID
       for (BluetoothService service in services) {
         if (service.uuid == Guid(hPi4Global.UUID_ECG_SERVICE)) {
           ECGGSRService = service;
           for (BluetoothCharacteristic characteristic
-          in service.characteristics) {
+              in service.characteristics) {
             if (characteristic.uuid == Guid(hPi4Global.UUID_ECG_CHAR)) {
               ECGCharacteristic = characteristic;
               await ECGCharacteristic?.setNotifyValue(true);
@@ -111,13 +110,12 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
           }
         }
       }
-
-    }else if(widget.selectedType == "PPG"){
+    } else if (widget.selectedType == "PPG") {
       for (BluetoothService service in services) {
         if (service.uuid == Guid(hPi4Global.UUID_SERV_PPG)) {
           PPGFINGERPPGService = service;
           for (BluetoothCharacteristic characteristic
-          in service.characteristics) {
+              in service.characteristics) {
             if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_PPG)) {
               PPGCharacteristic = characteristic;
               await PPGCharacteristic?.setNotifyValue(true);
@@ -126,13 +124,12 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
           }
         }
       }
-
-    } else if(widget.selectedType == "GSR"){
+    } else if (widget.selectedType == "GSR") {
       for (BluetoothService service in services) {
         if (service.uuid == Guid(hPi4Global.UUID_ECG_SERVICE)) {
           ECGGSRService = service;
           for (BluetoothCharacteristic characteristic
-          in service.characteristics) {
+              in service.characteristics) {
             if (characteristic.uuid == Guid(hPi4Global.UUID_GSR_CHAR)) {
               GSRCharacteristic = characteristic;
               await GSRCharacteristic?.setNotifyValue(true);
@@ -141,43 +138,34 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
           }
         }
       }
-
-    } else if(widget.selectedType == "Finger PPG"){
+    } else if (widget.selectedType == "Finger PPG") {
       for (BluetoothService service in services) {
         if (service.uuid == Guid(hPi4Global.UUID_SERV_PPG)) {
           PPGFINGERPPGService = service;
           for (BluetoothCharacteristic characteristic
-          in service.characteristics) {
+              in service.characteristics) {
             if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_FINGERPPG)) {
               FingerPPGCharacteristic = characteristic;
-              await FingerPPGCharacteristic ?.setNotifyValue(true);
+              await FingerPPGCharacteristic?.setNotifyValue(true);
               break;
             }
           }
         }
       }
-
-    }else{
-
-    }
+    } else {}
     dataFormatBasedOnBoardsSelection();
   }
 
   void dataFormatBasedOnBoardsSelection() async {
-    if(widget.selectedType == "ECG"){
+    if (widget.selectedType == "ECG") {
       startECG32Listening();
-    }
-    else if(widget.selectedType == "PPG"){
+    } else if (widget.selectedType == "PPG") {
       startPPG32Listening();
-    }
-    else if(widget.selectedType == "GSR"){
+    } else if (widget.selectedType == "GSR") {
       startGSR32Listening();
-    }
-    else if(widget.selectedType == "Finger PPG"){
+    } else if (widget.selectedType == "Finger PPG") {
       startFingerPPG32Listening();
-    }else{
-
-    }
+    } else {}
   }
 
   void closeAllStreams() async {
@@ -202,8 +190,8 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     print("AKW: Started listening to stream");
     listeningECGStream = true;
 
-    streamECGSubscription = ECGCharacteristic!.onValueReceived.listen((value) async
-    {
+    streamECGSubscription = ECGCharacteristic!.onValueReceived.listen(
+      (value) async {
         ByteData ecgByteData = Uint8List.fromList(value).buffer.asByteData(0);
         Int32List ecgList = ecgByteData.buffer.asInt32List();
 
@@ -218,19 +206,19 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         });
       },
       onError: (Object error) {
-      // Handle a possible error
-      print("Error while monitoring data characteristic \n$error");
-    },
-    cancelOnError: true,
-      );
+        // Handle a possible error
+        print("Error while monitoring data characteristic \n$error");
+      },
+      cancelOnError: true,
+    );
   }
 
   void startPPG32Listening() async {
     print("AKW: Started listening to ppg stream");
     listeningPPGStream = true;
 
-    streamPPGSubscription = PPGCharacteristic!.onValueReceived.listen((value) async
-    {
+    streamPPGSubscription = PPGCharacteristic!.onValueReceived.listen(
+      (value) async {
         // print("AKW: Rx PPG: " + event.length.toString());
         ByteData ppgByteData = Uint8List.fromList(value).buffer.asByteData(0);
         Uint32List ppgList = ppgByteData.buffer.asUint32List();
@@ -257,21 +245,21 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     print("AKW: Started listening to GSR stream");
     listeningGSRStream = true;
 
-    streamGSRSubscription = GSRCharacteristic!.onValueReceived.listen((value) async
-    {
-      ByteData gsrByteData = Uint8List.fromList(value).buffer.asByteData(0);
-      Int32List ecgList = gsrByteData.buffer.asInt32List();
+    streamGSRSubscription = GSRCharacteristic!.onValueReceived.listen(
+      (value) async {
+        ByteData gsrByteData = Uint8List.fromList(value).buffer.asByteData(0);
+        Int32List ecgList = gsrByteData.buffer.asInt32List();
 
-      ecgList.forEach((element) {
-        setStateIfMounted(() {
-          gsrLineData.add(FlSpot(gsrDataCounter++, (element.toDouble())));
+        ecgList.forEach((element) {
+          setStateIfMounted(() {
+            gsrLineData.add(FlSpot(gsrDataCounter++, (element.toDouble())));
+          });
+
+          if (gsrDataCounter >= 128 * 6) {
+            gsrLineData.removeAt(0);
+          }
         });
-
-        if (gsrDataCounter >= 128 * 6) {
-          gsrLineData.removeAt(0);
-        }
-      });
-    },
+      },
       onError: (Object error) {
         // Handle a possible error
         print("Error while monitoring data characteristic \n$error");
@@ -284,66 +272,51 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     print("AKW: Started listening to Finger ppg stream");
     listeningFingerPPGStream = true;
 
-    streamFingerPPGSubscription = FingerPPGCharacteristic!.onValueReceived.listen((value) async
-    {
-      // print("AKW: Rx PPG: " + event.length.toString());
-      ByteData fingerppgByteData = Uint8List.fromList(value).buffer.asByteData(0);
-      Uint32List ppgList = fingerppgByteData.buffer.asUint32List();
+    streamFingerPPGSubscription = FingerPPGCharacteristic!.onValueReceived
+        .listen(
+          (value) async {
+            // print("AKW: Rx PPG: " + event.length.toString());
+            ByteData fingerppgByteData = Uint8List.fromList(
+              value,
+            ).buffer.asByteData(0);
+            Uint32List ppgList = fingerppgByteData.buffer.asUint32List();
 
-      ppgList.forEach((element) {
-        setStateIfMounted(() {
-          fingerPPGLineData.add(FlSpot(fingerPPGDataCounter++, (element.toDouble())));
-        });
+            ppgList.forEach((element) {
+              setStateIfMounted(() {
+                fingerPPGLineData.add(
+                  FlSpot(fingerPPGDataCounter++, (element.toDouble())),
+                );
+              });
 
-        if (fingerPPGDataCounter >= 64 * 3) {
-          fingerPPGLineData.removeAt(0);
-        }
-      });
-    },
-      onError: (Object error) {
-        // Handle a possible error
-        print("Error while monitoring data characteristic \n$error");
-      },
-      cancelOnError: true,
-    );
+              if (fingerPPGDataCounter >= 64 * 3) {
+                fingerPPGLineData.removeAt(0);
+              }
+            });
+          },
+          onError: (Object error) {
+            // Handle a possible error
+            print("Error while monitoring data characteristic \n$error");
+          },
+          cancelOnError: true,
+        );
   }
 
   Widget sizedBoxForCharts() {
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 2,
-    );
+    return SizedBox(height: SizeConfig.blockSizeVertical * 2);
   }
 
-
   Widget displayHealthyPiMoveCharts() {
-    if(widget.selectedType == "ECG"){
+    if (widget.selectedType == "ECG") {
+      return Column(children: [buildChart(50, 90, ecgLineData, Colors.green)]);
+    } else if (widget.selectedType == "PPG") {
+      return Column(children: [buildChart(50, 90, ppgLineData, Colors.green)]);
+    } else if (widget.selectedType == "GSR") {
+      return Column(children: [buildChart(50, 90, gsrLineData, Colors.green)]);
+    } else if (widget.selectedType == "Finger PPG") {
       return Column(
-        children: [
-          buildChart(50, 90, ecgLineData, Colors.green),
-        ],
+        children: [buildChart(50, 90, fingerPPGLineData, Colors.green)],
       );
-    }
-    else if(widget.selectedType == "PPG"){
-      return Column(
-        children: [
-          buildChart(50, 90, ppgLineData, Colors.green),
-        ],
-      );
-    }
-    else if(widget.selectedType == "GSR"){
-      return Column(
-        children: [
-          buildChart(50, 90, gsrLineData, Colors.green),
-        ],
-      );
-    }
-    else if(widget.selectedType == "Finger PPG"){
-      return Column(
-        children: [
-          buildChart(50, 90, fingerPPGLineData, Colors.green),
-        ],
-      );
-    }else{
+    } else {
       return Container();
     }
   }
@@ -354,19 +327,18 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Column(children: [
-            Text(
-              "Connected: " +
-                  widget.device.remoteId.toString() +
-                  " ( " +
-                   widget.selectedType +
-                  " )",
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white,
+          Column(
+            children: [
+              Text(
+                "Connected: " +
+                    widget.device.remoteId.toString() +
+                    " ( " +
+                    widget.selectedType +
+                    " )",
+                style: TextStyle(fontSize: 12, color: Colors.white),
               ),
-            ),
-          ]),
+            ],
+          ),
         ],
       ),
     );
@@ -375,9 +347,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
   LineChartBarData currentLine(List<FlSpot> points, Color plotcolor) {
     return LineChartBarData(
       spots: points,
-      dotData: FlDotData(
-        show: false,
-      ),
+      dotData: FlDotData(show: false),
       gradient: LinearGradient(
         colors: [plotcolor, plotcolor],
         //stops: const [0.1, 1.0],
@@ -387,7 +357,12 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     );
   }
 
-  buildChart(int vertical, int horizontal, List<FlSpot> source, Color plotColor) {
+  buildChart(
+    int vertical,
+    int horizontal,
+    List<FlSpot> source,
+    Color plotColor,
+  ) {
     return Container(
       height: SizeConfig.blockSizeVertical * vertical,
       width: SizeConfig.blockSizeHorizontal * horizontal,
@@ -410,30 +385,24 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
             bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
             topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
           ),
-          lineBarsData: [
-            currentLine(source, plotColor),
-          ],
+          lineBarsData: [currentLine(source, plotColor)],
         ),
         //swapAnimationDuration: Duration.zero,
         duration: Duration.zero,
-
       ),
     );
   }
 
-
   Widget buildCharts() {
     return Expanded(
-        child: Container(
-            color: Colors.black,
-            child: Padding(
-              padding: const EdgeInsets.all(0.0),
-              child: Column(
-                children: <Widget>[
-                  displayHealthyPiMoveCharts()
-                ],
-              ),
-            )));
+      child: Container(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.all(0.0),
+          child: Column(children: <Widget>[displayHealthyPiMoveCharts()]),
+        ),
+      ),
+    );
   }
 
   void setStateIfMounted(f) {
@@ -450,24 +419,25 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         color: Colors.red,
         child: Row(
           children: <Widget>[
-            Text('Close',
-                style: new TextStyle(fontSize: 18.0, color: Colors.white)),
+            Text(
+              'Close',
+              style: new TextStyle(fontSize: 18.0, color: Colors.white),
+            ),
           ],
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
         onPressed: () async {
           closeAllStreams();
 
           Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => ScrStreamsSelection(device: widget.device)),
+            MaterialPageRoute(
+              builder: (_) => ScrStreamsSelection(device: widget.device),
+            ),
           );
         },
       ),
     );
   }
-
 
   Widget StartAndStopButton() {
     return Padding(
@@ -478,21 +448,22 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         child: Row(
           children: <Widget>[
             startStreaming
-                ? Text('Stop',
-                style: new TextStyle(fontSize: 16.0, color: Colors.white))
-                : Text('Start',
-                style: new TextStyle(fontSize: 16.0, color: Colors.white)),
+                ? Text(
+                  'Stop',
+                  style: new TextStyle(fontSize: 16.0, color: Colors.white),
+                )
+                : Text(
+                  'Start',
+                  style: new TextStyle(fontSize: 16.0, color: Colors.white),
+                ),
           ],
         ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
         onPressed: () async {
           if (startStreaming == false) {
             setState(() {
               startStreaming = true;
             });
-
           } else {
             closeAllStreams();
             ecgLineData.removeAt(0);
@@ -513,15 +484,17 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
       mainAxisAlignment: MainAxisAlignment.start,
       mainAxisSize: MainAxisSize.max,
       children: <Widget>[
-        Column(children: <Widget>[
-          Image.asset(
-            'assets/healthypi_move.png',
-            fit: BoxFit.fitWidth,
-            height: 30,
-          ),
-          displayDeviceName(),
-        ]),
-       // StartAndStopButton(),
+        Column(
+          children: <Widget>[
+            Image.asset(
+              'assets/healthypi_move.png',
+              fit: BoxFit.fitWidth,
+              height: 30,
+            ),
+            displayDeviceName(),
+          ],
+        ),
+        // StartAndStopButton(),
         displayDisconnectButton(),
       ],
     );

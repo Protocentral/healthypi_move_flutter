@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_fetch_ecg.dart';
-import 'package:move/screens/scr_syncing.dart';
+import 'package:move/screens/scrSync.dart';
 import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
