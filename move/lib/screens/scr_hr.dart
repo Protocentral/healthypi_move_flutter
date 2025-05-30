@@ -261,6 +261,85 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     }
   }
 
+ /* Widget customAxis() {
+    if (_tabController.index == 0) {
+      // 1 to 24 (hours)
+      return NumericAxis(
+        minimum: 1,
+        maximum: 24,
+        interval: 6, // Show every 6th hour
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Display 24 instead of 0 if needed (not applicable here, but included for parity)
+          String labelText = details.value.toInt().toString();
+          return ChartAxisLabel(
+            labelText,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
+      );
+    } else if (_tabController.index == 1) {
+      // 1 to 7 (days of week)
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return NumericAxis(
+        minimum: 1,
+        maximum: 7,
+        interval: 1,
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          int idx = details.value.toInt() - 1;
+          String labelText = (idx >= 0 && idx < days.length) ? days[idx] : details.value.toInt().toString();
+          return ChartAxisLabel(
+            labelText,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
+      );
+    } else {
+      // 1 to 30 (days of month)
+      return NumericAxis(
+        minimum: 1,
+        maximum: 30,
+        interval: 6,
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          String labelText = details.value.toInt().toString();
+          return ChartAxisLabel(
+            labelText,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
+      );
+    }
+  }*/
+
   Widget buildChartBlock() {
     return Padding(
       padding: const EdgeInsets.all(2.0),
@@ -293,15 +372,10 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                     xValueMapper: (HRTrends data, _) => data.date,
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
-                    borderWidth: 3,
+                    borderWidth: 7,
                     animationDuration: 0,
                   ),
                 ],
-                /*zoomPanBehavior: ZoomPanBehavior(
-                    enablePinching: true, // Enable pinch zoom
-                    enablePanning: true, // Enable panning
-                    zoomMode: ZoomMode.x, // Allow zooming in both X and Y directions
-                  ),*/
               ),
             ),
           ],
@@ -323,54 +397,81 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       print('No valid HR data found in CSV files.');
       return;
     }
+
     setState(() {
       hrTrendsData = data;
     });
 
-    // Get the weekly HR trends for the current week
     DateTime today = DateTime.now();
-    List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
-      today,
-    );
-    for (var trend in weeklyHRTrends) {
-      print(
-        'Date: ${trend.date.weekday}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+
+    if(_tabController.index == 0){
+      // Get the hourly HR trends for today
+      List<HourlyTrend> hourlyHRTrends =
+      await hrDataManager.getHourlyTrendForToday();
+      for (var trend in hourlyHRTrends) {
+
+        print(
+          'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
+      }
+
+      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
+      Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
+        today,
       );
+
+      print('Daily Stats: $dailyStats');
+
+    }else if(_tabController.index == 1){
+      // Get the weekly HR trends for the current week
+
+      List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
+        today,
+      );
+      for (var trend in weeklyHRTrends) {
+        setState((){
+          hrTrendsData.add(
+            HRTrends(
+              trend.date,
+              trend.max.toInt(),
+              trend.max.toInt(),
+            ),
+          );
+        });
+
+        print(
+          'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
+
+      }
+
+      Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
+        today,
+      );
+
+
+
+      print('Weekly Stats: $weeklyStats');
+
+    }else if(_tabController.index == 2){
+      // Get the monthly HR trends for the current month
+      List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
+        today,
+      );
+      for (var trend in monthlyHRTrends) {
+        print(
+          'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
+      }
+
+      Map<String, double> monthlyStats = await hrDataManager.getMonthlyStatistics(
+        today,
+      );
+
+      print('Monthly Stats: $monthlyStats');
     }
 
-    // Get the hourly HR trends for today
-    List<HourlyTrend> hourlyHRTrends =
-        await hrDataManager.getHourlyTrendForToday();
-    for (var trend in hourlyHRTrends) {
-      print(
-        'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
-      );
-    }
 
-    // Get the monthly HR trends for the current month
-    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
-      today,
-    );
-    for (var trend in monthlyHRTrends) {
-      print(
-        'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
-      );
-    }
-
-    // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-    Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
-      today,
-    );
-
-    Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
-      today,
-    );
-    Map<String, double> monthlyStats = await hrDataManager.getMonthlyStatistics(
-      today,
-    );
-    print('Weekly Stats: $weeklyStats');
-    print('Daily Stats: $dailyStats');
-    print('Monthly Stats: $monthlyStats');
   }
 
   // Save a value
