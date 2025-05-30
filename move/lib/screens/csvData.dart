@@ -145,12 +145,12 @@ class CsvDataManager<T> {
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
 
-    Map<int, List<double>> hourlyData = {};
+    Map<DateTime, List<double>> hourlyData = {};
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
       DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
-      int hour = dt.hour;
+      DateTime hour = DateTime(dt.year, dt.month, dt.day, dt.hour);
 
       double value =
           double.tryParse(row[1].toString()) ??
