@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
-class HRTrend {
-  HRTrend(this.date, this.maxHR, this.minHR);
-  final DateTime date;
-  final int maxHR;
-  final int minHR;
-}
 
 class HourlyTrend {
   final DateTime hour;

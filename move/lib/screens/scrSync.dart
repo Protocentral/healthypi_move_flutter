@@ -14,11 +14,6 @@ import 'package:path_provider/path_provider.dart';
 import '../globals.dart';
 import '../home.dart';
 
-import 'load_hr.dart';
-import 'load_temp.dart';
-import 'load_spo2.dart';
-import 'load_activity.dart';
-
 typedef LogHeader = ({int logFileID, int sessionLength});
 
 class SyncingScreen extends StatefulWidget {
@@ -722,7 +717,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
           isFetchingTemp = false;
         });
       });
-      await listCSVFiles();
       _checkAllFetchesComplete(deviceName);
       await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
       await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
@@ -792,7 +786,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
       });
 
       _checkAllFetchesComplete(deviceName);
-      await listSpo2CSVFiles();
       await _fetchLogCount(context, deviceName, hPi4Global.ActivityTrend);
       await _fetchLogIndex(context, deviceName, hPi4Global.ActivityTrend);
     }
@@ -860,7 +853,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
           isFetchingSpo2 = false;
           isFetchingActivity = false;
         });
-        await listTempCSVFiles();
         _checkAllFetchesComplete(deviceName);
       });
     }
@@ -925,7 +917,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
           isFetchingTemp = true;
           isFetchingActivity = false;
         });
-        await listActivityCSVFiles();
         _checkAllFetchesComplete(deviceName);
         await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
         await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);

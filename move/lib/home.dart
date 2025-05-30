@@ -5,6 +5,7 @@ import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:move/screens/csvData.dart';
 import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
@@ -109,6 +110,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _initPackageInfo();
+    _loadLastVitalInfo();
     _loadStoredValue();
   }
 
@@ -119,10 +121,95 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _loadLastVitalInfo() async {
+   await _loadStoredHRValue();
+   await _loadStoredTempValue();
+   await _loadHRData();
+   await _loadTempData();
+  }
+
   @override
   Future<void> dispose() async {
     super.dispose();
   }
+
+  _loadStoredHRValue(){
+    hrDataManager = CsvDataManager<HRTrends>(
+      filePrefix: "hr_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int minHR = int.tryParse(row[1]) ?? 0;
+        int maxHR = int.tryParse(row[2]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return HRTrends(date, maxHR, minHR);
+      },
+      getFileType: (file) => "hr",
+    );
+  }
+
+  Future<void> _loadHRData() async {
+    DateTime today = DateTime.now();
+    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(today);
+
+    if (monthlyHRTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyHRTrends.last;
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      double lastAvg = lastTrend.avg;
+      setState((){
+        saveValue(lastTime,lastAvg, "lastUpdatedHR", "latestHR");
+      });
+      print('Last Time: $lastTime, Min: $lastAvg');
+
+    } else {
+      print('No monthly HR trends data available.');
+    }
+  }
+
+  _loadStoredTempValue(){
+    tempDataManager = CsvDataManager<HRTrends>(
+      filePrefix: "temp_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int minHR = int.tryParse(row[1]) ?? 0;
+        int maxHR = int.tryParse(row[2]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return HRTrends(date, maxHR, minHR);
+      },
+      getFileType: (file) => "temp",
+    );
+  }
+
+  Future<void> _loadTempData() async {
+    DateTime today = DateTime.now();
+    List<MonthlyTrend> monthlyTempTrends = await tempDataManager.getMonthlyTrend(today);
+
+    if (monthlyTempTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyTempTrends.last;
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      double lastAvg = lastTrend.avg/100;
+      setState((){
+        saveValue(lastTime,lastAvg, "lastUpdatedTemp", "latestTemp");
+      });
+      print('Last Time: $lastTime, Min: $lastAvg');
+
+    } else {
+      print('No monthly Temp trends data available.');
+    }
+  }
+
+  // Save a value
+  saveValue(DateTime lastUpdatedTime, double averageHR,
+      String latestTimeString,
+      String latestValueString ) async {
+    String lastDateTime = DateFormat(
+      'EEE d MMM',
+    ).format(lastUpdatedTime);
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(latestValueString, averageHR.toString());
+    await prefs.setString(latestTimeString, lastDateTime);
+  }
+
+
 
   // Load the stored value
   _loadStoredValue() async {
@@ -155,6 +242,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return MediaQuery.of(context).size.aspectRatio * 3.0 / 2;
     }
   }
+
+  // Example usage for HR data:
+  late CsvDataManager<HRTrends> hrDataManager;
+  late CsvDataManager<HRTrends> tempDataManager;
+
 
   Widget _buildMainGrid() {
     return GridView.count(
