@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
-
 class HourlyTrend {
   final DateTime hour;
   final double min;
@@ -63,6 +62,42 @@ class ActivityMonthlyTrend {
   final int steps;
 
   ActivityMonthlyTrend({required this.date, required this.steps});
+}
+
+class SpO2DailyTrend {
+  final DateTime date;
+  final int spo2;
+
+  SpO2DailyTrend({required this.date, required this.spo2});
+}
+
+class SpO2WeeklyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  SpO2WeeklyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
+}
+
+/// Represents a monthly SpO2 trend with min, max, and average values.
+class SpO2MonthlyTrend {
+  final DateTime date;
+  final double min;
+  final double max;
+  final double avg;
+
+  SpO2MonthlyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
 }
 
 class hPi4Global {
