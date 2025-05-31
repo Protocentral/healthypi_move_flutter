@@ -277,7 +277,7 @@ class CsvDataManager<T> {
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
 
-    List<ActivityDailyTrend> activityTrends = [];
+    Map<DateTime, int> dailySteps = {};
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0; // Timestamp
@@ -287,11 +287,18 @@ class CsvDataManager<T> {
       );
       int steps = int.tryParse(row[1].toString()) ?? 0; // Steps data
 
-      activityTrends.add(ActivityDailyTrend(date: timestamp, steps: steps));
+      DateTime dayKey = DateTime(timestamp.year, timestamp.month, timestamp.day);
+      dailySteps.update(dayKey, (value) => value + steps, ifAbsent: () => steps);
     }
 
-    return activityTrends;
+    List<ActivityDailyTrend> dailyTrends = [];
+    dailySteps.forEach((day, steps) {
+      dailyTrends.add(ActivityDailyTrend(date: day, steps: steps));
+    });
+
+    return dailyTrends;
   }
+
 
   /// Get activity trends for a specific week in ActivityWeeklyTrend format
   /// This method aggregates daily steps data into weekly trends.
