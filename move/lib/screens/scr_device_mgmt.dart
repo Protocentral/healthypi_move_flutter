@@ -77,25 +77,24 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
     );
   }
 
-
   // reset the stored value
   _resetStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      prefs.setString('lastSynced','0');
-      prefs.setString('latestHR','0');
-      prefs.setString('latestTemp','0');
-      prefs.setString('latestSpo2','0');
-      prefs.setString('latestActivityCount','0');
-      prefs.setString('lastUpdatedHR','0');
-      prefs.setString('lastUpdatedTemp','0');
-      prefs.setString('lastUpdatedSpo2','0');
-      prefs.setString('lastUpdatedActivity','0');
-      prefs.setString('fetchStatus','0');
+      prefs.setString('lastSynced', '0');
+      prefs.setString('latestHR', '0');
+      prefs.setString('latestTemp', '0');
+      prefs.setString('latestSpo2', '0');
+      prefs.setString('latestActivityCount', '0');
+      prefs.setString('lastUpdatedHR', '0');
+      prefs.setString('lastUpdatedTemp', '0');
+      prefs.setString('lastUpdatedSpo2', '0');
+      prefs.setString('lastUpdatedActivity', '0');
+      prefs.setString('fetchStatus', '0');
     });
   }
 
- showConfirmationDialog(BuildContext context, String action) {
+  showConfirmationDialog(BuildContext context, String action) {
     return showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -105,25 +104,33 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
-            title: Text('Are you sure you wish to delete all data.',
-                style:TextStyle(fontSize: 18, color: Colors.white)
+            title: Text(
+              'Are you sure you wish to delete all data.',
+              style: TextStyle(fontSize: 18, color: Colors.white),
             ),
-            content: Text('This action is not reversible.',
-                style:TextStyle(fontSize: 16, color: Colors.red)),
+            content: Text(
+              'This action is not reversible.',
+              style: TextStyle(fontSize: 16, color: Colors.red),
+            ),
             actions: <Widget>[
               TextButton(
-                child: const Text('Yes',
-                    style:TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color:hPi4Global.hpi4Color)),
+                child: const Text(
+                  'Yes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
                 onPressed: () {
-                  if(action == "logs on the device."){
+                  if (action == "logs on the device.") {
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"2")),
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "2")),
                     );
-                  }else{
+                  } else {
                     Navigator.pop(context);
                     // deleteAllFiles();
                     _resetStoredValue();
-
                   }
                 },
               ),
@@ -212,8 +219,8 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                           SizedBox(height: 10.0),
-                                          ElevatedButton(
+                                          SizedBox(height: 10.0),
+                                          /*ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
                                                   hPi4Global
@@ -264,7 +271,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                 ],
                                               ),
                                             ),
-                                          ),
+                                          ),*/
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
@@ -324,13 +331,13 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                              hPi4Global
-                                                  .hpi4Color, // background color
+                                                  hPi4Global
+                                                      .hpi4Color, // background color
                                               foregroundColor:
-                                              Colors.white, // text color
+                                                  Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                BorderRadius.circular(20),
+                                                    BorderRadius.circular(20),
                                               ),
                                               minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -339,8 +346,15 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               ),
                                             ),
                                             onPressed: () {
-                                              Navigator.of(context).pushReplacement(
-                                                MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"4")),
+                                              Navigator.of(
+                                                context,
+                                              ).pushReplacement(
+                                                MaterialPageRoute(
+                                                  builder:
+                                                      (_) => ScrScan(
+                                                        tabIndex: "4",
+                                                      ),
+                                                ),
                                               );
                                             },
                                             child: Padding(
@@ -349,7 +363,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               ),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                                    MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
                                                     Icons.download_for_offline,
@@ -368,7 +382,8 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
-                                          Divider( // Horizontal line
+                                          Divider(
+                                            // Horizontal line
                                             color: Colors.grey,
                                             thickness: 0.5,
                                             height: 20, // space above and below
@@ -377,12 +392,13 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
                                               backgroundColor:
-                                              Colors.red, // background color
+                                                  Colors
+                                                      .red, // background color
                                               foregroundColor:
-                                              Colors.white, // text color
+                                                  Colors.white, // text color
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                BorderRadius.circular(20),
+                                                    BorderRadius.circular(20),
                                               ),
                                               /*minimumSize: Size(
                                                 SizeConfig.blockSizeHorizontal *
@@ -402,7 +418,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               ),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                MainAxisAlignment.start,
+                                                    MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
                                                     Icons.delete,
