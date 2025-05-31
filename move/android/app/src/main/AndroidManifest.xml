@@ -26,7 +26,7 @@
 
 
     <application
-        android:label="move"
+        android:label="Healthypi Move"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
         android:requestLegacyExternalStorage="true">
