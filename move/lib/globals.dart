@@ -66,9 +66,16 @@ class ActivityMonthlyTrend {
 
 class SpO2DailyTrend {
   final DateTime date;
-  final int spo2;
+  final double min;
+  final double max;
+  final double avg;
 
-  SpO2DailyTrend({required this.date, required this.spo2});
+  SpO2DailyTrend({
+    required this.date,
+    required this.min,
+    required this.max,
+    required this.avg,
+  });
 }
 
 class SpO2WeeklyTrend {

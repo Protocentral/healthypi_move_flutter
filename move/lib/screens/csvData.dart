@@ -317,7 +317,7 @@ class CsvDataManager<T> {
     );
     startOfWeek = DateTime(
       startOfWeek.year,
-      startOfWeek.month,   
+      startOfWeek.month,
       startOfWeek.day,
     );
     DateTime endOfWeek = startOfWeek
@@ -400,6 +400,8 @@ class CsvDataManager<T> {
   }
 
   /// Get SpO2 trends for a specific day in SpO2DailyTrend format
+  /// This method assumes that the SpO2 data is stored in a similar format as the daily trends.
+  /// This method aggregates SpO2 values into daily trends.
   Future<List<SpO2DailyTrend>> getSpO2DailyTrend(DateTime day) async {
     DateTime start = DateTime(day.year, day.month, day.day);
     DateTime end = start
@@ -408,7 +410,7 @@ class CsvDataManager<T> {
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
 
-    List<SpO2DailyTrend> spo2Trends = [];
+    Map<DateTime, List<int>> dailySpO2Data = {};
 
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0; // Timestamp
@@ -418,10 +420,26 @@ class CsvDataManager<T> {
       );
       int spo2 = int.tryParse(row[1].toString()) ?? 0; // SpO2 value
 
-      spo2Trends.add(SpO2DailyTrend(date: timestamp, spo2: spo2));
+      DateTime dayKey = DateTime(
+        timestamp.year,
+        timestamp.month,
+        timestamp.day,
+      );
+      dailySpO2Data.putIfAbsent(dayKey, () => []);
+      dailySpO2Data[dayKey]!.add(spo2);
     }
 
-    return spo2Trends;
+    List<SpO2DailyTrend> dailyTrends = [];
+    dailySpO2Data.forEach((day, values) {
+      double min = values.reduce((a, b) => a < b ? a : b).toDouble();
+      double max = values.reduce((a, b) => a > b ? a : b).toDouble();
+      double avg =
+          (values.reduce((a, b) => a + b) / values.length).floorToDouble();
+
+      dailyTrends.add(SpO2DailyTrend(date: day, min: min, max: max, avg: avg));
+    });
+
+    return dailyTrends;
   }
 
   /// Get SpO2 trends for a specific week in SpO2WeeklyTrend format
@@ -561,6 +579,63 @@ class CsvDataManager<T> {
   /// Get min, max, and average statistics for a specific month
   Future<Map<String, double>> getMonthlyStatistics(DateTime dateInMonth) async {
     List<MonthlyTrend> monthlyTrends = await getMonthlyTrend(dateInMonth);
+    double min = monthlyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = monthlyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        monthlyTrends.length;
+
+    return {'min': min, 'max': max, 'avg': avg};
+  }
+
+  /// Get min, max, and average statistics for a specific day in SpO2 data
+  /// This method assumes that the SpO2 data is stored in a similar format as the daily trends.
+  Future<Map<String, double>> getSpO2DailyStatistics(DateTime day) async {
+    List<SpO2DailyTrend> dailyTrends = await getSpO2DailyTrend(day);
+    double min = dailyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = dailyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        dailyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        dailyTrends.length;
+
+    return {'min': min, 'max': max, 'avg': avg};
+  }
+
+  /// Get min, max, and average statistics for a specific week in SpO2 data
+  /// This method assumes that the SpO2 data is stored in a similar format as the weekly trends.
+  Future<Map<String, double>> getSpO2WeeklyStatistics(
+    DateTime dateInWeek,
+  ) async {
+    List<SpO2WeeklyTrend> weeklyTrends = await getSpO2WeeklyTrend(dateInWeek);
+    double min = weeklyTrends
+        .map((trend) => trend.min)
+        .reduce((a, b) => a < b ? a : b);
+    double max = weeklyTrends
+        .map((trend) => trend.max)
+        .reduce((a, b) => a > b ? a : b);
+    double avg =
+        weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
+        weeklyTrends.length;
+
+    return {'min': min, 'max': max, 'avg': avg};
+  }
+
+  /// Get min, max, and average statistics for a specific month in SpO2 data
+  /// This method assumes that the SpO2 data is stored in a similar format as the monthly trends.
+  Future<Map<String, double>> getSpO2MonthlyStatistics(
+    DateTime dateInMonth,
+  ) async {
+    List<SpO2MonthlyTrend> monthlyTrends = await getSpO2MonthlyTrend(
+      dateInMonth,
+    );
     double min = monthlyTrends
         .map((trend) => trend.min)
         .reduce((a, b) => a < b ? a : b);
