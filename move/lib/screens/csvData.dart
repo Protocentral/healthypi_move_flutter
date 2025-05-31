@@ -287,8 +287,16 @@ class CsvDataManager<T> {
       );
       int steps = int.tryParse(row[1].toString()) ?? 0; // Steps data
 
-      DateTime dayKey = DateTime(timestamp.year, timestamp.month, timestamp.day);
-      dailySteps.update(dayKey, (value) => value + steps, ifAbsent: () => steps);
+      DateTime dayKey = DateTime(
+        timestamp.year,
+        timestamp.month,
+        timestamp.day,
+      );
+      dailySteps.update(
+        dayKey,
+        (value) => value + steps,
+        ifAbsent: () => steps,
+      );
     }
 
     List<ActivityDailyTrend> dailyTrends = [];
@@ -298,7 +306,6 @@ class CsvDataManager<T> {
 
     return dailyTrends;
   }
-
 
   /// Get activity trends for a specific week in ActivityWeeklyTrend format
   /// This method aggregates daily steps data into weekly trends.
@@ -310,7 +317,7 @@ class CsvDataManager<T> {
     );
     startOfWeek = DateTime(
       startOfWeek.year,
-      startOfWeek.month,
+      startOfWeek.month,   
       startOfWeek.day,
     );
     DateTime endOfWeek = startOfWeek
