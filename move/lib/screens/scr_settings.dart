@@ -393,7 +393,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                                               color: Colors.white,
                                             ),
                                             Text(
-                                              'Delete paired device ',
+                                              'Delete preferred device ',
                                               style: TextStyle(fontSize: 16, color: Colors.white),
                                             ),
                                           ],

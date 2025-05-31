@@ -301,10 +301,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
+                      /*Text(
                         "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      ),*/
                       Text(
                         lastUpdatedHR.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -359,10 +359,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
+                      /*Text(
                         "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      ),*/
                       Text(
                         lastUpdatedSpo2.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -416,10 +416,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
+                      /*Text(
                         "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      ),*/
                       Text(
                         lastUpdatedTemp.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -475,10 +475,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
+                      /*Text(
                         "Updated: ",
                         style: hPi4Global.movecardSubValueTextStyle,
-                      ),
+                      ),*/
                       Text(
                         lastUpdatedActivity.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:syncfusion_flutter_sliders/sliders.dart' as rs;
+import '../globals.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:path/path.dart' as p;
@@ -12,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
+import 'csvData.dart';
 
 class ScrActivity extends StatefulWidget {
   const ScrActivity({super.key});
@@ -36,7 +38,19 @@ class _ScrActivityState extends State<ScrActivity>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _listCSVFiles();
+
+    activityDataManager = CsvDataManager<ActivityTrends>(
+      filePrefix: "activity_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int count = int.tryParse(row[1]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return ActivityTrends(date, count);
+      },
+      getFileType: (file) => "activity",
+    );
+
+    _loadData();
   }
 
   @override
@@ -49,8 +63,7 @@ class _ScrActivityState extends State<ScrActivity>
 
   void _handleTabChange() {
     setState(() {
-      _listCSVFiles();
-
+      _loadData();
     });
   }
 
@@ -200,6 +213,16 @@ class _ScrActivityState extends State<ScrActivity>
     }
   }
 
+  double borderWidth(){
+    if (_tabController.index == 0){
+      return 7;
+    }else if(_tabController.index == 1){
+      return 20;
+    }else{
+      return 7;
+    }
+  }
+
   Widget buildChartBlock() {
     return Padding(
         padding: const EdgeInsets.all(2.0),
@@ -232,9 +255,9 @@ class _ScrActivityState extends State<ScrActivity>
                     HiloSeries<ActivityTrends, DateTime>(
                       dataSource: ActivityTrendsData,
                       xValueMapper: (ActivityTrends data, _) => data.date,
-                      lowValueMapper: (ActivityTrends data, _) => data.min,
+                      lowValueMapper: (ActivityTrends data, _) => 0,
                       highValueMapper: (ActivityTrends data, _) => data.count,
-                      borderWidth: 7,
+                      borderWidth: borderWidth(),
                       animationDuration: 0,
                     ),
                   ],
@@ -245,177 +268,105 @@ class _ScrActivityState extends State<ScrActivity>
         ));
   }
 
-  String _formatDate(DateTime date) {
-    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-  }
+  // Example usage for HR data:
+  late CsvDataManager<ActivityTrends> activityDataManager;
 
-  Future<String> _getSecondLineTimestamp(File file) async {
-    try {
-      List<String> lines = await file.readAsLines();
-      if (lines.length > 1) {
-        return lines[1]; // Assuming the timestamp is on the second line
-      }
-      return 'No second line';
-    } catch (e) {
-      return 'Error reading file: $e';
+  Future<void> _loadData() async {
+    List<ActivityTrends> data = await activityDataManager.getDataObjects();
+    if (data.isEmpty) {
+      print('No valid Activity data found in CSV files.');
+      return;
     }
-  }
 
-  Future<void> _listCSVFiles() async {
-    Directory? downloadsDirectory;
-    if (Platform.isAndroid) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    }
-    if (downloadsDirectory != null) {
-      String downloadsPath = downloadsDirectory.path;
-      Directory downloadsDir = Directory(downloadsPath);
-      if (downloadsDir.existsSync()) {
-        List<FileSystemEntity> files = downloadsDir.listSync();
+    DateTime today = DateTime.now();
 
-        List<File> csvFiles = files
-            .where((file) => file is File && file.path.endsWith('.csv'))
-            .map((file) => file as File)
-            .where(
-              (file) => p.basename(file.path).startsWith("activity_"),
-        ) // Filter by prefix
-            .toList();
+    if(_tabController.index == 0){
+      // Get the hourly HR trends for today
+      ActivityTrendsData = [];
+      List<ActivityDailyTrend> activityDailyTrend =
+      await activityDataManager.getActivityDailyTrend(today);
+      for (var trend in activityDailyTrend) {
 
-        for (File file in csvFiles) {
-          String timestamp = await _getSecondLineTimestamp(file);
-          String timestamp1 = timestamp.split(",")[0];
-          int timestamp2 = int.parse(timestamp1);
-          int updatedTimestamp = timestamp2 * 1000;
-          String fileName1 = p.basename(file.path);
-
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-            updatedTimestamp,
-            isUtc: true,
+        setState((){
+          ActivityTrendsData.add(
+            ActivityTrends(
+              trend.date,
+              trend.steps,
+            ),
           );
-          DateTime now = DateTime.now();
+        });
+        print(
+          'Hour: ${trend.date}, Step: ${trend.steps}',
+        );
+      }
 
-          if (_tabController.index == 0) {
-            // Group by every hour for the day
-            String todayStr = _formatDate(now);
-            if (_formatDate(timestampDateTime) == todayStr) {
-              await processFileData(
-                fileNames: [fileName1],
-                groupingFormat: "yyyy-MM-dd HH:00:00", // Group by hour
-              );
-            }
-          } else if (_tabController.index == 1) {
-            // Group by every day for the week
-            DateTime weekStart = now.subtract(Duration(days: 7));
-            if (timestampDateTime.isAfter(weekStart) &&
-                timestampDateTime.isBefore(now)) {
-              await processFileData(
-                fileNames: [fileName1],
-                groupingFormat: "yyyy-MM-dd", // Group by day
-              );
-            }
-          } else if (_tabController.index == 2) {
-            // Group by every day for the month
-            DateTime monthStart = now.subtract(Duration(days: 30));
-            if (timestampDateTime.isAfter(monthStart) &&
-                timestampDateTime.isBefore(now)) {
-              await processFileData(
-                fileNames: [fileName1],
-                groupingFormat: "yyyy-MM-dd", // Group by day
-              );
-            }
-          }
-        }
+     /* // Call functions to get the weekly, hourly, and monthly min, max and average statistics
+      Map<String, double> dailyStats = await activityDataManager.getDailyStatistics(
+        today,
+      );
+
+      setState((){
+        rangeMinHR = dailyStats['min']!.toInt();
+        rangeMaxHR = dailyStats['max']!.toInt();
+        averageHR = dailyStats['avg']!.toInt();
+      });
+
+      print('Daily Stats: $dailyStats');*/
+
+    }else if(_tabController.index == 1){
+      // Get the weekly HR trends for the current week
+      ActivityTrendsData = [];
+      List<ActivityWeeklyTrend> activityWeeklyTrend =
+      await activityDataManager.getActivityWeeklyTrend(today);
+      for (var trend in activityWeeklyTrend) {
+
+        setState((){
+          ActivityTrendsData.add(
+            ActivityTrends(
+              trend.date,
+              trend.steps,
+            ),
+          );
+        });
+        print(
+          'week: ${trend.date}, Step: ${trend.steps}',
+        );
+      }
+
+      /*Map<String, double> weeklyStats = await activityDataManager.getWeeklyStatistics(
+        today,
+      );
+
+      setState((){
+        rangeMinHR = weeklyStats['min']!.toInt();
+        rangeMaxHR = weeklyStats['max']!.toInt();
+        averageHR = weeklyStats['avg']!.toInt();
+      });
+
+      print('Weekly Stats: $weeklyStats');*/
+
+    }else if(_tabController.index == 2) {
+      // Get the monthly HR trends for the current month
+      ActivityTrendsData = [];
+      List<ActivityMonthlyTrend> activityMonthlyTrend =
+      await activityDataManager.getActivityMonthlyTrend(today);
+      for (var trend in activityMonthlyTrend) {
+
+        setState((){
+          ActivityTrendsData.add(
+            ActivityTrends(
+              trend.date,
+              trend.steps,
+            ),
+          );
+        });
+        print(
+          'Month: ${trend.date}, Step: ${trend.steps}',
+        );
       }
     }
   }
-// Save the last updated values
-  saveValue(DateTime lastUpdatedTime, int Count) async {
-    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestActivityCount', Count.toString());
-    await prefs.setString('lastUpdatedActivity', lastDateTime);
-  }
 
-  Future<void> processFileData({
-    required List<String> fileNames, // List of files to process
-    required String
-    groupingFormat, // Grouping format: "yyyy-MM-dd HH:00:00" for hourly, "yyyy-MM-dd" for daily
-  }) async {
-    Directory? downloadsDirectory;
-    Map<String, Map<String, int>> groupedStats =
-    {}; // To store grouped min and max values
-
-    if (Platform.isAndroid) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    }
-
-    if (downloadsDirectory == null) return;
-
-    for (String fileName in fileNames) {
-      String filePath = '${downloadsDirectory.path}/$fileName';
-      File csvFile = File(filePath);
-
-      if (await csvFile.exists()) {
-        String fileContent = await csvFile.readAsString();
-        List<String> result = fileContent.split('\n');
-        if (result.isEmpty) continue;
-
-        // Extract headers and rows
-        List<String> headers = result.first.split(',');
-        List<List<String>> rows =
-        result.skip(1).map((line) => line.split(',')).toList();
-
-        // Process each row
-        for (var row in rows) {
-          if (row.length < 2) continue;
-
-          int timestamp = int.parse(row[0]);
-          int count = int.parse(row[1]);
-
-          // Convert timestamp to DateTime and group by the specified format
-          var dateTime =
-          DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
-          String groupKey = DateFormat(groupingFormat).format(dateTime);
-
-          // Update min and max for the group
-          if (!groupedStats.containsKey(groupKey)) {
-            groupedStats[groupKey] = {
-              'count': count,
-            };
-          } else {
-            groupedStats[groupKey]!['count'] = (groupedStats[groupKey]!['count']! + count); // Add to sum
-            setState(() {
-             Count = groupedStats[groupKey]!['count']!;
-            });
-          }
-        }
-      }
-    }
-    double average = 0;
-    // Process the grouped stats and update the UI
-    groupedStats.forEach((group, stats) {
-      DateTime formattedDateTime = DateTime.parse(group);
-      setState(() {
-        ActivityTrendsData.add(ActivityTrends(formattedDateTime,0,stats['count']!),);
-      });
-     // print(" $group, Count: $stats");
-
-    });
-
-    // Update the last aggregated values
-    if (groupedStats.isNotEmpty) {
-      String lastGroup = groupedStats.keys.last;
-
-      setState(() {
-        lastUpdatedTime = DateTime.parse(lastGroup);
-        Count = groupedStats[lastGroup]!['count']!;
-      });
-      saveValue(lastUpdatedTime, Count);
-    }
-  }
 
   Widget displayValue(){
     return Row(
@@ -595,8 +546,7 @@ class _ScrActivityState extends State<ScrActivity>
 
 
 class ActivityTrends {
-  ActivityTrends(this.date,this.min,this.count);
+  ActivityTrends(this.date,this.count);
   final DateTime date;
-  final int min;
   final int count;
 }
