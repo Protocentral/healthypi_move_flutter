@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/utils/extra.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:share_plus/share_plus.dart';
 import '../utils/sizeConfig.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -82,7 +84,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     ) async {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
-         await discoverDataChar(widget.device);
+        await discoverDataChar(widget.device);
         await _startListeningData();
         startFetching();
       }
@@ -103,7 +105,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         setState(() {});
       }
     });
-    requestPermissions();
+    // /requestPermissions();
     super.initState();
   }
 
@@ -121,12 +123,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     super.dispose();
   }
 
-  Future<void> requestPermissions() async {
+  /*Future<void> requestPermissions() async {
     Map<Permission, PermissionStatus> statuses =
         await [Permission.manageExternalStorage, Permission.storage].request();
 
     if (statuses.containsValue(PermissionStatus.denied)) {}
-  }
+  }*/
 
   bool get isConnected {
     return _connectionState == BluetoothConnectionState.connected;
@@ -262,6 +264,32 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
   }
 
+  /// Save CSV to file and share it to other apps
+  Future<void> saveAndShareCsv(String csvContent, String fileName) async {
+    Directory directory;
+    if (Platform.isAndroid) {
+      directory = Directory("/storage/emulated/0/Download");
+    } else {
+      directory = await getApplicationDocumentsDirectory();
+    }
+    final path = directory.path;
+    await Directory(path).create(recursive: true);
+
+    final file = File('$path/$fileName');
+    await file.writeAsString(csvContent);
+
+    final params = ShareParams(
+      text: 'ECG Log File',
+      files: [XFile('${directory.path}/$fileName')],
+    );
+
+    final result = await SharePlus.instance.share(params);
+
+    if (result.status == ShareResultStatus.success) {
+      print("File shared successfully!");
+    }
+  }
+
   Future<void> _writeLogDataToFile(List<int> mData, int sessionID) async {
     logConsole("Log data size: ${mData.length}");
 
@@ -293,9 +321,11 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
     // Code to convert logData to CSV file
 
-    String csv = const ListToCsvConverter().convert(dataList);
+    String csvData = const ListToCsvConverter().convert(dataList);
 
-    Directory directory0 = Directory("");
+    await saveAndShareCsv(csvData, 'ecg_log_$sessionID.csv');
+
+    /*Directory directory0 = Directory("");
 
     if (Platform.isAndroid) {
       // Redirects it to download folder in android
@@ -313,6 +343,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     print("Save file");
 
     await file.writeAsString(csv);
+    */
 
     logConsole("File exported successfully!");
 
@@ -333,77 +364,80 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       // Ignore if already cancelled or null
     }
 
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen(
-      (value) async {
-        logConsole("Data Rx: $value");
-        final bdata = Uint8List.fromList(value).buffer.asByteData();
-        final pktType = bdata.getUint8(0);
+    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
+      value,
+    ) async {
+      logConsole("Data Rx: $value");
+      final bdata = Uint8List.fromList(value).buffer.asByteData();
+      final pktType = bdata.getUint8(0);
 
-        switch (pktType) {
-          case hPi4Global.CES_CMDIF_TYPE_CMD_RSP:
-            if (mounted) {
-              setState(() {
-                totalSessionCount = bdata.getUint16(3, Endian.little);
-              });
-            }
-            logConsole("Data Rx count: $totalSessionCount");
-            break;
-
-          case hPi4Global.CES_CMDIF_TYPE_LOG_IDX:
-            logConsole("Data Rx length: ${value.length}");
-
-            final logFileID = bdata.getInt64(1, Endian.little);
-            final sessionLength = bdata.getInt16(9, Endian.little);
-            // trendType is unused, remove if not needed
-            // final trendType = bdata.getUint8(11);
-            final header = (logFileID: logFileID, sessionLength: sessionLength);
-            logConsole("Log: $header");
-
-            logHeaderList.add(header);
-
-            if (logHeaderList.length == totalSessionCount && mounted) {
-              setState(() {
-                logIndexReceived = true;
-              });
-            }
-            break;
-
-          case hPi4Global.CES_CMDIF_TYPE_DATA:
-            final pktPayloadSize = value.length - 1;
-            logConsole(
-              "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
-            );
-            currentFileDataCounter += pktPayloadSize;
-            _globalReceivedData += pktPayloadSize;
-            logData.addAll(value.sublist(1));
-
+      switch (pktType) {
+        case hPi4Global.CES_CMDIF_TYPE_CMD_RSP:
+          if (mounted) {
             setState(() {
-              displayPercent = globalDisplayPercentOffset +
-                  (_globalReceivedData / _globalExpectedLength) * 100;
-              if (displayPercent > 100) displayPercent = 100;
+              totalSessionCount = bdata.getUint16(3, Endian.little);
             });
+          }
+          logConsole("Data Rx count: $totalSessionCount");
+          break;
 
-            logConsole(
-              "File data counter: $currentFileDataCounter | Received: ${displayPercent.toStringAsFixed(2)}%",
-            );
+        case hPi4Global.CES_CMDIF_TYPE_LOG_IDX:
+          logConsole("Data Rx length: ${value.length}");
 
-            if (currentFileDataCounter >= _globalExpectedLength) {
-              logConsole("All data $currentFileDataCounter received");
+          final logFileID = bdata.getInt64(1, Endian.little);
+          final sessionLength = bdata.getInt16(9, Endian.little);
+          // trendType is unused, remove if not needed
+          // final trendType = bdata.getUint8(11);
+          final header = (logFileID: logFileID, sessionLength: sessionLength);
+          logConsole("Log: $header");
 
-              if (currentFileDataCounter > _globalExpectedLength) {
-                final diffData = currentFileDataCounter - _globalExpectedLength;
-                logConsole("Data received more than expected by: $diffData bytes");
-                // Optionally trim logData here if needed
-              }
+          logHeaderList.add(header);
 
-              await _writeLogDataToFile(logData, currentFileName);
+          if (logHeaderList.length == totalSessionCount && mounted) {
+            setState(() {
+              logIndexReceived = true;
+            });
+          }
+          break;
 
-              await resetFetchVariables();
+        case hPi4Global.CES_CMDIF_TYPE_DATA:
+          final pktPayloadSize = value.length - 1;
+          logConsole(
+            "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
+          );
+          currentFileDataCounter += pktPayloadSize;
+          _globalReceivedData += pktPayloadSize;
+          logData.addAll(value.sublist(1));
+
+          setState(() {
+            displayPercent =
+                globalDisplayPercentOffset +
+                (_globalReceivedData / _globalExpectedLength) * 100;
+            if (displayPercent > 100) displayPercent = 100;
+          });
+
+          logConsole(
+            "File data counter: $currentFileDataCounter | Received: ${displayPercent.toStringAsFixed(2)}%",
+          );
+
+          if (currentFileDataCounter >= _globalExpectedLength) {
+            logConsole("All data $currentFileDataCounter received");
+
+            if (currentFileDataCounter > _globalExpectedLength) {
+              final diffData = currentFileDataCounter - _globalExpectedLength;
+              logConsole(
+                "Data received more than expected by: $diffData bytes",
+              );
+              // Optionally trim logData here if needed
             }
-            break;
-        }
-      },
-    );
+
+            await _writeLogDataToFile(logData, currentFileName);
+
+            await resetFetchVariables();
+          }
+          break;
+      }
+    });
     widget.device.cancelWhenDisconnected(_streamDataSubscription);
     await dataCharacteristic!.setNotifyValue(true);
   }
@@ -507,7 +541,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   Future<void> _fetchLogFile(int sessionID, int sessionSize) async {
-    
     await _startListeningData();
     logConsole("Fetch logs initiated");
     isTransfering = true;
@@ -631,10 +664,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                       Row(
                                         children: [
                                           Text(
-                                            "Recorded : ${formattedTime(
-                                                  logHeaderList[index]
-                                                      .logFileID,
-                                                )}",
+                                            "Recorded : ${formattedTime(logHeaderList[index].logFileID)}",
                                             style: TextStyle(
                                               fontSize: 12,
                                               color: Colors.white,
