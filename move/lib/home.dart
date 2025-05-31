@@ -33,8 +33,8 @@ class _HomePageState extends State<HomePage> {
 
   final List<Widget> _screens = [HomeScreen(), ScrDeviceMgmt(), ScrSettings()];
 
-  bottomBarHeight(){
-    if(Platform.isIOS){
+  bottomBarHeight() {
+    if (Platform.isIOS) {
       return 110;
     }
   }
@@ -105,7 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String lastUpdatedSpo2 = '';
   String lastUpdatedActivity = '';
 
-
   @override
   void initState() {
     super.initState();
@@ -122,10 +121,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadLastVitalInfo() async {
-   await _loadStoredHRValue();
-   await _loadStoredSpo2Value();
-   await _loadStoredTempValue();
-   await _loadStoredActivityValue();
+    await _loadStoredHRValue();
+    await _loadStoredSpo2Value();
+    await _loadStoredTempValue();
+    await _loadStoredActivityValue();
   }
 
   @override
@@ -137,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return (value * 10).floor() / 10;
   }
 
-  _loadStoredHRValue(){
+  _loadStoredHRValue() {
     hrDataManager = CsvDataManager<HRTrends>(
       filePrefix: "hr_",
       fromRow: (row) {
@@ -154,23 +153,25 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadHRData() async {
     DateTime today = DateTime.now();
-    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(today);
+    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
+      today,
+    );
 
     if (monthlyHRTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyHRTrends.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime =
+          lastTrend.date; // This is the last day's date in the month with data
       double lastAvg = floorToOneDecimal(lastTrend.avg);
-      setState((){
+      setState(() {
         saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
       });
       print('Last Time: $lastTime, Min: $lastAvg');
-
     } else {
       print('No monthly HR trends data available.');
     }
   }
 
-  _loadStoredSpo2Value(){
+  _loadStoredSpo2Value() {
     Spo2DataManager = CsvDataManager<Spo2Trends>(
       filePrefix: "spo2_",
       fromRow: (row) {
@@ -186,25 +187,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSpo2Data() async {
     DateTime today = DateTime.now();
-    List<SpO2MonthlyTrend> monthlySpo2Trends = await Spo2DataManager.getSpO2MonthlyTrend(
-      today,
-    );
+    List<SpO2MonthlyTrend> monthlySpo2Trends =
+        await Spo2DataManager.getSpO2MonthlyTrend(today);
     if (monthlySpo2Trends.isNotEmpty) {
       SpO2MonthlyTrend lastTrend = monthlySpo2Trends.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime =
+          lastTrend.date; // This is the last day's date in the month with data
       double lastAvg = floorToOneDecimal(lastTrend.avg);
-      setState((){
-        saveValue(lastTime,lastAvg, "lastUpdatedSpo2", "latestSpo2");
+      setState(() {
+        saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
       });
       print('Last Time: $lastTime, Min: $lastAvg');
-
     } else {
       print('No monthly HR trends data available.');
     }
   }
 
-
-  _loadStoredTempValue(){
+  _loadStoredTempValue() {
     tempDataManager = CsvDataManager<TempTrends>(
       filePrefix: "temp_",
       fromRow: (row) {
@@ -221,23 +220,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadTempData() async {
     DateTime today = DateTime.now();
-    List<MonthlyTrend> monthlyTempTrends = await tempDataManager.getMonthlyTrend(today);
+    List<MonthlyTrend> monthlyTempTrends = await tempDataManager
+        .getMonthlyTrend(today);
 
     if (monthlyTempTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyTempTrends.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = floorToOneDecimal(lastTrend.avg/100);
-      setState((){
-        saveValue(lastTime,lastAvg, "lastUpdatedTemp", "latestTemp");
+      DateTime lastTime =
+          lastTrend.date; // This is the last day's date in the month with data
+      double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
+      setState(() {
+        saveValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
       });
       print('Last Time: $lastTime, Min: $lastAvg');
-
     } else {
       print('No monthly Temp trends data available.');
     }
   }
 
-  _loadStoredActivityValue(){
+  _loadStoredActivityValue() {
     ActivityDataManager = CsvDataManager<ActivityTrends>(
       filePrefix: "activity_",
       fromRow: (row) {
@@ -254,50 +254,80 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadActivityData() async {
     DateTime today = DateTime.now();
     List<ActivityMonthlyTrend> activityMonthlyTrend =
-    await ActivityDataManager.getActivityMonthlyTrend(today);
+        await ActivityDataManager.getActivityMonthlyTrend(today);
 
     if (activityMonthlyTrend.isNotEmpty) {
       ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime =
+          lastTrend.date; // This is the last day's date in the month with data
       double lastAvg = floorToOneDecimal(lastTrend.steps.toDouble());
-      setState((){
-        saveValue(lastTime,lastAvg, "lastUpdatedActivity", "latestActivityCount");
+      setState(() {
+        saveValue(
+          lastTime,
+          lastAvg,
+          "lastUpdatedActivity",
+          "latestActivityCount",
+        );
       });
       print('Last Time: $lastTime, steps: $lastAvg');
-
     } else {
       print('No monthly Activity trends data available.');
     }
   }
 
-
   // Save a value
-  saveValue(DateTime lastUpdatedTime, double averageHR,
-      String latestTimeString,
-      String latestValueString ) async {
-    String lastDateTime = DateFormat(
-      'EEE d MMM',
-    ).format(lastUpdatedTime);
+  saveValue(
+    DateTime lastUpdatedTime,
+    double averageHR,
+    String latestTimeString,
+    String latestValueString,
+  ) async {
+    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(latestValueString, averageHR.toString());
     await prefs.setString(latestTimeString, lastDateTime);
   }
 
-
-
   // Load the stored value
   _loadStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      lastSyncedDateTime = (prefs.getString('lastSynced') ?? '--') == '0' ? '--' : prefs.getString('lastSynced') ?? '--';
-      lastestHR = (prefs.getString('latestHR') ?? '--') == "0" ? '--' : prefs.getString('latestHR') ?? '--';
-      lastestTemp = (prefs.getString('latestTemp') ?? '--') == "0" ? '--' : prefs.getString('latestTemp') ?? '--';
-      lastestSpo2 = (prefs.getString('latestSpo2') ?? '--') == "0" ? '--' : prefs.getString('latestSpo2') ?? '--';
-      lastestActivity = (prefs.getString('latestActivityCount') ?? '--') == "0" ? '--' : prefs.getString('latestActivityCount') ?? '--';
-      lastUpdatedHR = (prefs.getString('lastUpdatedHR') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedHR') ?? '--';
-      lastUpdatedTemp = (prefs.getString('lastUpdatedTemp') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedTemp') ?? '--';
-      lastUpdatedSpo2 = (prefs.getString('lastUpdatedSpo2') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedSpo2') ?? '--';
-      lastUpdatedActivity = (prefs.getString('lastUpdatedActivity') ?? '--') == "0" ? '--' : prefs.getString('lastUpdatedActivity') ?? '--';
+      lastSyncedDateTime =
+          (prefs.getString('lastSynced') ?? '--') == '0'
+              ? '--'
+              : prefs.getString('lastSynced') ?? '--';
+      lastestHR =
+          (prefs.getString('latestHR') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('latestHR') ?? '--';
+      lastestTemp =
+          (prefs.getString('latestTemp') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('latestTemp') ?? '--';
+      lastestSpo2 =
+          (prefs.getString('latestSpo2') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('latestSpo2') ?? '--';
+      lastestActivity =
+          (prefs.getString('latestActivityCount') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('latestActivityCount') ?? '--';
+      lastUpdatedHR =
+          (prefs.getString('lastUpdatedHR') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('lastUpdatedHR') ?? '--';
+      lastUpdatedTemp =
+          (prefs.getString('lastUpdatedTemp') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('lastUpdatedTemp') ?? '--';
+      lastUpdatedSpo2 =
+          (prefs.getString('lastUpdatedSpo2') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('lastUpdatedSpo2') ?? '--';
+      lastUpdatedActivity =
+          (prefs.getString('lastUpdatedActivity') ?? '--') == "0"
+              ? '--'
+              : prefs.getString('lastUpdatedActivity') ?? '--';
     });
   }
 
@@ -469,13 +499,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.thermostat, color: Colors.white),
                       SizedBox(width: 10.0),
                       Text('Temperature', style: hPi4Global.movecardTextStyle),
-                     // SizedBox(width: 15.0),
+                      // SizedBox(width: 15.0),
                     ],
                   ),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(lastestTemp,
+                      Text(
+                        lastestTemp,
                         style: hPi4Global.movecardValueTextStyle,
                       ),
                     ],
@@ -508,9 +539,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         InkWell(
           onTap: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrActivity()),
-            );
+            Navigator.of(
+              context,
+            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrActivity()));
           },
           child: Card(
             color: Colors.grey[900],
@@ -539,20 +570,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
-                        "Steps",
-                        style: hPi4Global.movecardTextStyle,
-                      ),
+                      Text("Steps", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
                   SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      /*Text(
-                        "Updated: ",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),*/
+
                       Text(
                         lastUpdatedActivity.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -569,45 +594,40 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget liveViewButton(){
+  Widget liveViewButton() {
     return Padding(
-      padding:const EdgeInsets.all(8.0),
-      child: Column(
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-            child:  ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4Color, // background color
-                foregroundColor: Colors.white, // text color
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.all(8.0),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: hPi4Global.hpi4Color, // background color
+            foregroundColor: Colors.white, // text color
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+          ),
+          onPressed: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(Symbols.monitoring, color: Colors.white),
+                const Text(
+                  ' Live View',
+                  style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
-                //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
-              ),
-              onPressed: (){
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => ScrScan(tabIndex:"3")),
-                );
-              },
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                     Icon(Symbols.monitoring, color: Colors.white),
-                    const Text(
-                      ' Live View ',
-                      style: TextStyle(fontSize: 16, color: Colors.white),
-                    ),
-                    Spacer(),
-                  ],
-                ),
-              ),
+                Spacer(),
+              ],
             ),
           ),
-
-        ],
+        ),
       ),
     );
   }
@@ -615,7 +635,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void logConsole(String logString) async {
     print("AKW - $logString");
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -634,30 +653,10 @@ class _HomeScreenState extends State<HomeScreen> {
               fit: BoxFit.fitWidth,
               height: 30,
             ),
-            Column(
-              children: <Widget>[
-                InkWell(
-                  onTap: () {
-                    //showScanDialog();
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-                    );
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: hPi4Global.hpi4Color,
-                    ),
-                    child: Icon(
-                      Icons.sync,
-                      color: hPi4Global.hpi4AppBarIconsColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            Column(children: <Widget>[
+          
+          ],
+        ),
           ],
         ),
       ),
@@ -666,7 +665,31 @@ class _HomeScreenState extends State<HomeScreen> {
           Center(
             child: Column(
               children: <Widget>[
-                SizedBox(height: 20),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: hPi4Global.hpi4Color,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.sync,
+                    color: hPi4Global.hpi4AppBarIconsColor,
+                  ),
+                  label: const Text('Sync', style: TextStyle(fontSize: 16)),
+                ),
+                SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.max,
@@ -685,18 +708,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
                 ),
-                SizedBox(height: 10),
+
                 SizedBox(
                   //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 90,
                   child: liveViewButton(),
                 ),
-
-
               ],
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+        onPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
+          );
+        },
+        tooltip: 'Sync',
+        child: const Icon(Icons.sync),
       ),
     );
   }

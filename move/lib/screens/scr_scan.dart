@@ -164,7 +164,8 @@ class _ScrScanState extends State<ScrScan> {
   void dispose() {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
-    _connectionStateSubscription.cancel();
+
+    _connectionStateSubscription!.cancel();
     super.dispose();
   }
 

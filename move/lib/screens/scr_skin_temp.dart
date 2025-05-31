@@ -307,7 +307,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           );
         });
         print(
-          'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Hour: ${trend.hour}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
         );
       }
 
@@ -342,7 +342,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
         });
 
         print(
-          'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Date: ${trend.date}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
         );
 
       }
@@ -378,7 +378,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
         });
 
         print(
-          'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Date: ${trend.date.day}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
         );
       }
 

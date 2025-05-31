@@ -110,7 +110,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   Future onDisconnectPressed() async {
     try {
-      await widget.device.disconnectAndUpdateStream();
+      await widget.device.disconnect(queue: true);
       Snackbar.show(ABC.c, "Disconnect: Success", success: true);
     } catch (e, backtrace) {
       Snackbar.show(
@@ -996,6 +996,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         isFetchingTempComplete &&
         isFetchingSpo2Complete &&
         isFetchingActivityComplete) {
+          deviceName.disconnect(queue: true);
       Navigator.push(
         Navigator.of(context).context,
         MaterialPageRoute(builder: (context) => HomePage()),
@@ -1126,7 +1127,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () async {
-              await onDisconnectPressed();
+              onDisconnectPressed();
               Navigator.of(
                 context,
               ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));

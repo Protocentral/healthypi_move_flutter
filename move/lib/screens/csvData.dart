@@ -226,15 +226,15 @@ class CsvDataManager<T> {
     DateTime endOfMonth =
         (dateInMonth.month < 12)
             ? DateTime(
-              dateInMonth.year,
-              dateInMonth.month + 1,
-              1,
-            ).subtract(const Duration(milliseconds: 1))
+                dateInMonth.year,
+                dateInMonth.month + 1,
+                1,
+              ).subtract(const Duration(seconds: 1))
             : DateTime(
-              dateInMonth.year + 1,
-              1,
-              1,
-            ).subtract(const Duration(milliseconds: 1));
+                dateInMonth.year + 1,
+                1,
+                1,
+              ).subtract(const Duration(seconds: 1));
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(
       startOfMonth,
@@ -597,6 +597,9 @@ class CsvDataManager<T> {
   /// This method assumes that the SpO2 data is stored in a similar format as the daily trends.
   Future<Map<String, double>> getSpO2DailyStatistics(DateTime day) async {
     List<SpO2DailyTrend> dailyTrends = await getSpO2DailyTrend(day);
+    if (dailyTrends.isEmpty) {
+      return {'min': 0, 'max': 0, 'avg': 0};
+    }
     double min = dailyTrends
         .map((trend) => trend.min)
         .reduce((a, b) => a < b ? a : b);

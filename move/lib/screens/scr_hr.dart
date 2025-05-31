@@ -261,12 +261,12 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     }
   }
 
-  double borderWidth(){
-    if (_tabController.index == 0){
+  double borderWidth() {
+    if (_tabController.index == 0) {
       return 7;
-    }else if(_tabController.index == 1){
+    } else if (_tabController.index == 1) {
       return 20;
-    }else{
+    } else {
       return 7;
     }
   }
@@ -328,20 +328,15 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
     DateTime today = DateTime.now();
 
-    if(_tabController.index == 0){
+    if (_tabController.index == 0) {
       // Get the hourly HR trends for today
       hrTrendsData = [];
       List<HourlyTrend> hourlyHRTrends =
-      await hrDataManager.getHourlyTrendForToday();
+          await hrDataManager.getHourlyTrendForToday();
       for (var trend in hourlyHRTrends) {
-
-        setState((){
+        setState(() {
           hrTrendsData.add(
-            HRTrends(
-              trend.hour,
-              trend.max.toInt(),
-              trend.min.toInt(),
-            ),
+            HRTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
           );
         });
         print(
@@ -354,61 +349,53 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         today,
       );
 
-      setState((){
+      setState(() {
         rangeMinHR = dailyStats['min']!.toInt();
         rangeMaxHR = dailyStats['max']!.toInt();
         averageHR = dailyStats['avg']!.toInt();
       });
 
       print('Daily Stats: $dailyStats');
-
-    }else if(_tabController.index == 1){
+    } else if (_tabController.index == 1) {
       // Get the weekly HR trends for the current week
       hrTrendsData = [];
       List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
         today,
       );
       for (var trend in weeklyHRTrends) {
-        setState((){
+        setState(() {
           hrTrendsData.add(
-            HRTrends(
-              trend.date,
-              trend.max.toInt(),
-              trend.min.toInt(),
-            ),
+            HRTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
           );
         });
 
         print(
           'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
         );
-
       }
 
       Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
         today,
       );
 
-      setState((){
+      setState(() {
         rangeMinHR = weeklyStats['min']!.toInt();
         rangeMaxHR = weeklyStats['max']!.toInt();
         averageHR = weeklyStats['avg']!.toInt();
       });
 
       print('Weekly Stats: $weeklyStats');
-
-    }else if(_tabController.index == 2){
+    } else if (_tabController.index == 2) {
       // Get the monthly HR trends for the current month
       hrTrendsData = [];
       List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
         today,
       );
       for (var trend in monthlyHRTrends) {
-
-        setState((){
+        setState(() {
           hrTrendsData.add(
             HRTrends(
-              trend.date,
+              trend.date.add(Duration(days: 1)),
               trend.max.toInt(),
               trend.min.toInt(),
             ),
@@ -420,11 +407,10 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         );
       }
 
-      Map<String, double> monthlyStats = await hrDataManager.getMonthlyStatistics(
-        today,
-      );
+      Map<String, double> monthlyStats = await hrDataManager
+          .getMonthlyStatistics(today);
 
-      setState((){
+      setState(() {
         rangeMinHR = monthlyStats['min']!.toInt();
         rangeMaxHR = monthlyStats['max']!.toInt();
         averageHR = monthlyStats['avg']!.toInt();
@@ -432,7 +418,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
 
       print('Monthly Stats: $monthlyStats');
     }
-
   }
 
   Widget displayRangeValues() {
@@ -487,7 +472,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                     children: <Widget>[
                       SizedBox(width: 10.0),
                       Text('BPM', style: hPi4Global.movecardSubValueTextStyle),
-                     // SizedBox(width: 15.0),
+                      // SizedBox(width: 15.0),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
@@ -545,7 +530,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       ],
     );
   }
-
 
   Widget displayCard(String tab) {
     return Card(
