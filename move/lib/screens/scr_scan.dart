@@ -508,13 +508,13 @@ class _ScrScanState extends State<ScrScan> {
               children: [
                 SizedBox(width: 10),
                 Text(
-                  'Do you wish to pair the device ?',
+                  'Do you wish to use this as the preferred device ?',
                   style: TextStyle(fontSize: 18, color: Colors.white),
                 ),
               ],
             ),
             content: Text(
-              ' Please click "Yes" to pair',
+              ' Please click "Yes" to set',
               style: TextStyle(fontSize: 16, color: Colors.white),
             ),
             actions: [

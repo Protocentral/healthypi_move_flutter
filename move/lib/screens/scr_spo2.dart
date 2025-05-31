@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
+import 'csvData.dart';
 
 class ScrSPO2 extends StatefulWidget {
   const ScrSPO2({super.key});
@@ -42,7 +43,20 @@ class _ScrSPO2State extends State<ScrSPO2>
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _listCSVFiles();
+
+    spo2DataManager = CsvDataManager<Spo2Trends>(
+      filePrefix: "spo2_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int spo2 = int.tryParse(row[1]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return Spo2Trends(date, spo2, 0);
+      },
+      getFileType: (file) => "spo2",
+    );
+
+    _loadData();
+
   }
 
   @override
@@ -55,7 +69,7 @@ class _ScrSPO2State extends State<ScrSPO2>
 
   void _handleTabChange() {
     setState(() {
-      _listCSVFiles();
+      _loadData();
     });
   }
 
@@ -205,6 +219,16 @@ class _ScrSPO2State extends State<ScrSPO2>
     }
   }
 
+  double borderWidth(){
+    if (_tabController.index == 0){
+      return 7;
+    }else if(_tabController.index == 1){
+      return 20;
+    }else{
+      return 7;
+    }
+  }
+
   Widget buildChartBlock() {
     return Padding(
         padding: const EdgeInsets.all(2.0),
@@ -239,7 +263,7 @@ class _ScrSPO2State extends State<ScrSPO2>
                           xValueMapper: (Spo2Trends data, _) => data.date,
                           lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
                           highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
-                        borderWidth: 7,
+                        borderWidth: borderWidth(),
                         animationDuration: 0,
                       ),
                     ],
@@ -251,180 +275,123 @@ class _ScrSPO2State extends State<ScrSPO2>
         ));
   }
 
-  String _formatDate(DateTime date) {
-    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-  }
+// Example usage for HR data:
+  late CsvDataManager<Spo2Trends> spo2DataManager;
 
-  Future<void> _listCSVFiles() async {
-    Directory? downloadsDirectory;
-    if (Platform.isAndroid) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    }
-    if (downloadsDirectory != null) {
-      String downloadsPath = downloadsDirectory.path;
-      Directory downloadsDir = Directory(downloadsPath);
-      if (downloadsDir.existsSync()) {
-        List<FileSystemEntity> files = downloadsDir.listSync();
-
-        List<File> csvFiles = files
-            .where((file) => file is File && file.path.endsWith('.csv'))
-            .map((file) => file as File)
-            .where((file) => p.basename(file.path).startsWith("spo2_")) // Filter by prefix
-            .toList();
-
-        List<String> fileNames = csvFiles.map((file) => p.basename(file.path)).toList();
-
-        for (File file in csvFiles) {
-          String timestamp = await _getSecondLineTimestamp(file);
-          String timestamp1 = timestamp.split(",")[0];
-          int timestamp2 = int.parse(timestamp1);
-          int updatedTimestamp = timestamp2 * 1000;
-          String fileName1 = p.basename(file.path);
-
-          DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(updatedTimestamp);
-          DateTime now = DateTime.now();
-
-          if (_tabController.index == 0) {
-            // Last 1 hour
-            DateTime oneHourAgo = now.subtract(Duration(hours: 1));
-            if (timestampDateTime.isAfter(oneHourAgo) && timestampDateTime.isBefore(now)) {
-              await _processFileForHourlyOrDailyStats(fileName1, "hour");
-            }
-          } else if (_tabController.index == 1) {
-            // Last 24 hours (1 day)
-            DateTime oneDayAgo = now.subtract(Duration(days: 1));
-            if (timestampDateTime.isAfter(oneDayAgo) && timestampDateTime.isBefore(now)) {
-              await _processFileForHourlyOrDailyStats(fileName1, "day");
-            }
-          } else if (_tabController.index == 2) {
-            // Last 30 days (1 month)
-            DateTime oneMonthAgo = now.subtract(Duration(days: 30));
-            if (timestampDateTime.isAfter(oneMonthAgo) && timestampDateTime.isBefore(now)) {
-              await _processFileForHourlyOrDailyStats(fileName1, "month");
-            }
-          }
-        }
-      }
-    }
-  }
-
-  Future<void> _processFileForHourlyOrDailyStats(String fileName, String range) async {
-    Directory? downloadsDirectory;
-    if (Platform.isAndroid) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
-      downloadsDirectory = await getApplicationDocumentsDirectory();
+  Future<void> _loadData() async {
+    List<Spo2Trends> data = await spo2DataManager.getDataObjects();
+    if (data.isEmpty) {
+      print('No valid HR data found in CSV files.');
+      return;
     }
 
-    if (downloadsDirectory != null) {
-      String filePath = '${downloadsDirectory.path}/$fileName';
-      File csvFile = File(filePath);
+    DateTime today = DateTime.now();
 
-      if (await csvFile.exists()) {
-        String fileContent = await csvFile.readAsString();
-       _calculateMinMaxBasedOnRange(fileContent, range);
+    if(_tabController.index == 0){
+      // Get the hourly HR trends for today
+      Spo2TrendsData = [];
+      List<SpO2DailyTrend> hourlySpo2Trends =
+      await spo2DataManager.getSpO2DailyTrend(today);
+      for (var trend in hourlySpo2Trends) {
 
-      }
-    }
-  }
-
-  _calculateMinMaxBasedOnRange(String fileContent, String range) {
-    List<String> lines = fileContent.split('\n');
-    Map<String, List<int>> groupedData = {};
-    DateTime now = DateTime.now();
-    Duration rangeDuration;
-
-    // Define the range for grouping
-    if (range == "hour") {
-      rangeDuration = Duration(hours: 1);
-    } else if (range == "day") {
-      rangeDuration = Duration(days: 1);
-    } else if (range == "month") {
-      rangeDuration = Duration(days: 30); // Assuming 30 days for a month
-    } else {
-      throw Exception("Invalid range specified.");
-    }
-
-    for (int i = 1; i < lines.length; i++) { // Start from 1 to skip the header
-      if (lines[i].trim().isEmpty) continue;
-
-      List<String> parts = lines[i].split(',');
-      if (parts.length < 2) continue;
-
-      int timestamp = int.parse(parts[0]) * 1000;
-      int spo2 = int.parse(parts[1]);
-
-      DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(timestamp);
-      if (dateTime.isBefore(now.subtract(rangeDuration)) || dateTime.isAfter(now)) {
-        continue; // Skip data outside the range
+       /* setState((){
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+        });
+        print(
+          'Hour: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );*/
       }
 
-      String rangeKey = "0";
+      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
+     /* Map<String, double> dailyStats = await spo2DataManager.getDailyStatistics(
+        today,
+      );
 
-      if (range == "hour") {
-        rangeKey = DateFormat('yyyy-MM-dd HH:00:00').format(dateTime); // Group by hour
-      } else if (range == "day" || range == "month") {
-        rangeKey = DateFormat('yyyy-MM-dd').format(dateTime); // Group by day
-      }
-
-      if (!groupedData.containsKey(rangeKey)) {
-        groupedData[rangeKey] = [];
-      }
-      groupedData[rangeKey]!.add(spo2);
-    }
-    int minSpo2 = 0;
-    int maxSpo2 = 0;
-
-    groupedData.forEach((group, spo2Values) {
-      minSpo2 = spo2Values.reduce((a, b) => a < b ? a : b); // Calculate min as an int
-      maxSpo2 = spo2Values.reduce((a, b) => a > b ? a : b); // Calculate max as an int
-
-      DateTime formattedDateTime = DateTime.parse(group);
-      setState(() {
-        Spo2TrendsData.add(Spo2Trends(formattedDateTime, minSpo2, maxSpo2));
-        restingSpo2 = maxSpo2;
-        averageSpo2 = maxSpo2;
-        rangeMinSpo2 = minSpo2;
-        rangeMaxSpo2 = maxSpo2;
-
-      });
-     // print("$range: $group, Min: $minSpo2, Max: $maxSpo2");
-    });
-
-    if (groupedData.isNotEmpty) {
-      String lastGroup = groupedData.keys.last;
-      setState(() {
-        lastUpdatedTime = DateTime.parse(lastGroup);
+      setState((){
+        rangeMinHR = dailyStats['min']!.toInt();
+        rangeMaxHR = dailyStats['max']!.toInt();
+        averageHR = dailyStats['avg']!.toInt();
       });
 
-     /* String todayStr = _formatDate(DateTime.now());
-      if (_formatDate(lastUpdatedTime) == todayStr) {
-        saveValue(lastUpdatedTime);
-      }*/
-      saveValue(lastUpdatedTime);
-    }
-  }
+      print('Daily Stats: $dailyStats');*/
 
-  Future<String> _getSecondLineTimestamp(File file) async {
-    try {
-      List<String> lines = await file.readAsLines();
-      if (lines.length > 1) {
-        return lines[1]; // Assuming the timestamp is on the second line
+    }else if(_tabController.index == 1){
+      // Get the weekly HR trends for the current week
+      Spo2TrendsData = [];
+      List<SpO2WeeklyTrend> weeklySpo2Trends = await spo2DataManager.getSpO2WeeklyTrend(
+        today,
+      );
+      for (var trend in weeklySpo2Trends) {
+        setState((){
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+        });
+
+        print(
+          'Date: ${trend.date}, Min: ${trend.min}, Max: ${trend.max}, Avg : ${trend.avg}',
+        );
+
       }
-      return 'No second line';
-    } catch (e) {
-      return 'Error reading file: $e';
-    }
-  }
 
-  // Save a value
-  saveValue(DateTime lastUpdatedTime) async {
-    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('latestSpo2', restingSpo2.toString());
-    await prefs.setString('lastUpdatedSpo2', lastDateTime.toString());
+     /* Map<String, double> weeklyStats = await spo2DataManager.getWeeklyStatistics(
+        today,
+      );
+
+      setState((){
+        rangeMinHR = weeklyStats['min']!.toInt();
+        rangeMaxHR = weeklyStats['max']!.toInt();
+        averageHR = weeklyStats['avg']!.toInt();
+      });
+
+      print('Weekly Stats: $weeklyStats');*/
+
+    }else if(_tabController.index == 2){
+      // Get the monthly HR trends for the current month
+      Spo2TrendsData = [];
+      List<SpO2MonthlyTrend> monthlySpo2Trends = await spo2DataManager.getSpO2MonthlyTrend(
+        today,
+      );
+      for (var trend in monthlySpo2Trends) {
+
+        setState((){
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+        });
+
+        print(
+          'Date: ${trend.date.day}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}',
+        );
+      }
+
+      /*Map<String, double> monthlyStats = await spo2DataManager.getMonthlyStatistics(
+        today,
+      );
+
+      setState((){
+        rangeMinHR = monthlyStats['min']!.toInt();
+        rangeMaxHR = monthlyStats['max']!.toInt();
+        averageHR = monthlyStats['avg']!.toInt();
+      });
+
+      print('Monthly Stats: $monthlyStats');*/
+    }
+
   }
 
 

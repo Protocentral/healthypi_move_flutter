@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
 
 import '../globals.dart';
@@ -304,7 +305,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                     MainAxisAlignment.start,
                                                 children: <Widget>[
                                                   Icon(
-                                                    Icons.sync,
+                                                    Symbols.blood_pressure,
                                                     color: Colors.white,
                                                   ),
                                                   const Text(
