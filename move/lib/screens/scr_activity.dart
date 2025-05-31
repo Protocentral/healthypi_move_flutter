@@ -71,60 +71,55 @@ class _ScrActivityState extends State<ScrActivity>
     if (_tabController.index == 0) {
       return DateTimeAxis(
         // Display a 6-hour range dynamically based on slider values
-          minimum: DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-            DateTime.now().day,
-            0,
-            0,
-            0,
-          ), // Start value of the range slider
-          maximum: DateTime(
-            DateTime.now().year,
-            DateTime.now().month,
-            DateTime.now().day+1,
-            0,
-            0,
-            0,
-          ),
-          //DateTime.now(), // End value of the range slider
-          interval: 6,
-          intervalType: DateTimeIntervalType.hours,
-          dateFormat: DateFormat.H(),
-          majorGridLines: MajorGridLines(width: 0),
-          labelStyle: TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          axisLabelFormatter: (AxisLabelRenderDetails details) {
-            // Replace "0" (midnight) with "24"
-            String labelText = details.text;
-            if (details.value == DateTime(
-              DateTime
-                  .now()
-                  .year,
-              DateTime
-                  .now()
-                  .month,
-              DateTime
-                  .now()
-                  .day + 1,
-              0,
-              0,
-              0,
-            ).millisecondsSinceEpoch.toDouble()) {
-              labelText = '24';
-            }
-            return ChartAxisLabel(
-              labelText,
-              TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
-            );
+        minimum: DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day,
+          0,
+          0,
+          0,
+        ), // Start value of the range slider
+        maximum: DateTime(
+          DateTime.now().year,
+          DateTime.now().month,
+          DateTime.now().day + 1,
+          0,
+          0,
+          0,
+        ),
+        //DateTime.now(), // End value of the range slider
+        interval: 6,
+        intervalType: DateTimeIntervalType.hours,
+        dateFormat: DateFormat.H(),
+        majorGridLines: MajorGridLines(width: 0),
+        labelStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        axisLabelFormatter: (AxisLabelRenderDetails details) {
+          // Replace "0" (midnight) with "24"
+          String labelText = details.text;
+          if (details.value ==
+              DateTime(
+                DateTime.now().year,
+                DateTime.now().month,
+                DateTime.now().day + 1,
+                0,
+                0,
+                0,
+              ).millisecondsSinceEpoch.toDouble()) {
+            labelText = '24';
           }
+          return ChartAxisLabel(
+            labelText,
+            TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          );
+        },
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
@@ -280,6 +275,8 @@ class _ScrActivityState extends State<ScrActivity>
 
     DateTime today = DateTime.now();
 
+    print(today);
+
     if(_tabController.index == 0){
       // Get the hourly HR trends for today
       ActivityTrendsData = [];
@@ -364,6 +361,22 @@ class _ScrActivityState extends State<ScrActivity>
           'Month: ${trend.date}, Step: ${trend.steps}',
         );
       }
+    }
+
+    List<ActivityMonthlyTrend> activityMonthlyTrend =
+    await activityDataManager.getActivityMonthlyTrend(today);
+
+    if (activityMonthlyTrend.isNotEmpty) {
+      ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      int lastAvg = lastTrend.steps;
+      setState((){
+        Count = lastAvg;
+      });
+      print('Last Time: $lastTime, Min: $lastAvg');
+
+    } else {
+      print('No monthly HR trends data available.');
     }
   }
 

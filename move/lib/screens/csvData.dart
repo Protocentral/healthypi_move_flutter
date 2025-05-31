@@ -291,6 +291,7 @@ class CsvDataManager<T> {
         timestamp.year,
         timestamp.month,
         timestamp.day,
+        timestamp.hour,
       );
       dailySteps.update(
         dayKey,

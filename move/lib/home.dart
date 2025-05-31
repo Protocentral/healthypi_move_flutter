@@ -123,14 +123,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadLastVitalInfo() async {
    await _loadStoredHRValue();
+   await _loadStoredSpo2Value();
    await _loadStoredTempValue();
-   await _loadHRData();
-   await _loadTempData();
+   await _loadStoredActivityValue();
   }
 
   @override
   Future<void> dispose() async {
     super.dispose();
+  }
+
+  double floorToOneDecimal(double value) {
+    return (value * 10).floor() / 10;
   }
 
   _loadStoredHRValue(){
@@ -145,6 +149,7 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       getFileType: (file) => "hr",
     );
+    _loadHRData();
   }
 
   Future<void> _loadHRData() async {
@@ -154,9 +159,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (monthlyHRTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyHRTrends.last;
       DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = lastTrend.avg;
+      double lastAvg = floorToOneDecimal(lastTrend.avg);
       setState((){
-        saveValue(lastTime,lastAvg, "lastUpdatedHR", "latestHR");
+        saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
       });
       print('Last Time: $lastTime, Min: $lastAvg');
 
@@ -165,18 +170,53 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  _loadStoredSpo2Value(){
+    Spo2DataManager = CsvDataManager<Spo2Trends>(
+      filePrefix: "spo2_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int spo2 = int.tryParse(row[1]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return Spo2Trends(date, spo2, 0);
+      },
+      getFileType: (file) => "spo2",
+    );
+    _loadSpo2Data();
+  }
+
+  Future<void> _loadSpo2Data() async {
+    DateTime today = DateTime.now();
+    List<SpO2MonthlyTrend> monthlySpo2Trends = await Spo2DataManager.getSpO2MonthlyTrend(
+      today,
+    );
+    if (monthlySpo2Trends.isNotEmpty) {
+      SpO2MonthlyTrend lastTrend = monthlySpo2Trends.last;
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      double lastAvg = floorToOneDecimal(lastTrend.avg);
+      setState((){
+        saveValue(lastTime,lastAvg, "lastUpdatedSpo2", "latestSpo2");
+      });
+      print('Last Time: $lastTime, Min: $lastAvg');
+
+    } else {
+      print('No monthly HR trends data available.');
+    }
+  }
+
+
   _loadStoredTempValue(){
-    tempDataManager = CsvDataManager<HRTrends>(
+    tempDataManager = CsvDataManager<TempTrends>(
       filePrefix: "temp_",
       fromRow: (row) {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int minHR = int.tryParse(row[1]) ?? 0;
         int maxHR = int.tryParse(row[2]) ?? 0;
         DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return HRTrends(date, maxHR, minHR);
+        return TempTrends(date, maxHR.toDouble(), minHR.toDouble());
       },
       getFileType: (file) => "temp",
     );
+    _loadTempData();
   }
 
   Future<void> _loadTempData() async {
@@ -186,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (monthlyTempTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyTempTrends.last;
       DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = lastTrend.avg/100;
+      double lastAvg = floorToOneDecimal(lastTrend.avg/100);
       setState((){
         saveValue(lastTime,lastAvg, "lastUpdatedTemp", "latestTemp");
       });
@@ -196,6 +236,40 @@ class _HomeScreenState extends State<HomeScreen> {
       print('No monthly Temp trends data available.');
     }
   }
+
+  _loadStoredActivityValue(){
+    ActivityDataManager = CsvDataManager<ActivityTrends>(
+      filePrefix: "activity_",
+      fromRow: (row) {
+        int timestamp = int.tryParse(row[0]) ?? 0;
+        int count = int.tryParse(row[1]) ?? 0;
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        return ActivityTrends(date, count);
+      },
+      getFileType: (file) => "activity",
+    );
+    _loadActivityData();
+  }
+
+  Future<void> _loadActivityData() async {
+    DateTime today = DateTime.now();
+    List<ActivityMonthlyTrend> activityMonthlyTrend =
+    await ActivityDataManager.getActivityMonthlyTrend(today);
+
+    if (activityMonthlyTrend.isNotEmpty) {
+      ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      double lastAvg = floorToOneDecimal(lastTrend.steps.toDouble());
+      setState((){
+        saveValue(lastTime,lastAvg, "lastUpdatedActivity", "latestActivityCount");
+      });
+      print('Last Time: $lastTime, steps: $lastAvg');
+
+    } else {
+      print('No monthly Activity trends data available.');
+    }
+  }
+
 
   // Save a value
   saveValue(DateTime lastUpdatedTime, double averageHR,
@@ -245,8 +319,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Example usage for HR data:
   late CsvDataManager<HRTrends> hrDataManager;
-  late CsvDataManager<HRTrends> tempDataManager;
-
+  late CsvDataManager<TempTrends> tempDataManager;
+  late CsvDataManager<Spo2Trends> Spo2DataManager;
+  late CsvDataManager<ActivityTrends> ActivityDataManager;
 
   Widget _buildMainGrid() {
     return GridView.count(
@@ -400,8 +475,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
-                        lastestTemp,
+                      Text(lastestTemp,
                         style: hPi4Global.movecardValueTextStyle,
                       ),
                     ],

@@ -290,13 +290,6 @@ class _ScrScanState extends State<ScrScan> {
 
     await device.connect();
 
-    /*device.connectAndUpdateStream().catchError((e) {
-      Snackbar.show(
-        ABC.c,
-        prettyException("Connect Error:", e),
-        success: false,
-      );
-    });*/
   }
 
   Future<void> _eraseAllLogs(
@@ -507,10 +500,14 @@ class _ScrScanState extends State<ScrScan> {
             title: Row(
               children: [
                 SizedBox(width: 10),
-                Text(
-                  'Do you wish to use this as the preferred device ?',
-                  style: TextStyle(fontSize: 18, color: Colors.white),
-                ),
+                Expanded(
+                  child:  Text(
+                    'Do you wish to use this as the preferred device ?',
+                    style: TextStyle(fontSize: 18, color: Colors.white),
+                    maxLines: 2, // or however many lines you want
+                    //overflow: TextOverflow.fade, // or clip/ellipsis
+                  ),
+                )
               ],
             ),
             content: Text(
