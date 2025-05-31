@@ -105,9 +105,9 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
             dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
           ),
           child: AlertDialog(
-
             title: Text('Are you sure you wish to delete all data.',
-                style:TextStyle(fontSize: 18, color: Colors.white)),
+                style:TextStyle(fontSize: 18, color: Colors.white)
+            ),
             content: Text('This action is not reversible.',
                 style:TextStyle(fontSize: 16, color: Colors.red)),
             actions: <Widget>[

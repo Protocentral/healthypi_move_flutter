@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/utils/extra.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
@@ -54,9 +56,71 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   bool startListeningFlag = false;
 
+  bool _autoConnecting = false;
+  bool _deviceNotFound = false;
+  bool _displayNoScan = false;
+  String _deviceNotFoundMessage = "";
+
+  Future<String?> getPairedDeviceMac() async {
+    try {
+      final Directory appDocDir = await getApplicationDocumentsDirectory();
+      final String filePath = '${appDocDir.path}/paired_device_mac.txt';
+      final File macFile = File(filePath);
+      if (!await macFile.exists()) return null;
+      return (await macFile.readAsString()).trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _tryAutoConnectToPairedDevice() async {
+    String? pairedMac = await getPairedDeviceMac();
+    if (pairedMac != null && pairedMac.isNotEmpty) {
+      setState(() {
+        _autoConnecting = true;
+        _deviceNotFound = false;
+        _deviceNotFoundMessage = "";
+      });
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+      StreamSubscription? tempSub;
+      bool found = false;
+      tempSub = FlutterBluePlus.scanResults.listen((results) async {
+        for (var result in results) {
+          if (result.device.id.id == pairedMac) {
+            found = true;
+            await FlutterBluePlus.stopScan();
+            await tempSub?.cancel();
+            if (mounted)
+              setState(() {
+                _autoConnecting = false;
+                _deviceNotFound = false;
+                _deviceNotFoundMessage = "";
+              });
+            await onConnectPressed(result.device);
+            return;
+          }
+        }
+      });
+      // Timeout fallback
+      await Future.delayed(const Duration(seconds: 10), () async {
+        await FlutterBluePlus.stopScan();
+        await tempSub?.cancel();
+        if (!found && mounted) {
+          setState(() {
+            _autoConnecting = false;
+            _deviceNotFound = true;
+            _deviceNotFoundMessage =
+            "Device not found. Please make sure your paired device is turned on and in range.";
+          });
+        }
+      });
+    }
+  }
+
+
   @override
   void initState() {
-
+    super.initState();
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
       (results) {
         if (mounted) {
@@ -82,7 +146,8 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         setState(() {});
       }
     });
-    super.initState();
+
+    _tryAutoConnectToPairedDevice();
   }
 
   @override
@@ -188,7 +253,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   late BluetoothDevice Connecteddevice;
 
-  Future<void> onConnectPressed(BluetoothDevice device) async {
+ /* Future<void> onConnectPressed(BluetoothDevice device) async {
     device.connectAndUpdateStream().catchError((e) {
       Snackbar.show(
         ABC.c,
@@ -232,6 +297,125 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         }
       }
     });
+  }*/
+
+  redirectToScreens(BluetoothDevice device) {
+    if (mounted) {
+      setState(() {
+        Connecteddevice = device;
+        _displayNoScan   = true;
+        sendSetCalibrationCommand(device);
+        _showcalibrationCard = true;
+      });
+    }
+  }
+
+  bool pairedStatus = false;
+
+  Future<void> onConnectPressed(BluetoothDevice device) async {
+    _connectionStateSubscription = device.connectionState.listen((state) async {
+      _connectionState = state;
+
+      if (_connectionState == BluetoothConnectionState.connected) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        String? pairedStatus = "";
+        setState(() {
+          pairedStatus = prefs.getString('pairedStatus');
+        });
+        if (pairedStatus == "paired") {
+          redirectToScreens(device);
+          _connectionStateSubscription.cancel();
+        } else {
+          showPairDeviceDialog(context, device);
+          _connectionStateSubscription.cancel();
+        }
+      }
+    });
+    device.cancelWhenDisconnected(
+      _connectionStateSubscription,
+      delayed: true,
+      next: true,
+    );
+
+    await device.connect();
+
+  }
+
+  showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            textTheme: TextTheme(),
+            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+          ),
+          child: AlertDialog(
+            title: Row(
+              children: [
+                SizedBox(width: 10),
+                Expanded(
+                  child:  Text(
+                    'Do you wish to use this as the preferred device ?',
+                    style: TextStyle(fontSize: 18, color: Colors.white),
+                    maxLines: 2, // or however many lines you want
+                    //overflow: TextOverflow.fade, // or clip/ellipsis
+                  ),
+                )
+              ],
+            ),
+            content: Text(
+              ' Please click "Yes" to set',
+              style: TextStyle(fontSize: 16, color: Colors.white),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  try {
+                    final Directory appDocDir =
+                    await getApplicationDocumentsDirectory();
+                    final String filePath =
+                        '${appDocDir.path}/paired_device_mac.txt';
+                    final File macFile = File(filePath);
+                    await macFile.writeAsString(device.id.id);
+                    logConsole("...........Paired status saved");
+                    SharedPreferences prefs =
+                    await SharedPreferences.getInstance();
+                    setState(() {
+                      prefs.setString('pairedStatus', 'paired');
+                    });
+                    Navigator.pop(context);
+                    redirectToScreens(device);
+                  } catch (e) {}
+                },
+                child: Text(
+                  'Yes',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  redirectToScreens(device);
+                },
+                child: Text(
+                  'No',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: hPi4Global.hpi4Color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> sendSetCalibrationCommand(BluetoothDevice device) async {
@@ -487,7 +671,69 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 
   Widget _buildScanCard(BuildContext context) {
-    if (_showScanCard == true) {
+    // --- Auto-Connect UI ---
+    if (_autoConnecting) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text(
+                "Connecting to your paired device...",
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // --- End Auto-Connect UI ---
+
+    // --- Device Not Found Message UI ---
+    if (_deviceNotFound) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.redAccent, size: 50),
+              SizedBox(height: 20),
+              Text(
+                _deviceNotFoundMessage,
+                style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _deviceNotFound = false;
+                    _deviceNotFoundMessage = "";
+                  });
+                  _tryAutoConnectToPairedDevice();
+                },
+                child: Text("Try Again"),
+              ),
+
+            ],
+          ),
+        ),
+      );
+    }
+    // --- End Device Not Found Message UI ---
+    // ...existing code...
+    if(_displayNoScan == false){
       return Card(
         color: Colors.grey[800],
         child: Padding(
@@ -495,26 +741,43 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
           child: Column(
             children: <Widget>[
               Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'Select the device to calibrate',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+                padding: const EdgeInsets.all(8.0),
+                child: Text(
+                  'Select the device',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
                   ),
+                  textAlign: TextAlign.center,
                 ),
+              ),
               buildScanButton(context),
               ..._buildScanResultTiles(context),
             ],
           ),
         ),
       );
-    } else {
-      return Container();
+    }else{
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisSize: MainAxisSize.max,
+        children: <Widget>[
+          SizedBox(width: 10.0),
+          Text(
+            "Connected to: " +
+                Connecteddevice.remoteId.toString(),
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.green,
+            ),
+          ),
+          SizedBox(width: 10.0),
+        ],
+      );
     }
+
+
   }
 
   Widget buildScanButton(BuildContext context) {
