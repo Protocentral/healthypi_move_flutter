@@ -1407,7 +1407,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
             showCalibrationCard(),
             //SizedBox(height: 20),
             //_showCancelButton(),
-            Padding(
+           /* Padding(
               padding: const EdgeInsets.all(16),
               child: Card(
                 color: Colors.grey[900],
@@ -1423,7 +1423,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   ),
                 ),
               ),
-            ),
+            ),*/
 
           ],
         ),

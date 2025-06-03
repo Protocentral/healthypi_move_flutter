@@ -35,7 +35,7 @@ class _HomePageState extends State<HomePage> {
 
   bottomBarHeight() {
     if (Platform.isIOS) {
-      return 110;
+      return 110.0;
     }
   }
 
@@ -665,7 +665,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Center(
             child: Column(
               children: <Widget>[
-                ElevatedButton.icon(
+                /*ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: hPi4Global.hpi4Color,
                     foregroundColor: Colors.white,
@@ -688,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: hPi4Global.hpi4AppBarIconsColor,
                   ),
                   label: const Text('Sync', style: TextStyle(fontSize: 16)),
-                ),
+                ),*/
                 SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -719,17 +719,28 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.red,
-        foregroundColor: Colors.white,
-        onPressed: () {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-          );
-        },
-        tooltip: 'Sync',
-        child: const Icon(Icons.sync),
-      ),
+      floatingActionButton:Theme(
+        data: Theme.of(context).copyWith(
+          floatingActionButtonTheme: FloatingActionButtonThemeData(
+            extendedSizeConstraints: BoxConstraints(
+              minHeight: 40, // Set your desired height
+              minWidth: 50,
+            ),
+          ),
+        ),
+        child: FloatingActionButton.extended(
+          backgroundColor: Colors.red,
+          foregroundColor: Colors.white,
+          onPressed: () {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
+            );
+          },
+          tooltip: 'Sync',
+          icon: const Icon(Icons.sync),
+          label: const Text('Sync', style: TextStyle(fontSize: 16)),
+        ),
+      )
     );
   }
 }

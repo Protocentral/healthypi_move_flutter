@@ -319,6 +319,13 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       dataList.add(dataRow);
     }
 
+    /*for (int i = 0; i < logNumberPoints-1; i++) {
+      List<String> dataRow = [
+        bdata.getInt32((i * 4), Endian.little).toString(),
+      ];
+      dataList.add(dataRow);
+    }*/
+
     // Code to convert logData to CSV file
 
     String csvData = const ListToCsvConverter().convert(dataList);
