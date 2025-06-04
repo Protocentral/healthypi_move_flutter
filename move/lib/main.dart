@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 //#import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:upgrader/upgrader.dart';
 
 import 'home.dart';
 
@@ -20,7 +21,10 @@ void main() async {
             ),
           ),
         ),
-        home: HomePage(), //HomeScreen(),
+        home:  UpgradeAlert(
+         child: HomePage(),
+         ),
+        //HomeScreen(),
       ),
 
   );
