@@ -226,15 +226,15 @@ class CsvDataManager<T> {
     DateTime endOfMonth =
         (dateInMonth.month < 12)
             ? DateTime(
-                dateInMonth.year,
-                dateInMonth.month + 1,
-                1,
-              ).subtract(const Duration(seconds: 1))
+              dateInMonth.year,
+              dateInMonth.month + 1,
+              1,
+            ).subtract(const Duration(seconds: 1))
             : DateTime(
-                dateInMonth.year + 1,
-                1,
-                1,
-              ).subtract(const Duration(seconds: 1));
+              dateInMonth.year + 1,
+              1,
+              1,
+            ).subtract(const Duration(seconds: 1));
 
     List<List<dynamic>> rows = await _getRowsByTimestampRange(
       startOfMonth,

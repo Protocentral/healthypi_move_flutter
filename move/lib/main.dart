@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-//#import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'home.dart';
@@ -9,24 +7,16 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   runApp(
-     MaterialApp(
-        title: 'HealthyPi',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          primarySwatch: Colors.purple,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ButtonStyle(
-              //shape: MaterialStateProperty.resolveWith(getBorder),
-            ),
-          ),
-        ),
-        home:  UpgradeAlert(
-         child: HomePage(),
-         ),
-        //HomeScreen(),
+    MaterialApp(
+      title: 'HealthyPi',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.purple,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+        elevatedButtonTheme: ElevatedButtonThemeData(style: ButtonStyle()),
       ),
-
+      home: UpgradeAlert(child: HomePage()),
+    ),
   );
   //runApp(MyApp());
 }
@@ -40,11 +30,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'HealthyPi5',
       initialRoute: '/',
-      routes: {
-        //'/newsession': (context) => NewSessionPage(
-        //      title: "Title",
-        //    ),
-      },
+      routes: {},
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,

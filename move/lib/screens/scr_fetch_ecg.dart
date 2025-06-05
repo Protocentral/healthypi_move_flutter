@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:convert/convert.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/utils/extra.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/sizeConfig.dart';
 
@@ -46,7 +44,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   bool currentFileReceivedComplete = false;
   bool fetchingFile = false;
   bool listeningDataStream = false;
-  final bool _listeningCommandStream = false;
 
   late StreamSubscription<List<int>> _streamDataSubscription;
 
@@ -105,7 +102,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         setState(() {});
       }
     });
-    // /requestPermissions();
     super.initState();
   }
 
@@ -116,19 +112,11 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       await _connectionStateSubscription.cancel();
       await _isConnectingSubscription.cancel();
       await _isDisconnectingSubscription.cancel();
-      //await _streamDataSubscription.cancel();
       await onDisconnectPressed();
     });
 
     super.dispose();
   }
-
-  /*Future<void> requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses =
-        await [Permission.manageExternalStorage, Permission.storage].request();
-
-    if (statuses.containsValue(PermissionStatus.denied)) {}
-  }*/
 
   bool get isConnected {
     return _connectionState == BluetoothConnectionState.connected;
@@ -319,38 +307,11 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       dataList.add(dataRow);
     }
 
-    /*for (int i = 0; i < logNumberPoints-1; i++) {
-      List<String> dataRow = [
-        bdata.getInt32((i * 4), Endian.little).toString(),
-      ];
-      dataList.add(dataRow);
-    }*/
-
     // Code to convert logData to CSV file
 
     String csvData = const ListToCsvConverter().convert(dataList);
 
     await saveAndShareCsv(csvData, 'ecg_log_$sessionID.csv');
-
-    /*Directory directory0 = Directory("");
-
-    if (Platform.isAndroid) {
-      // Redirects it to download folder in android
-      directory0 = Directory("/storage/emulated/0/Download");
-    } else {
-      directory0 = await getApplicationDocumentsDirectory();
-    }
-    final exPath = directory0.path;
-    print("Saved Path: $exPath");
-    await Directory(exPath).create(recursive: true);
-
-    final String directory = exPath;
-
-    File file = File('$directory/$sessionID.csv');
-    print("Save file");
-
-    await file.writeAsString(csv);
-    */
 
     logConsole("File exported successfully!");
 
@@ -505,8 +466,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   Future<void> _fetchLogIndex(BuildContext context) async {
     logConsole("Fetch logs initiated");
     showLoadingIndicator("Fetching logs...", context);
-    //await _startListeningCommand(deviceID);
-    // await _startListeningData(0, 0, "0");
 
     List<int> commandFetchLogFile = List.empty(growable: true);
     commandFetchLogFile.addAll(hPi4Global.ECGLogIndex);
@@ -532,7 +491,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     await _sendCommand(commandFetchLogFile, widget.device);
 
     Navigator.pop(context);
-    //await _fetchLogIndex(widget.currentDevice.id, context);
   }
 
   Future<void> _deleteAllLog(BuildContext context) async {
@@ -544,16 +502,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     await _sendCommand(commandFetchLogFile, widget.device);
 
     Navigator.pop(context);
-    //await _fetchLogIndex(widget.currentDevice.id, context);
   }
 
   Future<void> _fetchLogFile(int sessionID, int sessionSize) async {
     await _startListeningData();
     logConsole("Fetch logs initiated");
     isTransfering = true;
-    //await _startListeningCommand(deviceID);
-    // Session size is in bytes, so multiply by 6 to get the number of data points, add header size
-    // await _startListeningData((sessionSize * 2), sessionID);
 
     // Reset all fetch variables
     currentFileDataCounter = 0;
@@ -703,13 +657,6 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                                 ),
                                                 color: hPi4Global.hpi4Color,
                                               ),
-                                          /*isTransfering
-                                              ? Container()
-                                              : IconButton(
-                                                onPressed: () async {},
-                                                icon: Icon(Icons.delete),
-                                                color: hPi4Global.hpi4Color,
-                                              ),*/
                                         ],
                                       ),
                                       isFetchIconTap

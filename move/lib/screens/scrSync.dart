@@ -232,11 +232,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
-    //logConsole("writing to file - hex: " +  hex.encode(mData));
-
     int logNumberPoints = ((mData.length) ~/ 16);
-
-    //logConsole("log no of point: " +  logNumberPoints.toString());
 
     List<List<String>> dataList = []; //Outter List which contains the data List
 
@@ -279,8 +275,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
     Directory directory0 = Directory("");
     if (Platform.isAndroid) {
-      // Redirects it to download folder in android
-      //_directory = Directory("/storage/emulated/0/Download");
       directory0 = await getApplicationDocumentsDirectory();
     } else {
       directory0 = await getApplicationDocumentsDirectory();
@@ -305,12 +299,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     logConsole("File exported successfully!");
   }
 
-  Future<void> _writeSpo2LogDataToFile(
-    List<int> mData,
-    int sessionID,
-  ) async {
-    // logConsole("Log data size: ${mData.length}");
-
+  Future<void> _writeSpo2LogDataToFile(List<int> mData, int sessionID) async {
     ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
 
     int logNumberPoints = ((mData.length) ~/ 16);
@@ -478,8 +467,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
         case 03: // Temp
           tempSessionCount = sessionCount;
-          if (tempSessionCount == 0)
-            isFetchingTempComplete = true;
+          if (tempSessionCount == 0) isFetchingTempComplete = true;
           break;
 
         case 04: // Activity
@@ -591,11 +579,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
       );
     } else if (isFetchingSpo2) {
       _processDataChunk(
-          logSpo2HeaderList,
-          currentSpo2FileIndex,
-          spo2ProgressPercent,
-          _writeSpo2LogDataToFile,
-          _fetchNextSpo2LogFile);
+        logSpo2HeaderList,
+        currentSpo2FileIndex,
+        spo2ProgressPercent,
+        _writeSpo2LogDataToFile,
+        _fetchNextSpo2LogFile,
+      );
     } else if (isFetchingTemp) {
       _processDataChunk(
         logTempHeaderList,
@@ -606,11 +595,12 @@ class _SyncingScreenState extends State<SyncingScreen> {
       );
     } else if (isFetchingActivity) {
       _processDataChunk(
-          logActivityHeaderList,
-          currentActivityFileIndex,
-          activityProgressPercent,
-          _writeSpo2LogDataToFile,
-          _fetchNextActivityLogFile);
+        logActivityHeaderList,
+        currentActivityFileIndex,
+        activityProgressPercent,
+        _writeSpo2LogDataToFile,
+        _fetchNextActivityLogFile,
+      );
     }
   }
 
@@ -996,7 +986,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
         isFetchingTempComplete &&
         isFetchingSpo2Complete &&
         isFetchingActivityComplete) {
-          deviceName.disconnect(queue: true);
+      deviceName.disconnect(queue: true);
       Navigator.push(
         Navigator.of(context).context,
         MaterialPageRoute(builder: (context) => HomePage()),

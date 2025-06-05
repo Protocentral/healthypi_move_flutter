@@ -1,15 +1,11 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, FileSystemEntity, Platform;
-import 'package:convert/convert.dart';
-import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:move/screens/csvData.dart';
 import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
-import 'package:path_provider/path_provider.dart';
 import 'screens/scr_scan.dart';
 import 'screens/scr_skin_temp.dart';
 import 'screens/scr_spo2.dart';
@@ -464,10 +460,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      /*Text(
-                        "Updated: ",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),*/
                       Text(
                         lastUpdatedSpo2.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -606,7 +598,6 @@ class _HomeScreenState extends State<HomeScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
           ),
           onPressed: () {
             Navigator.of(context).pushReplacement(
@@ -653,10 +644,7 @@ class _HomeScreenState extends State<HomeScreen> {
               fit: BoxFit.fitWidth,
               height: 30,
             ),
-            Column(children: <Widget>[
-          
-          ],
-        ),
+            Column(children: <Widget>[]),
           ],
         ),
       ),
@@ -665,30 +653,6 @@ class _HomeScreenState extends State<HomeScreen> {
           Center(
             child: Column(
               children: <Widget>[
-                /*ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: hPi4Global.hpi4Color,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    elevation: 0,
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-                    );
-                  },
-                  icon: Icon(
-                    Icons.sync,
-                    color: hPi4Global.hpi4AppBarIconsColor,
-                  ),
-                  label: const Text('Sync', style: TextStyle(fontSize: 16)),
-                ),*/
                 SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -704,13 +668,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 SizedBox(height: 10),
                 SizedBox(
-                  //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
                 ),
-
                 SizedBox(
-                  //height: SizeConfig.blockSizeVertical * 42,
                   width: SizeConfig.blockSizeHorizontal * 90,
                   child: liveViewButton(),
                 ),
@@ -719,7 +680,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton:Theme(
+      floatingActionButton: Theme(
         data: Theme.of(context).copyWith(
           floatingActionButtonTheme: FloatingActionButtonThemeData(
             extendedSizeConstraints: BoxConstraints(
@@ -740,7 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: const Icon(Icons.sync),
           label: const Text('Sync', style: TextStyle(fontSize: 16)),
         ),
-      )
+      ),
     );
   }
 }

@@ -5,8 +5,9 @@ import 'package:simple_html_css/simple_html_css.dart';
 import '../globals.dart';
 
 void showTermsDialog(BuildContext context) async {
-  String htmlContent =
-  await rootBundle.loadString('assets/termsAndConditions.html');
+  String htmlContent = await rootBundle.loadString(
+    'assets/termsAndConditions.html',
+  );
 
   showDialog(
     context: context,
@@ -14,14 +15,20 @@ void showTermsDialog(BuildContext context) async {
       // return object of type Dialog
       return AlertDialog(
         backgroundColor: Colors.black,
-        title: Text("Terms of Use",
-          style: TextStyle(fontSize: 16, color: hPi4Global.hpi4AppBarIconsColor),),
+        title: Text(
+          "Terms of Use",
+          style: TextStyle(
+            fontSize: 16,
+            color: hPi4Global.hpi4AppBarIconsColor,
+          ),
+        ),
         content: SingleChildScrollView(
           child: Container(
             color: Colors.black,
             padding: EdgeInsets.all(16.0),
-            child: Builder(builder: (context) {
-              return RichText(
+            child: Builder(
+              builder: (context) {
+                return RichText(
                   text: HTML.toTextSpan(
                     context,
                     htmlContent,
@@ -36,18 +43,22 @@ void showTermsDialog(BuildContext context) async {
                     ),
                     overrideStyle: {
                       //"h1": TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold),
-                      "strong":
-                      TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
+                      "strong": TextStyle(
+                        fontSize: 14.0,
+                        fontWeight: FontWeight.bold,
+                      ),
                       //"p": TextStyle(fontSize: 12.0, color: Colors.black),
                     },
-                  ));
-            }),
+                  ),
+                );
+              },
+            ),
           ),
         ),
         actions: <Widget>[
           // usually buttons at the bottom of the dialog
           TextButton(
-            child: Text("Close",style: hPi4Global.eventsWhite,),
+            child: Text("Close", style: hPi4Global.eventsWhite),
             onPressed: () {
               Navigator.of(context).pop();
             },

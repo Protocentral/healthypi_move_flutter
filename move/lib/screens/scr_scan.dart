@@ -1,25 +1,18 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, FileSystemEntity, Platform;
 import 'package:convert/convert.dart';
-import 'package:csv/csv.dart';
-import 'package:intl/intl.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_fetch_ecg.dart';
 import 'package:move/screens/scrSync.dart';
 import 'package:move/screens/scr_stream_selection.dart';
-import 'package:move/utils/extra.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../utils/sizeConfig.dart';
 import '../widgets/scan_result_tile.dart';
-import '../widgets/system_device_tile.dart';
-import 'scr_device.dart';
 
 class ScrScan extends StatefulWidget {
   const ScrScan({super.key, required this.tabIndex});
@@ -290,7 +283,6 @@ class _ScrScanState extends State<ScrScan> {
     );
 
     await device.connect();
-
   }
 
   Future<void> _eraseAllLogs(
@@ -502,13 +494,13 @@ class _ScrScanState extends State<ScrScan> {
               children: [
                 SizedBox(width: 10),
                 Expanded(
-                  child:  Text(
+                  child: Text(
                     'Do you wish to use this as the preferred device ?',
                     style: TextStyle(fontSize: 18, color: Colors.white),
                     maxLines: 2, // or however many lines you want
                     //overflow: TextOverflow.fade, // or clip/ellipsis
                   ),
-                )
+                ),
               ],
             ),
             content: Text(
@@ -525,7 +517,7 @@ class _ScrScanState extends State<ScrScan> {
                         '${appDocDir.path}/paired_device_mac.txt';
                     final File macFile = File(filePath);
                     await macFile.writeAsString(device.id.id);
-                    logConsole("...........Paired status saved");
+                    //logConsole("...........Paired status saved");
                     SharedPreferences prefs =
                         await SharedPreferences.getInstance();
                     setState(() {
@@ -564,23 +556,6 @@ class _ScrScanState extends State<ScrScan> {
       },
     );
   }
-
-  /* subscribeToChar(BluetoothDevice deviceName) async {
-    List<BluetoothService> services = await deviceName.discoverServices();
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-            dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
-            break;
-          }
-        }
-      }
-    }
-  }*/
 
   Future<void> _sendCommand(
     List<int> commandList,
@@ -658,9 +633,7 @@ class _ScrScanState extends State<ScrScan> {
           onRefresh: onRefresh,
           child: ListView(
             shrinkWrap: true,
-            children: <Widget>[Column(children:[
-                  ]
-              ), _buildScanCard(context)],
+            children: <Widget>[Column(children: []), _buildScanCard(context)],
           ),
         ),
       ),

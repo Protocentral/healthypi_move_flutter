@@ -1,15 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
-import 'package:move/screens/scr_dfu.dart';
 import 'package:move/screens/scr_scan.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
 
@@ -55,27 +49,6 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
   }
 
   String debugText = "Console Inited...";
-
-  Widget _buildDebugConsole() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: SingleChildScrollView(
-        child: SizedBox(
-          height: 150, // 8 lines of text approximately
-          width: SizeConfig.blockSizeHorizontal * 88,
-          child: SingleChildScrollView(
-            child: Text(
-              debugText,
-              style: TextStyle(
-                fontSize: 12,
-                color: hPi4Global.hpi4AppBarIconsColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   // reset the stored value
   _resetStoredValue() async {
@@ -400,11 +373,6 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                 borderRadius:
                                                     BorderRadius.circular(20),
                                               ),
-                                              /*minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),*/
                                             ),
                                             onPressed: () {
                                               showConfirmationDialog(

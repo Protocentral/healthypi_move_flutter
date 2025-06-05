@@ -110,13 +110,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
             _autoConnecting = false;
             _deviceNotFound = true;
             _deviceNotFoundMessage =
-            "Device not found. Please make sure your paired device is turned on and in range.";
+                "Device not found. Please make sure your paired device is turned on and in range.";
           });
         }
       });
     }
   }
-
 
   @override
   void initState() {
@@ -184,12 +183,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         timeout: const Duration(seconds: 15),
         withServices: [],
         withNames: ['healthypi move'],
-        /*webOptionalServices: [
-          Guid("180f"), // battery
-          Guid("180a"), // device info
-          Guid("1800"), // generic access
-          Guid("6e400001-b5a3-f393-e0a9-e50e24dcca9e"), // Nordic UART
-        ],*/
       );
     } catch (e, backtrace) {
       Snackbar.show(
@@ -253,57 +246,11 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   late BluetoothDevice Connecteddevice;
 
- /* Future<void> onConnectPressed(BluetoothDevice device) async {
-    device.connectAndUpdateStream().catchError((e) {
-      Snackbar.show(
-        ABC.c,
-        prettyException("Connect Error:", e),
-        success: false,
-      );
-    });
-
-    _connectionStateSubscription = device.connectionState.listen((state) async {
-      _connectionState = state;
-
-      if (mounted) {
-        setState(() {
-          _showScanCard = false;
-          _showcalibrationButton = true;
-          //_showcalibrationCard = true;
-        });
-      }
-
-      final subscription = device.mtu.listen((int mtu) {
-        // iOS: initial value is always 23, but iOS will quickly negotiate a higher value
-        print("mtu $mtu");
-      });
-
-      // cleanup: cancel subscription when disconnected
-      device.cancelWhenDisconnected(subscription);
-
-      // You can also manually change the mtu yourself.
-      if (!kIsWeb && Platform.isAndroid) {
-        device.requestMtu(512);
-      }
-
-      if (_connectionState == BluetoothConnectionState.connected) {
-        if (mounted) {
-          setState(() {
-            Connecteddevice = device;
-            sendSetCalibrationCommand(device);
-            //_showcalibrationButton = true;
-            _showcalibrationCard = true;
-          });
-        }
-      }
-    });
-  }*/
-
   redirectToScreens(BluetoothDevice device) {
     if (mounted) {
       setState(() {
         Connecteddevice = device;
-        _displayNoScan   = true;
+        _displayNoScan = true;
         sendSetCalibrationCommand(device);
         _showcalibrationCard = true;
       });
@@ -338,7 +285,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     );
 
     await device.connect();
-
   }
 
   showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
@@ -355,13 +301,13 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
               children: [
                 SizedBox(width: 10),
                 Expanded(
-                  child:  Text(
+                  child: Text(
                     'Do you wish to use this as the preferred device ?',
                     style: TextStyle(fontSize: 18, color: Colors.white),
                     maxLines: 2, // or however many lines you want
                     //overflow: TextOverflow.fade, // or clip/ellipsis
                   ),
-                )
+                ),
               ],
             ),
             content: Text(
@@ -373,14 +319,14 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                 onPressed: () async {
                   try {
                     final Directory appDocDir =
-                    await getApplicationDocumentsDirectory();
+                        await getApplicationDocumentsDirectory();
                     final String filePath =
                         '${appDocDir.path}/paired_device_mac.txt';
                     final File macFile = File(filePath);
                     await macFile.writeAsString(device.id.id);
-                    logConsole("...........Paired status saved");
+                    //logConsole("...........Paired status saved");
                     SharedPreferences prefs =
-                    await SharedPreferences.getInstance();
+                        await SharedPreferences.getInstance();
                     setState(() {
                       prefs.setString('pairedStatus', 'paired');
                     });
@@ -427,7 +373,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     });
   }
 
-  void showSuccessDialog(BuildContext context, String titleMessage, String message, Icon customIcon) {
+  void showSuccessDialog(
+    BuildContext context,
+    String titleMessage,
+    String message,
+    Icon customIcon,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -442,7 +393,8 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                 //Icon(Icons.check_circle, color: Colors.green),
                 customIcon,
                 SizedBox(width: 10),
-                Text('Success',
+                Text(
+                  'Success',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -459,7 +411,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
               TextButton(
                 onPressed: () {
                   Navigator.pop(dialogContext); // Close the dialog
-                  //sendEndCalibration(context, Connecteddevice, 'success');
                 },
                 child: Text(
                   'OK',
@@ -509,23 +460,24 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
           _showcalibrationCard = false;
           _showcalibrationprogress = false;
         });
-        showSuccessDialog(context, 'Success', 'Calibration was successful!',
-          Icon(Icons.check_circle, color: Colors.green), // Pass the custom icon here
+        showSuccessDialog(
+          context,
+          'Success',
+          'Calibration was successful!',
+          Icon(
+            Icons.check_circle,
+            color: Colors.green,
+          ), // Pass the custom icon here
         );
-      }
-      else if (status == 4) {
+      } else if (status == 4) {
         statusString = "Excess motion. Hold still";
-      }
-      else if (status == 6) {
+      } else if (status == 6) {
         statusString = "Failed";
-      }
-      else if (status == 16 || status == 19 || status == 3) {
+      } else if (status == 16 || status == 19 || status == 3) {
         statusString = "Weak signal. Try moving the sensor";
-      }
-      else if (status == 23 || status == 24) {
+      } else if (status == 23 || status == 24) {
         statusString = "No finger contact. Adjust sensor position";
-      }
-      else {
+      } else {
         statusString = "";
       }
     });
@@ -539,50 +491,50 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     BluetoothDevice deviceName,
   ) async {
     logConsole("Send start calibration command initiated");
-    if(startListeningFlag == true) {
+    if (startListeningFlag == true) {
       _streamDataSubscription.cancel();
     }
-      await _startListeningData(deviceName);
-      await Future.delayed(Duration.zero, () async {
-        List<int> commandPacket = [];
-        String userInput1 = _systolicController.text;
-        String userInput2 = _diastolicController.text;
-        List<int> userCommandData = [];
-        List<int> userCommandData1 = [];
-        List<int> calIndex = [];
-        calIndex = [index];
-        // Convert the user input string to an integer list (if applicable)
-        if (userInput1.isNotEmpty) {
-          userCommandData =
-              userInput1.split(',').map((e) => int.parse(e.trim())).toList();
-        } else {
-          userCommandData = [0];
-        }
-        if (userInput2.isNotEmpty) {
-          userCommandData1 =
-              userInput2.split(',').map((e) => int.parse(e.trim())).toList();
-        } else {
-          userCommandData1 = [0];
-        }
+    await _startListeningData(deviceName);
+    await Future.delayed(Duration.zero, () async {
+      List<int> commandPacket = [];
+      String userInput1 = _systolicController.text;
+      String userInput2 = _diastolicController.text;
+      List<int> userCommandData = [];
+      List<int> userCommandData1 = [];
+      List<int> calIndex = [];
+      calIndex = [index];
+      // Convert the user input string to an integer list (if applicable)
+      if (userInput1.isNotEmpty) {
+        userCommandData =
+            userInput1.split(',').map((e) => int.parse(e.trim())).toList();
+      } else {
+        userCommandData = [0];
+      }
+      if (userInput2.isNotEmpty) {
+        userCommandData1 =
+            userInput2.split(',').map((e) => int.parse(e.trim())).toList();
+      } else {
+        userCommandData1 = [0];
+      }
 
-        commandPacket.addAll(hPi4Global.StartBPTCal);
-        commandPacket.addAll(userCommandData);
-        commandPacket.addAll(userCommandData1);
-        commandPacket.addAll(calIndex);
+      commandPacket.addAll(hPi4Global.StartBPTCal);
+      commandPacket.addAll(userCommandData);
+      commandPacket.addAll(userCommandData1);
+      commandPacket.addAll(calIndex);
 
-        await _sendCommand(commandPacket, deviceName);
-        logConsole(commandPacket.toString());
-        setState(() {
-          _showcalibrationprogress = true;
-        });
-        Navigator.pop(context);
+      await _sendCommand(commandPacket, deviceName);
+      logConsole(commandPacket.toString());
+      setState(() {
+        _showcalibrationprogress = true;
       });
-    }
+      Navigator.pop(context);
+    });
+  }
 
   Future<void> sendEndCalibration(
-      BuildContext context,
-      BluetoothDevice deviceName,
-      ) async {
+    BuildContext context,
+    BluetoothDevice deviceName,
+  ) async {
     logConsole("Send end calibration command initiated");
     await Future.delayed(Duration.zero, () async {
       List<int> commandPacket = [];
@@ -595,7 +547,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       Navigator.pop(context);
     });
   }
-
 
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
@@ -725,7 +676,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                 },
                 child: Text("Try Again"),
               ),
-
             ],
           ),
         ),
@@ -733,7 +683,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     }
     // --- End Device Not Found Message UI ---
     // ...existing code...
-    if(_displayNoScan == false){
+    if (_displayNoScan == false) {
       return Card(
         color: Colors.grey[800],
         child: Padding(
@@ -758,33 +708,27 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
           ),
         ),
       );
-    }else{
+    } else {
       return Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         mainAxisSize: MainAxisSize.max,
         children: <Widget>[
           SizedBox(width: 10.0),
           Text(
-            "Connected to: " +
-                Connecteddevice.remoteId.toString(),
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.green,
-            ),
+            "Connected to: " + Connecteddevice.remoteId.toString(),
+            style: TextStyle(fontSize: 16, color: Colors.green),
           ),
           SizedBox(width: 10.0),
         ],
       );
     }
-
-
   }
 
   Widget buildScanButton(BuildContext context) {
     if (FlutterBluePlus.isScanningNow) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-        child:ElevatedButton(
+        child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: hPi4Global.hpi4Color, // background color
             foregroundColor: Colors.white, // text color
@@ -806,7 +750,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     } else {
       return Padding(
         padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-        child:  ElevatedButton(
+        child: ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: hPi4Global.hpi4Color, // background color
             foregroundColor: Colors.white, // text color
@@ -835,7 +779,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     }
   }
 
-  Widget _showAnotherPointCard(){
+  Widget _showAnotherPointCard() {
     if (_showOnSuccessCal == true) {
       return Card(
         color: Colors.grey[800],
@@ -845,14 +789,15 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
             children: <Widget>[
               Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Text("Calibration point no "+(index+1).toString()+"/5",
+                child: Text(
+                  "Calibration point no " + (index + 1).toString() + "/5",
                   style: hPi4Global.movecardSubValue1TextStyle,
                   textAlign: TextAlign.center,
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                child:  ElevatedButton(
+                child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: hPi4Global.hpi4Color, // background color
                     foregroundColor: Colors.white, // text color
@@ -860,12 +805,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  onPressed: () async{
-                    setState((){
+                  onPressed: () async {
+                    setState(() {
                       //_showcalibrationButton = true;
                       _showcalibrationCard = true;
                       _showOnSuccessCal = false;
-                      index = index+1;
+                      index = index + 1;
                     });
                   },
                   child: Padding(
@@ -894,7 +839,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                child:  ElevatedButton(
+                child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.red, // background color
                     foregroundColor: Colors.white, // text color
@@ -902,14 +847,13 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                   ),
-                  onPressed: () async{
+                  onPressed: () async {
                     sendEndCalibration(context, Connecteddevice);
                     Future.delayed(Duration.zero, () async {
-                      Navigator.of(
-                        context,
-                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => HomePage()),
+                      );
                     });
-
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(8.0),
@@ -936,72 +880,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     }
   }
 
-  Widget _showCancelButton(){
-    if (_showcalibrationprogress == true) {
-      return Card(
-        color: Colors.grey[800],
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(
-                  'In calibration mode',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                child:  ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red, // background color
-                    foregroundColor: Colors.white, // text color
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                  ),
-                  onPressed: () async{
-                    sendEndCalibration(context, Connecteddevice);
-                    Future.delayed(Duration.zero, () async {
-                      await onDisconnectPressed();
-                      Navigator.of(
-                        context,
-                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-                    });
-
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(Icons.cancel, color: Colors.white),
-                        const Text(
-                          ' Exit calibration mode ',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
-                        Spacer(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-            ],
-          ),
-        ),
-      );
-    } else {
-      return Container();
-   }
-  }
-
   Widget showCalibrationCard() {
     if (_showcalibrationCard == true) {
       return Card(
@@ -1023,7 +901,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       children: <Widget>[
                         //Icon(Icons.warning, color: Colors.yellow[300]),
                         Text(
-                          "Calibrate point "+ (index+1).toString(),
+                          "Calibrate point " + (index + 1).toString(),
                           style: hPi4Global.movecardTextStyle,
                         ),
                         SizedBox(height: 5.0),
@@ -1136,7 +1014,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           ),
                         ),
                         onPressed: () async {
-                          if(_showcalibrationprogress == false){
+                          if (_showcalibrationprogress == false) {
                             FocusScope.of(context).unfocus();
                             if (_formKey.currentState!.validate()) {
                               showLoadingIndicator(
@@ -1155,10 +1033,9 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                             } else {
                               // Input is invalid, show errors
                             }
-                          }else{
+                          } else {
                             null;
                           }
-
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
@@ -1200,7 +1077,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Column(
-             mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               mainAxisSize: MainAxisSize.min,
               children: [
                 // SizedBox(height:20),
@@ -1238,10 +1115,11 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                 children: <Widget>[
                                   SizedBox(
                                     height: 10,
-                                    width: 150, // Provide a fixed width for the progress bar
+                                    width:
+                                        150, // Provide a fixed width for the progress bar
                                     child: LinearProgressIndicator(
                                       //value: progress.toDouble() > 0 ? progress.toDouble() : null,
-                                      value: (progress/100).toDouble(),
+                                      value: (progress / 100).toDouble(),
                                       valueColor:
                                           const AlwaysStoppedAnimation<Color>(
                                             hPi4Global.hpi4Color,
@@ -1255,9 +1133,10 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                               Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize:
-                                MainAxisSize.min, // Shrink-wrap children
+                                    MainAxisSize.min, // Shrink-wrap children
                                 children: <Widget>[
-                                  Text('Calibrating...',
+                                  Text(
+                                    'Calibrating...',
                                     style: hPi4Global.movecardTextStyle,
                                   ),
                                 ],
@@ -1268,41 +1147,60 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                 mainAxisSize:
                                     MainAxisSize.min, // Shrink-wrap children
                                 children: <Widget>[
-                                  Text('$statusString',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,color: Colors.red),
+                                  Text(
+                                    '$statusString',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red,
+                                    ),
                                   ),
                                 ],
                               ),
                               SizedBox(height: 10.0),
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-                                child:  ElevatedButton(
+                                padding: const EdgeInsets.fromLTRB(
+                                  32,
+                                  8,
+                                  32,
+                                  8,
+                                ),
+                                child: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red, // background color
+                                    backgroundColor:
+                                        Colors.red, // background color
                                     foregroundColor: Colors.white, // text color
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                   ),
-                                  onPressed: () async{
-                                    sendEndCalibration(context, Connecteddevice);
+                                  onPressed: () async {
+                                    sendEndCalibration(
+                                      context,
+                                      Connecteddevice,
+                                    );
                                     Future.delayed(Duration.zero, () async {
                                       await onDisconnectPressed();
-                                      Navigator.of(
-                                        context,
-                                      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+                                      Navigator.of(context).pushReplacement(
+                                        MaterialPageRoute(
+                                          builder: (_) => HomePage(),
+                                        ),
+                                      );
                                     });
-
                                   },
                                   child: Padding(
                                     padding: const EdgeInsets.all(8.0),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: <Widget>[
                                         Icon(Icons.cancel, color: Colors.white),
                                         const Text(
                                           ' Cancel ',
-                                          style: TextStyle(fontSize: 16, color: Colors.white),
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                         Spacer(),
                                       ],
@@ -1335,28 +1233,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 
   String debugText = "Console Inited...";
-
-  Widget _buildDebugConsole() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: SingleChildScrollView(
-        child: SizedBox(
-          height: 150, // 8 lines of text approximately
-          width: SizeConfig.blockSizeHorizontal * 88,
-          child: SingleChildScrollView(
-            child: Text(
-              debugText,
-              style: TextStyle(
-                fontSize: 12,
-                color: hPi4Global.hpi4AppBarIconsColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1394,37 +1270,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         onRefresh: onRefresh,
         child: ListView(
           children: <Widget>[
-            Column(
-              children: [
-              ],
-            ),
+            Column(children: []),
             _buildScanCard(context),
             SizedBox(height: 20),
             _showAnotherPointCard(),
             SizedBox(height: 20),
-            //_showCalibrationStartButton(),
-            //SizedBox(height: 20),
             showCalibrationCard(),
-            //SizedBox(height: 20),
-            //_showCancelButton(),
-           /* Padding(
-              padding: const EdgeInsets.all(16),
-              child: Card(
-                color: Colors.grey[900],
-                elevation: 2,
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      _buildDebugConsole(),
-                    ],
-                  ),
-                ),
-              ),
-            ),*/
-
           ],
         ),
       ),

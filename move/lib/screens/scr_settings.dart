@@ -1,8 +1,6 @@
 import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'showTerms.dart';
 import 'showPrivacy.dart';
 

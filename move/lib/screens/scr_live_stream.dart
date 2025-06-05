@@ -1,19 +1,15 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/scr_stream_selection.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../globals.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
-import 'ble_ctlr.dart';
 
 class ScrLiveStream extends StatefulWidget {
   ScrLiveStream({Key? key, required this.selectedType, required this.device})

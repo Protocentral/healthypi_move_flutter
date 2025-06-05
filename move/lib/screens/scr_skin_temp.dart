@@ -1,16 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-
 import '../globals.dart';
 import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 
 import 'csvData.dart';
 
@@ -244,9 +238,6 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 primaryXAxis: dateTimeAxis(),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
-                  // minimum: 0,
-                  //maximum: 200,
-                  //interval: 10,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
                     color: Colors.white,
@@ -261,7 +252,6 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                     xValueMapper: (TempTrends data, _) => data.date,
                     lowValueMapper: (TempTrends data, _) => data.minTemp/100,
                     highValueMapper: (TempTrends data, _) => data.maxTemp/100,
-                    //borderRadius: BorderRadius.all(Radius.circular(10)),
                     borderWidth: borderWidth(),
                     animationDuration: 0,
                   ),
@@ -541,9 +531,6 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
-    //return DefaultTabController(
-    //length: 3,
-    // child:
     return Scaffold(
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(

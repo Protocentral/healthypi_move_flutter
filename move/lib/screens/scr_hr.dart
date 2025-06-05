@@ -1,17 +1,12 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/csvData.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 
 class ScrHR extends StatefulWidget {
   const ScrHR({super.key});
@@ -70,51 +65,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       _loadData();
     });
   }
-
-  /*Future<List<List<dynamic>>> readAllHRDataSorted(List<File> csvFiles) async {
-    List<List<dynamic>> allRows = [];
-
-    for (File file in csvFiles) {
-      try {
-        List<String> lines = await file.readAsLines();
-        if (lines.length <= 1) continue; // Skip files with no data rows
-
-        // Skip header, process each data row
-        for (int i = 1; i < lines.length; i++) {
-          String line = lines[i].trim();
-          if (line.isEmpty) continue;
-          List<String> parts = line.split(',');
-          if (parts.length < 5) continue; // Skip incomplete rows
-
-          // Parse timestamp as int for sorting
-          int? timestamp = int.tryParse(parts[0]);
-          if (timestamp == null) continue;
-
-          // Store as [timestamp, minHR, maxHR, avgHR, latestHR]
-          List<dynamic> row = [
-            timestamp,
-            int.tryParse(parts[1]) ?? 0,
-            int.tryParse(parts[2]) ?? 0,
-            int.tryParse(parts[3]) ?? 0,
-            int.tryParse(parts[4]) ?? 0,
-          ];
-          allRows.add(row);
-
-          // Debug print for each row conversion
-          print('Parsed row from file ${file.path}: $row');
-        }
-      } catch (e) {
-        // Optionally handle file read errors
-        print('Error reading file ${file.path}: $e');
-        continue;
-      }
-    }
-
-    // Sort all rows by timestamp (ascending)
-    allRows.sort((a, b) => a[0].compareTo(b[0]));
-
-    return allRows;
-  }*/
 
   dateTimeAxis() {
     if (_tabController.index == 0) {
@@ -286,9 +236,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                 primaryXAxis: dateTimeAxis(),
                 primaryYAxis: NumericAxis(
                   majorGridLines: MajorGridLines(width: 0.05),
-                  //minimum: 0,
-                  //maximum: 200,
-                  //interval: 10,
                   anchorRangeToVisiblePoints: false,
                   labelStyle: TextStyle(
                     color: Colors.white,
@@ -304,7 +251,6 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                     lowValueMapper: (HRTrends data, _) => data.minHR,
                     highValueMapper: (HRTrends data, _) => data.maxHR,
                     borderWidth: borderWidth(),
-                    //borderRadius: BorderRadius.all(Radius.circular(10)),
                     animationDuration: 0,
                   ),
                 ],

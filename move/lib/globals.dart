@@ -133,10 +133,8 @@ class hPi4Global {
 
   static const String UUID_CHAR_HR = "00002a37-0000-1000-8000-00805f9b34fb";
   static const String UUID_SPO2_CHAR = "00002a5e-0000-1000-8000-00805f9b34fb";
-  //static const String UUID_RR_CHAR      = "00002a6e-0000-1000-8000-00805f9b34fb";
   static const String UUID_TEMP_CHAR = "00002a6e-0000-1000-8000-00805f9b34fb";
 
-  //static const String UUID_CHAR_HIST = "01bf1525-970f-8d96-d44d-9023c47faddc";
   static const String UUID_CHAR_ACT = "000000a2-0000-1000-8000-00805f9b34fb";
   static const String UUID_CHAR_BATT = "00002a19-0000-1000-8000-00805f9b34fb";
   static const String UUID_DIS_FW_REVISION =

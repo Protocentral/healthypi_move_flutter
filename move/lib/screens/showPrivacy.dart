@@ -13,14 +13,20 @@ void showPrivacyDialog(BuildContext context) async {
       // return object of type Dialog
       return AlertDialog(
         backgroundColor: Colors.black,
-        title: Text("Privacy Policy",
-          style: TextStyle(fontSize: 16, color: hPi4Global.hpi4AppBarIconsColor),),
+        title: Text(
+          "Privacy Policy",
+          style: TextStyle(
+            fontSize: 16,
+            color: hPi4Global.hpi4AppBarIconsColor,
+          ),
+        ),
         content: SingleChildScrollView(
           child: Container(
             color: Colors.black,
             padding: EdgeInsets.all(16.0),
-            child: Builder(builder: (context) {
-              return RichText(
+            child: Builder(
+              builder: (context) {
+                return RichText(
                   text: HTML.toTextSpan(
                     context,
                     htmlContent,
@@ -34,17 +40,21 @@ void showPrivacyDialog(BuildContext context) async {
                     ),
                     overrideStyle: {
                       //"h1": TextStyle(fontSize: 12.0, fontWeight: FontWeight.bold),
-                      "strong":
-                      TextStyle(fontSize: 14.0, fontWeight: FontWeight.bold),
+                      "strong": TextStyle(
+                        fontSize: 14.0,
+                        fontWeight: FontWeight.bold,
+                      ),
                       //"p": TextStyle(fontSize: 12.0, color: Colors.black),
                     },
-                  ));
-            }),
+                  ),
+                );
+              },
+            ),
           ),
         ),
         actions: <Widget>[
           TextButton(
-            child: Text("Close",style: hPi4Global.eventsWhite,),
+            child: Text("Close", style: hPi4Global.eventsWhite),
             onPressed: () {
               Navigator.of(context).pop();
             },
