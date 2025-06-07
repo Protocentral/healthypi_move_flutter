@@ -341,7 +341,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         setState(() {
           hrTrendsData.add(
             HRTrends(
-              trend.date.add(Duration(days: 1)),
+              trend.date,
               trend.max.toInt(),
               trend.min.toInt(),
             ),

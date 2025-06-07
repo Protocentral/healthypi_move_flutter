@@ -152,7 +152,7 @@ class CsvDataManager<T> {
     for (var row in rows) {
       int ts = int.tryParse(row[0].toString()) ?? 0;
 
-      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000);
+      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
       DateTime hour = DateTime(dt.year, dt.month, dt.day, dt.hour);
 
       double value =
@@ -211,8 +211,7 @@ class CsvDataManager<T> {
     dailyData.forEach((day, values) {
       double min = values.reduce((a, b) => a < b ? a : b);
       double max = values.reduce((a, b) => a > b ? a : b);
-      double avg =
-          (values.reduce((a, b) => a + b) / values.length).floorToDouble();
+      double avg = (values.reduce((a, b) => a + b) / values.length).floorToDouble();
 
       weeklyTrends.add(WeeklyTrend(date: day, min: min, max: max, avg: avg));
     });

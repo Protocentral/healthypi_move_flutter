@@ -271,14 +271,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   void startFetching() async {
-    //_sendCurrentDateTime(widget.device, "Sync");
-    /*_saveValue();
-    setState(() {
-      isFetchingHR = true;
-      isFetchingSpo2 = false;
-      isFetchingTemp = false;
-      isFetchingActivity = false;
-    });*/
+    _sendCurrentDateTime(widget.device, "Sync");
+    _saveValue();
 
     _showProgressActivity = true;
     _showProgressHR = true;
@@ -493,11 +487,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       file = File('$directory/hr_$sessionID.csv');
     } else if (trendType == hPi4Global.TempTrend) {
       file = File('$directory/temp_$sessionID.csv');
-    } else if (trendType == hPi4Global.Spo2Trend) {
-      file = File('$directory/spo2_$sessionID.csv');
-    } else if (trendType == hPi4Global.ActivityTrend) {
-      file = File('$directory/activity_$sessionID.csv');
-    } else {
+    }  else {
       logConsole("Unknown trend type: $trendType");
       return;
     }
@@ -663,275 +653,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  /*Future<void> _fetchNextLogFile(BluetoothDevice deviceName) async {
-    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    while (currentFileIndex < logHeaderList.length) {
-      int logFileID = logHeaderList[currentFileIndex].logFileID;
-      int updatedTimestamp = logFileID * 1000;
-
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-        updatedTimestamp,
-      );
-      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
-
-      if (fileDate == todayDate) {
-        logConsole(
-          "Today's file detected with ID $logFileID. Always downloading...",
-        );
-        if (isFetchingTodayHR == false) {
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            logHeaderList[currentFileIndex].sessionLength,
-            hPi4Global.HrTrend,
-          );
-        }
-        setState(() {
-          isFetchingTodayHR = true;
-        });
-      } else {
-        bool fileExists = await _doesFileExistByType(logFileID, "hr");
-        if (fileExists) {
-          logConsole("File with ID $logFileID already exists. Skipping...");
-        } else {
-          logConsole("Fetching file with ID $logFileID...");
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            logHeaderList[currentFileIndex].sessionLength,
-            hPi4Global.HrTrend,
-          );
-          break; // Exit the loop to fetch the current file
-        }
-      }
-
-      currentFileIndex++; // Increment after processing
-    }
-
-    if (currentFileIndex == logHeaderList.length) {
-      logConsole("All files have been processed.");
-      currentFileIndex--;
-
-      Future.delayed(Duration(seconds: 2), () async {
-        setState(() {
-          totalFileDataCounter = 0;
-          isFetchingHRComplete = true;
-          isFetchingHR = false;
-          isFetchingSpo2 = true;
-          isFetchingActivity = false;
-          isFetchingTemp = false;
-        });
-      });
-      _checkAllFetchesComplete(deviceName);
-      await _fetchLogCount(context, deviceName, hPi4Global.Spo2Trend);
-      await _fetchLogIndex(context, deviceName, hPi4Global.Spo2Trend);
-    }
-  }*/
-
-  /*Future<void> _fetchNextSpo2LogFile(BluetoothDevice deviceName) async {
-    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    while (currentSpo2FileIndex < logSpo2HeaderList.length) {
-      int logFileID = logSpo2HeaderList[currentSpo2FileIndex].logFileID;
-      int updatedTimestamp = logFileID * 1000;
-
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-        updatedTimestamp,
-      );
-      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
-
-      if (fileDate == todayDate) {
-        logConsole(
-          "Today's Spo2 file detected with ID $logFileID. Always downloading...",
-        );
-        if (isFetchingTodaySpo2 == false) {
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
-            hPi4Global.Spo2Trend,
-          );
-        }
-        setState(() {
-          isFetchingTodaySpo2 = true;
-        });
-      } else {
-        bool fileExists = await _doesFileExistByType(logFileID, "spo2");
-        if (fileExists) {
-          logConsole(
-            "spo2 file with ID $logFileID already exists. Skipping...",
-          );
-        } else {
-          logConsole("Fetching spo2 file with ID $logFileID...");
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            logSpo2HeaderList[currentSpo2FileIndex].sessionLength,
-            hPi4Global.Spo2Trend,
-          );
-          break; // Exit the loop to fetch the current file
-        }
-      }
-
-      currentSpo2FileIndex++; // Increment after processing
-    }
-
-    if (currentSpo2FileIndex == logSpo2HeaderList.length) {
-      logConsole("All spo2 files have been processed.");
-      currentSpo2FileIndex--;
-
-      Future.delayed(Duration(seconds: 1), () async {
-        setState(() {
-          isFetchingSpo2Complete = true;
-          isFetchingHR = false;
-          isFetchingSpo2 = false;
-          isFetchingTemp = false;
-          isFetchingActivity = true;
-        });
-      });
-
-      _checkAllFetchesComplete(deviceName);
-      await _fetchLogCount(context, deviceName, hPi4Global.ActivityTrend);
-      await _fetchLogIndex(context, deviceName, hPi4Global.ActivityTrend);
-    }
-  }
-  
-
-  Future<void> _fetchNextTempLogFile(BluetoothDevice deviceName) async {
-    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    while (currentTempFileIndex < listTempLogIndices.length) {
-      int logFileID = listTempLogIndices[currentTempFileIndex].logFileID;
-      int updatedTimestamp = logFileID * 1000;
-
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-        updatedTimestamp,
-      );
-      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
-
-      if (fileDate == todayDate) {
-        logConsole(
-          "Today's Temp file detected with ID $logFileID. Always downloading...",
-        );
-        if (isFetchingTodayTemp == false) {
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            listTempLogIndices[currentTempFileIndex].sessionLength,
-            hPi4Global.TempTrend,
-          );
-        }
-        setState(() {
-          isFetchingTodayTemp = true;
-        });
-      } else {
-        bool fileExists = await _doesFileExistByType(logFileID, "temp");
-
-        if (fileExists) {
-          logConsole(
-            "temp file with ID $logFileID already exists. Skipping...",
-          );
-        } else {
-          logConsole("Fetching temp file with ID $logFileID...");
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            listTempLogIndices[currentTempFileIndex].sessionLength,
-            hPi4Global.TempTrend,
-          );
-          break; // Exit the loop to fetch the current file
-        }
-      }
-
-      currentTempFileIndex++; // Increment after processing
-    }
-
-    if (currentTempFileIndex == listTempLogIndices.length) {
-      logConsole("All Temperature files have been processed.");
-      currentTempFileIndex--;
-
-      Future.delayed(Duration(seconds: 5), () async {
-        setState(() {
-          totalFileDataCounter = 0;
-          isFetchingTempComplete = true;
-          isFetchingHR = false;
-          isFetchingTemp = false;
-          isFetchingSpo2 = false;
-          isFetchingActivity = false;
-        });
-        _checkAllFetchesComplete(deviceName);
-      });
-    }
-  }
-
-  Future<void> _fetchNextActivityLogFile(BluetoothDevice deviceName) async {
-    String todayDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
-    while (currentActivityFileIndex < listActivityLogIndices.length) {
-      int logFileID =
-          listActivityLogIndices[currentActivityFileIndex].logFileID;
-      int updatedTimestamp = logFileID * 1000;
-
-      DateTime timestampDateTime = DateTime.fromMillisecondsSinceEpoch(
-        updatedTimestamp,
-      );
-      String fileDate = DateFormat('yyyy-MM-dd').format(timestampDateTime);
-
-      if (fileDate == todayDate) {
-        logConsole(
-          "Today's Activity file detected with ID $logFileID. Always downloading...",
-        );
-        if (isFetchingTodayActivity == false) {
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            listActivityLogIndices[currentActivityFileIndex].sessionLength,
-            hPi4Global.ActivityTrend,
-          );
-        }
-        setState(() {
-          isFetchingTodayActivity = true;
-        });
-      } else {
-        bool fileExists = await _doesFileExistByType(logFileID, "activity");
-
-        if (fileExists) {
-          logConsole(
-            "Activity file with ID $logFileID already exists. Skipping...",
-          );
-        } else {
-          logConsole("Fetching Activity file with ID $logFileID...");
-          await _fetchLogFile(
-            deviceName,
-            logFileID,
-            listActivityLogIndices[currentActivityFileIndex].sessionLength,
-            hPi4Global.ActivityTrend,
-          );
-          break; // Exit the loop to fetch the current file
-        }
-      }
-      currentActivityFileIndex++; // Increment after processing
-    }
-
-    if (currentActivityFileIndex == listActivityLogIndices.length) {
-      logConsole("All Activity files have been processed.");
-      currentActivityFileIndex--;
-      Future.delayed(Duration(seconds: 1), () async {
-        setState(() {
-          isFetchingActivityComplete = true;
-          isFetchingHR = false;
-          isFetchingSpo2 = false;
-          isFetchingTemp = true;
-          isFetchingActivity = false;
-        });
-        _checkAllFetchesComplete(deviceName);
-        await _fetchLogCount(context, deviceName, hPi4Global.TempTrend);
-        await _fetchLogIndex(context, deviceName, hPi4Global.TempTrend);
-      });
-    }
-  }*/
-
   Future<String> _getLogFilePathByType(int logFileID, String prefix) async {
     String directoryPath = (await getApplicationDocumentsDirectory()).path;
     return "$directoryPath/${prefix}_$logFileID.csv";
@@ -1034,6 +755,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
         currentFileDataCounter += pktPayloadSize;
         logData.addAll(value.sublist(1));
 
+       // logConsole(logData.toString());
+
         if (trendType == hPi4Global.HrTrend) {
           setState(() {
             hrProgressPercent =
@@ -1124,6 +847,15 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
+ // To check timstamp is today
+  bool _isToday(dynamic header) {
+    final DateTime now = DateTime.now();
+    final DateTime fileDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID);
+    return now.year == fileDate.year &&
+        now.month == fileDate.month &&
+        now.day == fileDate.day;
+  }
+
   Future<void> fetchAllHRLogFiles(BluetoothDevice deviceName) async {
     logConsole("Fetching all HR log files count: ${listHRLogIndices.length}");
     // Calculate total bytes to fetch
@@ -1136,9 +868,27 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listHRLogIndices) {
+
+      // Determine if this header is for today
+      bool isToday = _isToday(header);
+
+      // Only check for file existence if NOT today
+      bool fileExists = false;
+      if (!isToday) {
+        fileExists = await _doesFileExistByType(header.logFileID, "hr_");
+        if (fileExists) {
+          logConsole(
+            "File for logFileID ${header.logFileID} already exists, skipping download.",
+          );
+          continue;
+        }
+      }
+
       logConsole(
         "HPI - Fetching HR log file with ID ${header.logFileID} and length ${header.sessionLength}",
       );
+
+      // Always download today's file, or if non-today file doesn't exist
       await _fetchLogFile(
         deviceName,
         header.logFileID,
@@ -1162,6 +912,22 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listTempLogIndices) {
+
+      // Determine if this header is for today
+      bool isToday = _isToday(header);
+
+      // Only check for file existence if NOT today
+      bool fileExists = false;
+      if (!isToday) {
+        fileExists = await _doesFileExistByType(header.logFileID, "temp_");
+        if (fileExists) {
+          logConsole(
+            "File for logFileID ${header.logFileID} already exists, skipping download.",
+          );
+          continue;
+        }
+      }
+
       logConsole(
         "HPI - Fetching Temp log file with ID ${header.logFileID} and length ${header.sessionLength}",
       );
@@ -1189,6 +955,22 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listSpO2LogIndices) {
+
+      // Determine if this header is for today
+      bool isToday = _isToday(header);
+
+      // Only check for file existence if NOT today
+      bool fileExists = false;
+      if (!isToday) {
+        fileExists = await _doesFileExistByType(header.logFileID, "spo2_");
+        if (fileExists) {
+          logConsole(
+            "File for logFileID ${header.logFileID} already exists, skipping download.",
+          );
+          continue;
+        }
+      }
+
       logConsole(
         "HPI - Fetching SpO2 log file with ID ${header.logFileID} and length ${header.sessionLength}",
       );
@@ -1216,6 +998,21 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listActivityLogIndices) {
+      // Determine if this header is for today
+      bool isToday = _isToday(header);
+
+      // Only check for file existence if NOT today
+      bool fileExists = false;
+      if (!isToday) {
+        fileExists = await _doesFileExistByType(header.logFileID, "activity_");
+        if (fileExists) {
+          logConsole(
+            "File for logFileID ${header.logFileID} already exists, skipping download.",
+          );
+          continue;
+        }
+      }
+
       logConsole(
         "HPI - Fetching Activity log file with ID ${header.logFileID} and length ${header.sessionLength}",
       );
