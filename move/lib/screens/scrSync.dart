@@ -72,6 +72,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
   int totalActivityBytesToFetch = 0;
   int totalActivityBytesFetched = 0;
 
+  bool _showProgressHR = true;
+  bool _showProgressTemp = true;
+  bool _showProgressSpo2 = true;
+  bool _showProgressActivity = true;
+
   @override
   void initState() {
     _connectionStateSubscription = widget.device.connectionState.listen((
@@ -275,6 +280,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
       isFetchingActivity = false;
     });*/
 
+    _showProgressActivity = true;
+    _showProgressHR = true;
+    _showProgressSpo2 = true;
+    _showProgressTemp = true;
+
     hrSessionCount = await _fetchLogCount(
       context,
       widget.device,
@@ -330,9 +340,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
       );
 
       await fetchAllHRLogFiles(widget.device);
-      /*setState(() {
-        isFetchingHR = true;
-      });*/
+      setState(() {
+        _showProgressHR = false;
+      });
     }
 
     // Fetch Temperature log indices if count > 0
@@ -347,6 +357,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
       );
 
       await fetchAllTempLogFiles(widget.device);
+      setState(() {
+        _showProgressTemp = false;
+      });
     }
 
     // Fetch SpO2 log indices if count > 0
@@ -359,6 +372,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
         listSpO2LogIndices,
         spo2SessionCount,
       );
+
+      await fetchAllSpo2LogFiles(widget.device);
+      setState(() {
+        _showProgressSpo2 = false;
+      });
     }
 
     // Fetch Activity log indices if count > 0
@@ -373,6 +391,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
         listActivityLogIndices,
         activitySessionCount,
       );
+
+      await fetchAllActivityLogFiles(widget.device);
+      setState(() {
+        _showProgressActivity = false;
+      });
     }
 
     await _showSyncCompleteDialog();
@@ -1025,6 +1048,54 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     : 0.0;
             if (overallHRProgressPercent > 1.0) overallHRProgressPercent = 1.0;
           });
+        } else if (trendType == hPi4Global.TempTrend) {
+          setState(() {
+            tempProgressPercent =
+                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
+            if (tempProgressPercent > 1.0) tempProgressPercent = 1.0;
+
+            // Update overall Temp progress
+            totalTempBytesFetched += pktPayloadSize;
+            overallTempProgressPercent =
+                totalTempBytesToFetch > 0
+                    ? totalTempBytesFetched / totalTempBytesToFetch
+                    : 0.0;
+            if (overallTempProgressPercent > 1.0) {
+              overallTempProgressPercent = 1.0;
+            }
+          });
+        } else if (trendType == hPi4Global.Spo2Trend) {
+          setState(() {
+            spo2ProgressPercent =
+                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
+            if (spo2ProgressPercent > 1.0) spo2ProgressPercent = 1.0;
+
+            // Update overall SpO2 progress
+            totalSpo2BytesFetched += pktPayloadSize;
+            overallSpo2ProgressPercent =
+                totalSpo2BytesToFetch > 0
+                    ? totalSpo2BytesFetched / totalSpo2BytesToFetch
+                    : 0.0;
+            if (overallSpo2ProgressPercent > 1.0) {
+              overallSpo2ProgressPercent = 1.0;
+            }
+          });
+        } else if (trendType == hPi4Global.ActivityTrend) {
+          setState(() {
+            activityProgressPercent =
+                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
+            if (activityProgressPercent > 1.0) activityProgressPercent = 1.0;
+
+            // Update overall Activity progress
+            totalActivityBytesFetched += pktPayloadSize;
+            overallActivityProgressPercent =
+                totalActivityBytesToFetch > 0
+                    ? totalActivityBytesFetched / totalActivityBytesToFetch
+                    : 0.0;
+            if (overallActivityProgressPercent > 1.0) {
+              overallActivityProgressPercent = 1.0;
+            }
+          });
         }
 
         // Check if all data received
@@ -1099,6 +1170,60 @@ class _SyncingScreenState extends State<SyncingScreen> {
         header.logFileID,
         header.sessionLength,
         hPi4Global.TempTrend,
+      );
+    }
+  }
+
+  Future<void> fetchAllSpo2LogFiles(BluetoothDevice deviceName) async {
+    logConsole(
+      "Fetching all SpO2 log files count: ${listSpO2LogIndices.length}",
+    );
+
+    // Calculate total bytes to fetch
+    totalSpo2BytesToFetch = listSpO2LogIndices.fold(
+      0,
+      (sum, header) => sum + header.sessionLength,
+    );
+    totalSpo2BytesFetched = 0;
+    overallSpo2ProgressPercent = 0.0;
+    setState(() {});
+
+    for (final header in listSpO2LogIndices) {
+      logConsole(
+        "HPI - Fetching SpO2 log file with ID ${header.logFileID} and length ${header.sessionLength}",
+      );
+      await _fetchLogFile(
+        deviceName,
+        header.logFileID,
+        header.sessionLength,
+        hPi4Global.Spo2Trend,
+      );
+    }
+  }
+
+  Future<void> fetchAllActivityLogFiles(BluetoothDevice deviceName) async {
+    logConsole(
+      "Fetching all Activity log files count: ${listActivityLogIndices.length}",
+    );
+
+    // Calculate total bytes to fetch
+    totalActivityBytesToFetch = listActivityLogIndices.fold(
+      0,
+      (sum, header) => sum + header.sessionLength,
+    );
+    totalActivityBytesFetched = 0;
+    overallActivityProgressPercent = 0.0;
+    setState(() {});
+
+    for (final header in listActivityLogIndices) {
+      logConsole(
+        "HPI - Fetching Activity log file with ID ${header.logFileID} and length ${header.sessionLength}",
+      );
+      await _fetchLogFile(
+        deviceName,
+        header.logFileID,
+        header.sessionLength,
+        hPi4Global.ActivityTrend,
       );
     }
   }
@@ -1258,13 +1383,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
                     ],
                   ),
                   SizedBox(height: 10),
-                  showHRProgress(true),
+                  showHRProgress(_showProgressHR),
                   SizedBox(height: 10),
-                  showSpo2Progress(true),
+                  showSpo2Progress(_showProgressSpo2),
                   SizedBox(height: 10),
-                  showActivityProgress(true),
+                  showActivityProgress(_showProgressActivity),
                   SizedBox(height: 20),
-                  showTempProgress(true),
+                  showTempProgress(_showProgressTemp),
                   SizedBox(height: 10),
                   displayCloseandCancel(),
                 ],
