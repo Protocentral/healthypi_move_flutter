@@ -355,6 +355,41 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
+                                          ElevatedButton(
+                                            style: ElevatedButton.styleFrom(
+                                              minimumSize: const Size(0, 36),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              backgroundColor: hPi4Global.hpi4Color,
+                                              foregroundColor: Colors.white,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(20),
+                                              ),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            ),
+                                            onPressed: () {
+                                              Navigator.of(context).pushReplacement(
+                                                MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(8.0),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.max,
+                                                children: <Widget>[
+                                                  Icon(
+                                                    Symbols.monitoring,
+                                                    color: Colors.white,
+                                                    size: 18,
+                                                  ),
+                                                  const Text(
+                                                    ' Live View',
+                                                    style: TextStyle(fontSize: 14, color: Colors.white),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
                                           Divider(
                                             // Horizontal line
                                             color: Colors.grey,
@@ -405,6 +440,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                             ),
                                           ),
                                           SizedBox(height: 10.0),
+                                          
                                         ],
                                       ),
                                     ),

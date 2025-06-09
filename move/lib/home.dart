@@ -589,35 +589,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget liveViewButton() {
     return Padding(
       padding: const EdgeInsets.all(8.0),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(64, 8, 64, 8),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: hPi4Global.hpi4Color, // background color
-            foregroundColor: Colors.white, // text color
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(0, 36), // Minimum width, reasonable height
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Minimal padding
+          backgroundColor: hPi4Global.hpi4Color,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          onPressed: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(Symbols.monitoring, color: Colors.white),
-                const Text(
-                  ' Live View',
-                  style: TextStyle(fontSize: 16, color: Colors.white),
-                ),
-                Spacer(),
-              ],
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
+          );
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min, // Shrink to fit content
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Icon(Symbols.monitoring, color: Colors.white, size: 18),
+            const Text(
+              ' Live View',
+              style: TextStyle(fontSize: 14, color: Colors.white),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -654,6 +651,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: <Widget>[
                 SizedBox(height: 10),
+                // Add this note above "Last synced"
+                
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.max,
@@ -666,15 +665,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     SizedBox(width: 10.0),
                   ],
                 ),
+                
                 SizedBox(height: 10),
                 SizedBox(
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
                 ),
-                SizedBox(
-                  width: SizeConfig.blockSizeHorizontal * 90,
-                  child: liveViewButton(),
-                ),
+                // REMOVE the Live View button from Home tab:
+                // SizedBox(
+                //   width: SizeConfig.blockSizeHorizontal * 90,
+                //   child: liveViewButton(),
+                // ),
               ],
             ),
           ),
@@ -683,23 +684,19 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: Theme(
         data: Theme.of(context).copyWith(
           floatingActionButtonTheme: FloatingActionButtonThemeData(
-            extendedSizeConstraints: BoxConstraints(
-              minHeight: 40, // Set your desired height
-              minWidth: 50,
-            ),
+            shape: const CircleBorder(),
+            backgroundColor: Colors.amber, // Changed to a standout color
+            foregroundColor: Colors.black, // Black icon for contrast
           ),
         ),
-        child: FloatingActionButton.extended(
-          backgroundColor: Colors.red,
-          foregroundColor: Colors.white,
+        child: FloatingActionButton(
           onPressed: () {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
             );
           },
           tooltip: 'Sync',
-          icon: const Icon(Icons.sync),
-          label: const Text('Sync', style: TextStyle(fontSize: 16)),
+          child: const Icon(Icons.sync, size: 32),
         ),
       ),
     );
