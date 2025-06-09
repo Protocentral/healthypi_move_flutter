@@ -9,7 +9,6 @@ import 'package:move/screens/scr_settings.dart';
 import 'screens/scr_scan.dart';
 import 'screens/scr_skin_temp.dart';
 import 'screens/scr_spo2.dart';
-
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
 import 'screens/scr_hr.dart';
@@ -100,6 +99,13 @@ class _HomeScreenState extends State<HomeScreen> {
   String lastUpdatedTemp = '';
   String lastUpdatedSpo2 = '';
   String lastUpdatedActivity = '';
+
+  // Add DateTime fields for each value:
+  DateTime? lastSyncedDate;
+  DateTime? lastUpdatedHRDate;
+  DateTime? lastUpdatedTempDate;
+  DateTime? lastUpdatedSpo2Date;
+  DateTime? lastUpdatedActivityDate;
 
   @override
   void initState() {
@@ -278,53 +284,64 @@ class _HomeScreenState extends State<HomeScreen> {
     String latestTimeString,
     String latestValueString,
   ) async {
-    String lastDateTime = DateFormat('EEE d MMM').format(lastUpdatedTime);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(latestValueString, averageHR.toString());
-    await prefs.setString(latestTimeString, lastDateTime);
+    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String());
   }
 
   // Load the stored value
   _loadStoredValue() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     setState(() {
-      lastSyncedDateTime =
-          (prefs.getString('lastSynced') ?? '--') == '0'
-              ? '--'
-              : prefs.getString('lastSynced') ?? '--';
-      lastestHR =
-          (prefs.getString('latestHR') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('latestHR') ?? '--';
-      lastestTemp =
-          (prefs.getString('latestTemp') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('latestTemp') ?? '--';
-      lastestSpo2 =
-          (prefs.getString('latestSpo2') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('latestSpo2') ?? '--';
-      lastestActivity =
-          (prefs.getString('latestActivityCount') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('latestActivityCount') ?? '--';
-      lastUpdatedHR =
-          (prefs.getString('lastUpdatedHR') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('lastUpdatedHR') ?? '--';
-      lastUpdatedTemp =
-          (prefs.getString('lastUpdatedTemp') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('lastUpdatedTemp') ?? '--';
-      lastUpdatedSpo2 =
-          (prefs.getString('lastUpdatedSpo2') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('lastUpdatedSpo2') ?? '--';
-      lastUpdatedActivity =
-          (prefs.getString('lastUpdatedActivity') ?? '--') == "0"
-              ? '--'
-              : prefs.getString('lastUpdatedActivity') ?? '--';
+      // Parse lastSyncedDateTime as DateTime if possible
+      String? lastSyncedRaw = prefs.getString('lastSynced');
+      lastSyncedDate = _parseDate(lastSyncedRaw);
+      lastSyncedDateTime = getRelativeTime(lastSyncedDate);
+
+      // Repeat for each updated date
+      String? lastHRRaw = prefs.getString('lastUpdatedHR');
+      lastUpdatedHRDate = _parseDate(lastHRRaw);
+      lastUpdatedHR = getRelativeTime(lastUpdatedHRDate);
+
+      String? lastTempRaw = prefs.getString('lastUpdatedTemp');
+      lastUpdatedTempDate = _parseDate(lastTempRaw);
+      lastUpdatedTemp = getRelativeTime(lastUpdatedTempDate);
+
+      String? lastSpo2Raw = prefs.getString('lastUpdatedSpo2');
+      lastUpdatedSpo2Date = _parseDate(lastSpo2Raw);
+      lastUpdatedSpo2 = getRelativeTime(lastUpdatedSpo2Date);
+
+      String? lastActivityRaw = prefs.getString('lastUpdatedActivity');
+      lastUpdatedActivityDate = _parseDate(lastActivityRaw);
+      lastUpdatedActivity = getRelativeTime(lastUpdatedActivityDate);
+
+      // The rest remain unchanged
+      lastestHR = (prefs.getString('latestHR') ?? '--') == "0"
+          ? '--'
+          : prefs.getString('latestHR') ?? '--';
+      lastestTemp = (prefs.getString('latestTemp') ?? '--') == "0"
+          ? '--'
+          : prefs.getString('latestTemp') ?? '--';
+      lastestSpo2 = (prefs.getString('latestSpo2') ?? '--') == "0"
+          ? '--'
+          : prefs.getString('latestSpo2') ?? '--';
+      lastestActivity = (prefs.getString('latestActivityCount') ?? '--') == "0"
+          ? '--'
+          : prefs.getString('latestActivityCount') ?? '--';
     });
+  }
+
+  // 3. Add a helper to parse your stored date strings:
+  DateTime? _parseDate(String? dateStr) {
+    if (dateStr == null || dateStr == '--') return null;
+    try {
+      // Try parsing as ISO8601 first
+      return DateTime.tryParse(dateStr) ??
+          // Try parsing as your formatted string
+          DateFormat('EEE d MMM').parse(dateStr);
+    } catch (_) {
+      return null;
+    }
   }
 
   int getGridCount() {
@@ -622,6 +639,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void logConsole(String logString) async {
     print("AKW - $logString");
+  }
+
+  String getRelativeTime(DateTime? date) {
+    if (date == null) return '--';
+    final now = DateTime.now();
+    final difference = now.difference(date);
+
+    if (difference.inSeconds < 60) {
+      return 'just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} min ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} hr ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+    } else {
+      return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    }
   }
 
   @override
