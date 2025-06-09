@@ -666,6 +666,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                  child: Text(
+                    "Note: Sync has to be done manually using the Sync button below.",
+                    style: TextStyle(
+                      color: Colors.orangeAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+
                 SizedBox(height: 10),
                 SizedBox(
                   width: SizeConfig.blockSizeHorizontal * 95,
