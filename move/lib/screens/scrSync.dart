@@ -169,9 +169,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
   // Save a value
   _saveValue() async {
     DateTime now = DateTime.now();
-    String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
+   // String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastSynced', lastDateTime);
+    await prefs.setString('lastSynced', now.toIso8601String());
   }
 
   Future<void> _sendCurrentDateTime(
@@ -655,6 +655,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   Future<String> _getLogFilePathByType(int logFileID, String prefix) async {
     String directoryPath = (await getApplicationDocumentsDirectory()).path;
+    logConsole("directoryPath/${prefix}_$logFileID.csv");
     return "$directoryPath/${prefix}_$logFileID.csv";
   }
 
@@ -848,12 +849,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
  // To check timstamp is today
-  bool _isToday(dynamic header) {
-    final DateTime now = DateTime.now();
-    final DateTime fileDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID);
-    return now.year == fileDate.year &&
-        now.month == fileDate.month &&
-        now.day == fileDate.day;
+  bool _isToday(LogHeader header) {
+    final now = DateTime.now();
+    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID*1000);
+
+    return now.year == headerDate.year &&
+        now.month == headerDate.month &&
+        now.day == headerDate.day;
   }
 
   Future<void> fetchAllHRLogFiles(BluetoothDevice deviceName) async {
@@ -875,7 +877,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Only check for file existence if NOT today
       bool fileExists = false;
       if (!isToday) {
-        fileExists = await _doesFileExistByType(header.logFileID, "hr_");
+        fileExists = await _doesFileExistByType(header.logFileID, "hr");
+        //logConsole("Existence result for ${header.logFileID}: $fileExists");
         if (fileExists) {
           logConsole(
             "File for logFileID ${header.logFileID} already exists, skipping download.",
@@ -919,7 +922,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Only check for file existence if NOT today
       bool fileExists = false;
       if (!isToday) {
-        fileExists = await _doesFileExistByType(header.logFileID, "temp_");
+        fileExists = await _doesFileExistByType(header.logFileID, "temp");
         if (fileExists) {
           logConsole(
             "File for logFileID ${header.logFileID} already exists, skipping download.",
@@ -962,7 +965,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Only check for file existence if NOT today
       bool fileExists = false;
       if (!isToday) {
-        fileExists = await _doesFileExistByType(header.logFileID, "spo2_");
+        fileExists = await _doesFileExistByType(header.logFileID, "spo2");
         if (fileExists) {
           logConsole(
             "File for logFileID ${header.logFileID} already exists, skipping download.",
@@ -1004,7 +1007,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Only check for file existence if NOT today
       bool fileExists = false;
       if (!isToday) {
-        fileExists = await _doesFileExistByType(header.logFileID, "activity_");
+        fileExists = await _doesFileExistByType(header.logFileID, "activity");
         if (fileExists) {
           logConsole(
             "File for logFileID ${header.logFileID} already exists, skipping download.",

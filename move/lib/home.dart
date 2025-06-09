@@ -260,8 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (activityMonthlyTrend.isNotEmpty) {
       ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      DateTime lastTime =
-          lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
       double lastAvg = floorToOneDecimal(lastTrend.steps.toDouble());
       setState(() {
         saveValue(
