@@ -174,6 +174,39 @@ class CsvDataManager<T> {
     return hourlyTrends;
   }
 
+  /// Get min, max, and average for every hour of a given day in HourlyTrend format
+  Future<List<HourlyTrend>> getHourlyTrendForDay(DateTime day) async {
+    DateTime start = DateTime(day.year, day.month, day.day);
+    DateTime end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(milliseconds: 1));
+
+    List<List<dynamic>> rows = await _getRowsByTimestampRange(start, end);
+
+    Map<DateTime, List<double>> hourlyData = {};
+
+    for (var row in rows) {
+      int ts = int.tryParse(row[0].toString()) ?? 0;
+      DateTime dt = DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true);
+      DateTime hour = DateTime(dt.year, dt.month, dt.day, dt.hour);
+
+      double value = double.tryParse(row[1].toString()) ?? 0;
+      hourlyData.putIfAbsent(hour, () => []);
+      hourlyData[hour]!.add(value);
+    }
+
+    List<HourlyTrend> hourlyTrends = [];
+    hourlyData.forEach((hour, values) {
+      double min = values.reduce((a, b) => a < b ? a : b);
+      double max = values.reduce((a, b) => a > b ? a : b);
+      double avg = values.reduce((a, b) => a + b) / values.length;
+
+      hourlyTrends.add(HourlyTrend(hour: hour, min: min, max: max, avg: avg));
+    });
+
+    return hourlyTrends;
+  }
+
   /// Get min, max, and average for every day of the current week in WeeklyTrend format
   Future<List<WeeklyTrend>> getWeeklyTrend(DateTime dateInWeek) async {
     DateTime startOfWeek = dateInWeek.subtract(
@@ -546,7 +579,10 @@ class CsvDataManager<T> {
 
   /// Get min, max, and average statistics for a specific day
   Future<Map<String, double>> getDailyStatistics(DateTime day) async {
-    List<HourlyTrend> dailyTrends = await getHourlyTrendForToday();
+    List<HourlyTrend> dailyTrends = await getHourlyTrendForDay(day);
+    if (dailyTrends.isEmpty) {
+      return {'min': 0, 'max': 0, 'avg': 0};
+    }
     double min = dailyTrends
         .map((trend) => trend.min)
         .reduce((a, b) => a < b ? a : b);
@@ -563,15 +599,15 @@ class CsvDataManager<T> {
   /// Get min, max, and average statistics for a specific week
   Future<Map<String, double>> getWeeklyStatistics(DateTime dateInWeek) async {
     List<WeeklyTrend> weeklyTrends = await getWeeklyTrend(dateInWeek);
-    double min = weeklyTrends
-        .map((trend) => trend.min)
-        .reduce((a, b) => a < b ? a : b);
-    double max = weeklyTrends
-        .map((trend) => trend.max)
-        .reduce((a, b) => a > b ? a : b);
-    double avg =
-        weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
-        weeklyTrends.length;
+    double min = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b)
+        : 0;
+    double max = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b)
+        : 0;
+    double avg = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / weeklyTrends.length
+        : 0;
 
     return {'min': min, 'max': max, 'avg': avg};
   }
@@ -579,15 +615,15 @@ class CsvDataManager<T> {
   /// Get min, max, and average statistics for a specific month
   Future<Map<String, double>> getMonthlyStatistics(DateTime dateInMonth) async {
     List<MonthlyTrend> monthlyTrends = await getMonthlyTrend(dateInMonth);
-    double min = monthlyTrends
-        .map((trend) => trend.min)
-        .reduce((a, b) => a < b ? a : b);
-    double max = monthlyTrends
-        .map((trend) => trend.max)
-        .reduce((a, b) => a > b ? a : b);
-    double avg =
-        monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
-        monthlyTrends.length;
+    double min = monthlyTrends.isNotEmpty
+        ? monthlyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b)
+        : 0;
+    double max = monthlyTrends.isNotEmpty
+        ? monthlyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b)
+        : 0;
+    double avg = monthlyTrends.isNotEmpty
+        ? monthlyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / monthlyTrends.length
+        : 0;
 
     return {'min': min, 'max': max, 'avg': avg};
   }
@@ -618,15 +654,15 @@ class CsvDataManager<T> {
     DateTime dateInWeek,
   ) async {
     List<SpO2WeeklyTrend> weeklyTrends = await getSpO2WeeklyTrend(dateInWeek);
-    double min = weeklyTrends
-        .map((trend) => trend.min)
-        .reduce((a, b) => a < b ? a : b);
-    double max = weeklyTrends
-        .map((trend) => trend.max)
-        .reduce((a, b) => a > b ? a : b);
-    double avg =
-        weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) /
-        weeklyTrends.length;
+    double min = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.min).reduce((a, b) => a < b ? a : b)
+        : 0;
+    double max = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.max).reduce((a, b) => a > b ? a : b)
+        : 0;
+    double avg = weeklyTrends.isNotEmpty
+        ? weeklyTrends.map((trend) => trend.avg).reduce((a, b) => a + b) / weeklyTrends.length
+        : 0;
 
     return {'min': min, 'max': max, 'avg': avg};
   }
@@ -639,6 +675,9 @@ class CsvDataManager<T> {
     List<SpO2MonthlyTrend> monthlyTrends = await getSpO2MonthlyTrend(
       dateInMonth,
     );
+    if (monthlyTrends.isEmpty) {
+      return {'min': 0, 'max': 0, 'avg': 0};
+    }
     double min = monthlyTrends
         .map((trend) => trend.min)
         .reduce((a, b) => a < b ? a : b);
