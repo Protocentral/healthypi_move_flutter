@@ -353,7 +353,7 @@ class _ScrActivityState extends State<ScrActivity>
         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
         //mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text("Week Total", style: hPi4Global.movecardSubValueTextStyle,),
+            Text("Total of the week", style: hPi4Global.movecardSubValueTextStyle,),
             Row(
                 children: <Widget>[
                   Text((Count.toString() == "0")
@@ -373,7 +373,7 @@ class _ScrActivityState extends State<ScrActivity>
         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
         //mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text("Month Total", style: hPi4Global.movecardSubValueTextStyle,),
+            Text("Total of the month", style: hPi4Global.movecardSubValueTextStyle,),
             Row(
                 children: <Widget>[
                   Text((Count.toString() == "0")
