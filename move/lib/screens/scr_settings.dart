@@ -452,8 +452,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                                           ),
                                           SizedBox(height: 10.0),
                                           Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                            mainAxisAlignment: MainAxisAlignment.center,
                                             children: <Widget>[
                                               Expanded(
                                                 child: Text(
@@ -499,7 +498,6 @@ class _ScrSettingsState extends State<ScrSettings> {
                                               ),
                                             ],
                                           ),
-
                                           SizedBox(height: 10.0),
                                           _getPoliciesTile(),
                                           ListTile(

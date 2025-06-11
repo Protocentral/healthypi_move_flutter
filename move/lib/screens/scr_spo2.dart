@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:move/screens/showTrendsAlert.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:intl/intl.dart';
@@ -363,7 +364,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 15,
+          height: SizeConfig.blockSizeVertical * 12,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -372,45 +373,71 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'RANGE',
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
                   SizedBox(height: 10.0),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    //mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text(
-                        (rangeMinSpo2.toString() == "0")
-                            ? "--"
-                            : rangeMinSpo2.toString(),
-                        style: hPi4Global.moveValueTextStyle,
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text((rangeMinSpo2.toString() == "0")
+                                      ? "--"
+                                      : rangeMinSpo2.toString(),
+                                    style: hPi4Global.moveValueGreenTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('%', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                ]
+                            ),
+
+                          ]
+                      ),
+                      Column(
+                        //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (averageSpo2.toString() == "0")
+                                        ? "--"
+                                        : averageSpo2.toString(),
+                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('%', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                ]
+                            ),
+                          ]
+                      ),
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (rangeMaxSpo2.toString() == "0")
+                                        ? "--"
+                                        : rangeMaxSpo2.toString(),
+                                    style: hPi4Global.moveValueBlueTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('%', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                ]
+                            ),
+
+                          ]
                       ),
                       SizedBox(width: 10.0),
-                      Text('-', style: hPi4Global.moveValueTextStyle),
-                      SizedBox(width: 10.0),
-                      Text(
-                        (rangeMaxSpo2.toString() == "0")
-                            ? "--"
-                            : rangeMaxSpo2.toString(),
-                        style: hPi4Global.moveValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text("%", style: hPi4Global.movecardSubValueTextStyle),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
                 ],
@@ -422,13 +449,14 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget displayAvergeValues() {
+
+  Widget displayAboutValues() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 13,
+          height: SizeConfig.blockSizeVertical * 30,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -438,27 +466,45 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        (averageSpo2.toString() == "0")
-                            ? "--"
-                            : averageSpo2.toString(),
+                      Text("About SpO2",
                         style: hPi4Global.moveValueTextStyle,
                       ),
-                      SizedBox(width: 15.0),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
+                  SizedBox(height: 10.0),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'AVERAGE',
-                        style: hPi4Global.movecardSubValueTextStyle,
+                      Expanded(
+                        child: Text(
+                          "SpO2 is estimated from optical sensors and represents the percentage of oxygen carried by your red blood cells."
+                              " Values may be influenced by motion, light interference, or sensor placement. ",
+                          style:
+                          hPi4Global.movecardSubValue1TextStyle,
+                          textAlign: TextAlign.justify,
+                        ),
                       ),
                     ],
                   ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      TextButton(
+                        onPressed: () {
+                          //launchURL("");
+                        },
+                        child: Text('Harvard Health', style:TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue,
+                        )),
+                      )
+                    ],
+                  ),
+                  displayValuesAlert(),
                 ],
               ),
             ),
@@ -468,36 +514,42 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget displayCard(String tab) {
-    return Card(
-      color: Colors.black,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: SizeConfig.blockSizeVertical * 45,
-                      width: SizeConfig.blockSizeHorizontal * 88,
-                      color: Colors.transparent,
-                      child: buildChartBlock(),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 20),
-                displayRangeValues(),
-                displayAvergeValues(),
-              ],
-            ),
-          ],
+
+  Widget displayCard(String title) {
+    return SingleChildScrollView(
+      child: Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 35,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color: Colors.transparent,
+                        child: buildChartBlock(),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  displayRangeValues(),
+                  SizedBox(height: 20),
+                  displayAboutValues(),
+                  SizedBox(height: 10),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
