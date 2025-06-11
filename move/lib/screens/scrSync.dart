@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:version/version.dart';
 import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../utils/extra.dart';
@@ -43,6 +44,8 @@ class _SyncingScreenState extends State<SyncingScreen> {
   BluetoothService? dataService;
   BluetoothCharacteristic? dataCharacteristic;
 
+  late BluetoothCharacteristic deviceFWCharacteristic;
+
   late StreamSubscription<List<int>> _streamDataSubscription;
   bool listeningDataStream = false;
 
@@ -77,6 +80,10 @@ class _SyncingScreenState extends State<SyncingScreen> {
   bool _showProgressSpo2 = true;
   bool _showProgressActivity = true;
 
+  String _currentFWVersion = "";
+  String _fWVersion = "1.2.0";
+  String _fwVersionCheck = "";
+
   @override
   void initState() {
     _connectionStateSubscription = widget.device.connectionState.listen((
@@ -86,7 +93,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
       if (state == BluetoothConnectionState.connected) {
         await discoverDataChar(widget.device);
         //await _startListeningData();
-        startFetching();
+       // startFetching();
       }
     });
 
@@ -163,6 +170,55 @@ class _SyncingScreenState extends State<SyncingScreen> {
           }
         }
       }
+      if (service.uuid == Guid("180a")) {
+        for (BluetoothCharacteristic characteristic
+        in service.characteristics) {
+          if (characteristic.uuid == Guid("2a26")) {
+            deviceFWCharacteristic = characteristic;
+            characteristic.read().then((value) {
+              if (mounted) {
+                setState(() {
+                  _currentFWVersion = String.fromCharCodes(value);
+                  _fwVersionCheck = _CompareFWVersion(_currentFWVersion, _fWVersion);
+                  logConsole(
+                    "Current FW version: $_currentFWVersion",
+                  );
+                  if(_fwVersionCheck == "Can_sync"){
+                    startFetching();
+                  }else if(_fwVersionCheck == "Cannot_sync"){
+                    _cannotSyncAndClose();
+                    return;
+                  }else{
+
+                  }
+
+                });
+              }
+            }).catchError((e) {
+              Snackbar.show(
+                ABC.c,
+                prettyException("Read Error:", e),
+                success: false,
+              );
+            });
+            break;
+          }
+        }
+      }
+
+    }
+  }
+
+  String _CompareFWVersion(String versionCurrent, String versionAvail) {
+    Version availVersion = Version.parse(versionAvail);
+    Version currentVersion = Version.parse(versionCurrent);
+
+    if (availVersion > currentVersion) {
+      return "Cannot_sync";
+    } else if (availVersion == currentVersion || availVersion < currentVersion) {
+      return "Can_sync";
+    } else {
+      return "None";
     }
   }
 
@@ -211,22 +267,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     BluetoothDevice deviceName,
   ) async {
     logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
-
-    /*List<BluetoothService> services = await deviceName.discoverServices();
-
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-            commandCharacteristic = characteristic;
-            break;
-          }
-        }
-      }
-    }*/
 
     if (commandService != null && commandCharacteristic != null) {
       // Write to the characteristic
@@ -302,9 +342,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
     logConsole(
       "HR Session Count: $hrSessionCount, "
-      "Temp Session Count: $tempSessionCount, "
-      "SpO2 Session Count: $spo2SessionCount, "
-      "Activity Session Count: $activitySessionCount",
+          "Temp Session Count: $tempSessionCount, "
+          "SpO2 Session Count: $spo2SessionCount, "
+          "Activity Session Count: $activitySessionCount",
     );
 
     //await _streamDataSubscription.cancel();
@@ -651,6 +691,57 @@ class _SyncingScreenState extends State<SyncingScreen> {
         ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
       }
     }
+  }
+
+  Future<void> _cannotSyncAndClose() async {
+    // Disconnect from device
+    await widget.device.disconnect(queue: true);
+
+      // Show dialog to user
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false, // Prevent dismissing by tapping outside
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange, size: 28),
+                  SizedBox(width: 10),
+                  Text('Cannot sync the data'),
+                ],
+              ),
+              content:
+              Text(
+                'Please ensure the device has the latest fw version 1.2.0 or greater to sync.',
+                style: TextStyle(fontSize: 16),
+              ),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => HomePage()),
+                    );
+                  },
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      color: hPi4Global.hpi4Color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      }
   }
 
   Future<String> _getLogFilePathByType(int logFileID, String prefix) async {

@@ -163,13 +163,13 @@ class _HomeScreenState extends State<HomeScreen> {
       MonthlyTrend lastTrend = monthlyHRTrends.last;
       DateTime lastTime =
           lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = floorToOneDecimal(lastTrend.avg);
+      int lastAvg = lastTrend.avg.toInt();
       setState(() {
         saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
       });
-      print('Last Time: $lastTime, Min: $lastAvg');
+      //print('Last Time: $lastTime, Min: $lastAvg');
     } else {
-      print('No monthly HR trends data available.');
+      //print('No monthly HR trends data available.');
     }
   }
 
@@ -193,15 +193,14 @@ class _HomeScreenState extends State<HomeScreen> {
         await Spo2DataManager.getSpO2MonthlyTrend(today);
     if (monthlySpo2Trends.isNotEmpty) {
       SpO2MonthlyTrend lastTrend = monthlySpo2Trends.last;
-      DateTime lastTime =
-          lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = floorToOneDecimal(lastTrend.avg);
+      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      int lastAvg = lastTrend.avg.toInt();
       setState(() {
         saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
       });
-      print('Last Time: $lastTime, Min: $lastAvg');
+     // print('Last Time: $lastTime, Min: $lastAvg');
     } else {
-      print('No monthly HR trends data available.');
+     // print('No monthly HR trends data available.');
     }
   }
 
@@ -231,11 +230,11 @@ class _HomeScreenState extends State<HomeScreen> {
           lastTrend.date; // This is the last day's date in the month with data
       double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
       setState(() {
-        saveValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
+        saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
       });
-      print('Last Time: $lastTime, Min: $lastAvg');
+      //print('Last Time: $lastTime, Min: $lastAvg');
     } else {
-      print('No monthly Temp trends data available.');
+      //print('No monthly Temp trends data available.');
     }
   }
 
@@ -261,7 +260,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (activityMonthlyTrend.isNotEmpty) {
       ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
       DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      double lastAvg = floorToOneDecimal(lastTrend.steps.toDouble());
+      int lastAvg = lastTrend.steps;
       setState(() {
         saveValue(
           lastTime,
@@ -270,14 +269,25 @@ class _HomeScreenState extends State<HomeScreen> {
           "latestActivityCount",
         );
       });
-      print('Last Time: $lastTime, steps: $lastAvg');
+     // print('Last Time: $lastTime, steps: $lastAvg');
     } else {
-      print('No monthly Activity trends data available.');
+      //print('No monthly Activity trends data available.');
     }
   }
 
-  // Save a value
   saveValue(
+      DateTime lastUpdatedTime,
+      int averageHR,
+      String latestTimeString,
+      String latestValueString,
+      ) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(latestValueString, averageHR.toString());
+    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String());
+  }
+
+  // Save a value
+  saveTempValue(
     DateTime lastUpdatedTime,
     double averageHR,
     String latestTimeString,

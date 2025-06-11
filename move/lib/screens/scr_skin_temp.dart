@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:move/screens/showTrendsAlert.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -392,7 +393,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 15,
+          height: SizeConfig.blockSizeVertical * 12,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -401,42 +402,71 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'RANGE',
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
-                    ],
-                  ),
                   SizedBox(height: 10.0),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    //mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      Text((rangeMinTemp.toString()=="0.0")? "--":rangeMinTemp.toString(),
-                        style: hPi4Global.moveValueTextStyle,
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text((rangeMinTemp.toString() == "0")
+                                      ? "--"
+                                      : rangeMinTemp.toString(),
+                                    style: hPi4Global.moveValueGreenTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                ]
+                            ),
+
+                          ]
+                      ),
+                      Column(
+                        //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (averageTemp.toString() == "0")
+                                        ? "--"
+                                        : averageTemp.toString(),
+                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                ]
+                            ),
+                          ]
+                      ),
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (rangeMaxTemp.toString() == "0")
+                                        ? "--"
+                                        : rangeMaxTemp.toString(),
+                                    style: hPi4Global.moveValueBlueTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                ]
+                            ),
+
+                          ]
                       ),
                       SizedBox(width: 10.0),
-                      Text('-', style: hPi4Global.moveValueTextStyle),
-                      SizedBox(width: 10.0),
-                      Text((rangeMaxTemp.toString()=="0.0")? "--":rangeMaxTemp.toString(),
-                        style: hPi4Global.moveValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        "\u00b0 F",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 15.0),
-                      //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
                 ],
@@ -448,13 +478,13 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
     );
   }
 
-  Widget displayAvergeValues() {
+  Widget displayAboutValues() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 13,
+          height: SizeConfig.blockSizeVertical * 35,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -464,24 +494,47 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text((averageTemp.toString() =="0.0")? "--":averageTemp.toString(),
+                      Text("About Skin Temperature",
                         style: hPi4Global.moveValueTextStyle,
                       ),
-                      SizedBox(width: 15.0),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
+                  SizedBox(height: 10.0),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        'AVERAGE',
-                        style: hPi4Global.movecardSubValueTextStyle,
+                      Expanded(
+                        child: Text(
+                          "Skin temperature is measured at the surface of the wrist and may differ from core body temperature. "
+                              "Fluctuations can occur due to physical activity, ambient conditions, and device positioning. "
+                              "This is provided for general awareness and is not a substitute for medical-grade thermometers ",
+                          style:
+                          hPi4Global.movecardSubValue1TextStyle,
+                          textAlign: TextAlign.justify,
+                        ),
                       ),
                     ],
                   ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      TextButton(
+                        onPressed: () {
+                          //launchURL("");
+                        },
+                        child: Text('Harvard Health', style:TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue,
+                        )),
+                      )
+                    ],
+                  ),
+
+                  displayValuesAlert(),
                 ],
               ),
             ),
@@ -492,40 +545,44 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }
 
 
-  Widget displayCard(String tab) {
-    return Card(
-      color: Colors.black,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      height: SizeConfig.blockSizeVertical * 45,
-                      width: SizeConfig.blockSizeHorizontal * 88,
-                      color: Colors.transparent,
-                      child: buildChartBlock(),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 20),
-                displayRangeValues(),
-                displayAvergeValues(),
-              ],
-            ),
-          ],
+  Widget displayCard(String title) {
+    return SingleChildScrollView(
+      child: Card(
+        color: Colors.black,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        height: SizeConfig.blockSizeVertical * 35,
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        color: Colors.transparent,
+                        child: buildChartBlock(),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 20),
+                  displayRangeValues(),
+                  SizedBox(height: 20),
+                  displayAboutValues(),
+                  SizedBox(height: 10),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
-
   }
 
   @override
