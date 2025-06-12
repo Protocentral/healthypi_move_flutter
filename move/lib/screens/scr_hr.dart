@@ -224,6 +224,15 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   }
 
   Widget buildChartBlock() {
+    String periodText = "";
+    if (_tabController.index == 0) {
+      periodText = "today";
+    } else if (_tabController.index == 1) {
+      periodText = "this week";
+    } else {
+      periodText = "this month";
+    }
+
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
@@ -233,30 +242,42 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: dateTimeAxis(),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+              child: hrTrendsData.isEmpty 
+                ? Center(
+                    child: Text(
+                      "No data available for $periodText",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : SfCartesianChart(
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: dateTimeAxis(),
+                    primaryYAxis: NumericAxis(
+                      majorGridLines: MajorGridLines(width: 0.05),
+                      anchorRangeToVisiblePoints: true,
+                      rangePadding: ChartRangePadding.auto,
+                      labelStyle: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    palette: <Color>[hPi4Global.hpi4Color],
+                    series: <CartesianSeries>[
+                      HiloSeries<HRTrends, DateTime>(
+                        dataSource: hrTrendsData,
+                        xValueMapper: (HRTrends data, _) => data.date,
+                        lowValueMapper: (HRTrends data, _) => data.minHR,
+                        highValueMapper: (HRTrends data, _) => data.maxHR,
+                        borderWidth: borderWidth(),
+                        animationDuration: 0,
+                      ),
+                    ],
                   ),
-                ),
-                palette: <Color>[hPi4Global.hpi4Color],
-                series: <CartesianSeries>[
-                  HiloSeries<HRTrends, DateTime>(
-                    dataSource: hrTrendsData,
-                    xValueMapper: (HRTrends data, _) => data.date,
-                    lowValueMapper: (HRTrends data, _) => data.minHR,
-                    highValueMapper: (HRTrends data, _) => data.maxHR,
-                    borderWidth: borderWidth(),
-                    animationDuration: 0,
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -491,7 +512,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                       Expanded(
                         child: Text(
                           "Heart rate is measured using optical PPG sensors on the wrist. "
-                              "The values shown reflect pulse rate and are for general information and personal insight only. ",
+                              "The values shown reflect pulse rate and are for general information and personal insight only.",
                           style:
                           hPi4Global.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,

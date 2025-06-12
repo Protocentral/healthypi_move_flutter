@@ -215,6 +215,15 @@ class _ScrActivityState extends State<ScrActivity>
   }
 
   Widget buildChartBlock() {
+    String periodText = "";
+    if (_tabController.index == 0) {
+      periodText = "today";
+    } else if (_tabController.index == 1) {
+      periodText = "this week";
+    } else {
+      periodText = "this month";
+    }
+
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
@@ -224,30 +233,41 @@ class _ScrActivityState extends State<ScrActivity>
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: dateTimeAxis(),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+              child: ActivityTrendsData.isEmpty 
+                ? Center(
+                    child: Text(
+                      "No data available for $periodText",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : SfCartesianChart(
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: dateTimeAxis(),
+                    primaryYAxis: NumericAxis(
+                      majorGridLines: MajorGridLines(width: 0.05),
+                      anchorRangeToVisiblePoints: false,
+                      labelStyle: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    palette: <Color>[hPi4Global.hpi4Color],
+                    series: <CartesianSeries>[
+                      HiloSeries<ActivityTrends, DateTime>(
+                        dataSource: ActivityTrendsData,
+                        xValueMapper: (ActivityTrends data, _) => data.date,
+                        lowValueMapper: (ActivityTrends data, _) => 0,
+                        highValueMapper: (ActivityTrends data, _) => data.count,
+                        borderWidth: borderWidth(),
+                        animationDuration: 0,
+                      ),
+                    ],
                   ),
-                ),
-                palette: <Color>[hPi4Global.hpi4Color],
-                series: <CartesianSeries>[
-                  HiloSeries<ActivityTrends, DateTime>(
-                    dataSource: ActivityTrendsData,
-                    xValueMapper: (ActivityTrends data, _) => data.date,
-                    lowValueMapper: (ActivityTrends data, _) => 0,
-                    highValueMapper: (ActivityTrends data, _) => data.count,
-                    borderWidth: borderWidth(),
-                    animationDuration: 0,
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -399,7 +419,7 @@ class _ScrActivityState extends State<ScrActivity>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 11,
+          height: SizeConfig.blockSizeVertical * 15,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],

@@ -221,6 +221,15 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
   }
 
   Widget buildChartBlock() {
+    String periodText = "";
+    if (_tabController.index == 0) {
+      periodText = "today";
+    } else if (_tabController.index == 1) {
+      periodText = "this week";
+    } else {
+      periodText = "this month";
+    }
+
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
@@ -230,30 +239,64 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: dateTimeAxis(),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+              child: Spo2TrendsData.isEmpty 
+                ? Center(
+                    child: Text(
+                      "No data available for $periodText",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : SfCartesianChart(
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: dateTimeAxis(),
+                    primaryYAxis: NumericAxis(
+                      majorGridLines: MajorGridLines(width: 0.05),
+                      anchorRangeToVisiblePoints: true,
+                      rangePadding: ChartRangePadding.auto,
+                      labelStyle: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    palette: <Color>[hPi4Global.hpi4Color],
+                    series: <CartesianSeries>[
+                      // Use LineSeries for single values and HiloSeries for ranges
+                      ...Spo2TrendsData.any((data) => data.minSpo2 != data.maxSpo2)
+                          ? [
+                              HiloSeries<Spo2Trends, DateTime>(
+                                dataSource: Spo2TrendsData.where((data) => data.minSpo2 != data.maxSpo2).toList(),
+                                xValueMapper: (Spo2Trends data, _) => data.date,
+                                lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
+                                highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
+                                borderWidth: borderWidth(),
+                                animationDuration: 0,
+                              ),
+                            ]
+                          : [],
+                      // Add scatter series for points where min == max
+                      ...Spo2TrendsData.any((data) => data.minSpo2 == data.maxSpo2)
+                          ? [
+                              ScatterSeries<Spo2Trends, DateTime>(
+                                dataSource: Spo2TrendsData.where((data) => data.minSpo2 == data.maxSpo2).toList(),
+                                xValueMapper: (Spo2Trends data, _) => data.date,
+                                yValueMapper: (Spo2Trends data, _) => data.maxSpo2,
+                                markerSettings: MarkerSettings(
+                                  isVisible: true,
+                                  width: borderWidth(),
+                                  height: borderWidth(),
+                                  shape: DataMarkerType.circle,
+                                ),
+                                animationDuration: 0,
+                              ),
+                            ]
+                          : [],
+                    ],
                   ),
-                ),
-                palette: <Color>[hPi4Global.hpi4Color],
-                series: <CartesianSeries>[
-                  HiloSeries<Spo2Trends, DateTime>(
-                    dataSource: Spo2TrendsData,
-                    xValueMapper: (Spo2Trends data, _) => data.date,
-                    lowValueMapper: (Spo2Trends data, _) => data.minSpo2,
-                    highValueMapper: (Spo2Trends data, _) => data.maxSpo2,
-                    borderWidth: borderWidth(),
-                    animationDuration: 0,
-                  ),
-                ],
-              ),
             ),
           ],
         ),
@@ -382,60 +425,79 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                       Column(
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
-                            Row(
-                                children: <Widget>[
-                                  Text((rangeMinSpo2.toString() == "0")
-                                      ? "--"
-                                      : rangeMinSpo2.toString(),
-                                    style: hPi4Global.moveValueGreenTextStyle,
-                                  ),
-                                  SizedBox(width: 5.0),
-                                  Text('%', style: hPi4Global.movecardSubValueGreenTextStyle),
-                                ]
-                            ),
-
-                          ]
+                        children: <Widget>[
+                          Text(
+                            "Minimum",
+                            style: hPi4Global.movecardSubValueTextStyle,
+                          ),
+                          Row(
+                            children: <Widget>[
+                              Text(
+                                (rangeMinSpo2.toString() == "0")
+                                    ? "--"
+                                    : rangeMinSpo2.toString(),
+                                style: hPi4Global.moveValueGreenTextStyle,
+                              ),
+                              SizedBox(width: 5.0),
+                              Text(
+                                '%',
+                                style:
+                                    hPi4Global.movecardSubValueGreenTextStyle,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       Column(
                         //mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
-                            Row(
-                                children: <Widget>[
-                                  Text(
-                                    (averageSpo2.toString() == "0")
-                                        ? "--"
-                                        : averageSpo2.toString(),
-                                    style: hPi4Global.moveValueOrangeTextStyle,
-                                  ),
-                                  SizedBox(width: 5.0),
-                                  Text('%', style: hPi4Global.movecardSubValueOrangeTextStyle),
-                                ]
-                            ),
-                          ]
+                        children: <Widget>[
+                          Text(
+                            "Average",
+                            style: hPi4Global.movecardSubValueTextStyle,
+                          ),
+                          Row(
+                            children: <Widget>[
+                              Text(
+                                (averageSpo2.toString() == "0")
+                                    ? "--"
+                                    : averageSpo2.toString(),
+                                style: hPi4Global.moveValueOrangeTextStyle,
+                              ),
+                              SizedBox(width: 5.0),
+                              Text(
+                                '%',
+                                style:
+                                    hPi4Global.movecardSubValueOrangeTextStyle,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       Column(
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
-                          children: <Widget>[
-                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
-                            Row(
-                                children: <Widget>[
-                                  Text(
-                                    (rangeMaxSpo2.toString() == "0")
-                                        ? "--"
-                                        : rangeMaxSpo2.toString(),
-                                    style: hPi4Global.moveValueBlueTextStyle,
-                                  ),
-                                  SizedBox(width: 5.0),
-                                  Text('%', style: hPi4Global.movecardSubValueBlueTextStyle),
-                                ]
-                            ),
-
-                          ]
+                        children: <Widget>[
+                          Text(
+                            "Maximum",
+                            style: hPi4Global.movecardSubValueTextStyle,
+                          ),
+                          Row(
+                            children: <Widget>[
+                              Text(
+                                (rangeMaxSpo2.toString() == "0")
+                                    ? "--"
+                                    : rangeMaxSpo2.toString(),
+                                style: hPi4Global.moveValueBlueTextStyle,
+                              ),
+                              SizedBox(width: 5.0),
+                              Text(
+                                '%',
+                                style: hPi4Global.movecardSubValueBlueTextStyle,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                       SizedBox(width: 10.0),
                     ],
@@ -448,7 +510,6 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       ],
     );
   }
-
 
   Widget displayAboutValues() {
     return Row(
@@ -468,9 +529,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Text("About SpO2",
-                        style: hPi4Global.moveValueTextStyle,
-                      ),
+                      Text("About SpO2", style: hPi4Global.moveValueTextStyle),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
@@ -481,9 +540,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                       Expanded(
                         child: Text(
                           "SpO2 is estimated from optical sensors and represents the percentage of oxygen carried by your red blood cells."
-                              " Values may be influenced by motion, light interference, or sensor placement. ",
-                          style:
-                          hPi4Global.movecardSubValue1TextStyle,
+                          " Values may be influenced by motion, light interference, or sensor placement. ",
+                          style: hPi4Global.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -492,16 +550,19 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
-                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      Text(
+                        'Learn more at',
+                        style: hPi4Global.movecardSubValue1TextStyle,
+                      ),
                       TextButton(
                         onPressed: () {
                           //launchURL("");
                         },
-                        child: Text('Harvard Health', style:TextStyle(
-                          fontSize: 14,
-                          color: Colors.blue,
-                        )),
-                      )
+                        child: Text(
+                          'Harvard Health',
+                          style: TextStyle(fontSize: 14, color: Colors.blue),
+                        ),
+                      ),
                     ],
                   ),
                   displayValuesAlert(),
@@ -513,7 +574,6 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       ],
     );
   }
-
 
   Widget displayCard(String title) {
     return SingleChildScrollView(

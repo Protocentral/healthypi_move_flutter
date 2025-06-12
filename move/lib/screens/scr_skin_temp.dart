@@ -225,6 +225,15 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }
 
   Widget buildChartBlock() {
+    String periodText = "";
+    if (_tabController.index == 0) {
+      periodText = "today";
+    } else if (_tabController.index == 1) {
+      periodText = "this week";
+    } else {
+      periodText = "this month";
+    }
+
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
@@ -234,30 +243,42 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: SfCartesianChart(
-                plotAreaBorderWidth: 0,
-                primaryXAxis: dateTimeAxis(),
-                primaryYAxis: NumericAxis(
-                  majorGridLines: MajorGridLines(width: 0.05),
-                  anchorRangeToVisiblePoints: false,
-                  labelStyle: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+              child: TempTrendsData.isEmpty 
+                ? Center(
+                    child: Text(
+                      "No data available for $periodText",
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : SfCartesianChart(
+                    plotAreaBorderWidth: 0,
+                    primaryXAxis: dateTimeAxis(),
+                    primaryYAxis: NumericAxis(
+                      majorGridLines: MajorGridLines(width: 0.05),
+                      anchorRangeToVisiblePoints: true,
+                      rangePadding: ChartRangePadding.auto,
+                      labelStyle: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    palette: <Color>[hPi4Global.hpi4Color],
+                    series: <CartesianSeries>[
+                      HiloSeries<TempTrends, DateTime>(
+                        dataSource: TempTrendsData,
+                        xValueMapper: (TempTrends data, _) => data.date,
+                        lowValueMapper: (TempTrends data, _) => data.minTemp/100,
+                        highValueMapper: (TempTrends data, _) => data.maxTemp/100,
+                        borderWidth: borderWidth(),
+                        animationDuration: 0,
+                      ),
+                    ],
                   ),
-                ),
-                palette: <Color>[hPi4Global.hpi4Color],
-                series: <CartesianSeries>[
-                  HiloSeries<TempTrends, DateTime>(
-                    dataSource: TempTrendsData,
-                    xValueMapper: (TempTrends data, _) => data.date,
-                    lowValueMapper: (TempTrends data, _) => data.minTemp/100,
-                    highValueMapper: (TempTrends data, _) => data.maxTemp/100,
-                    borderWidth: borderWidth(),
-                    animationDuration: 0,
-                  ),
-                ],
-              ),
             ),
           ],
         ),

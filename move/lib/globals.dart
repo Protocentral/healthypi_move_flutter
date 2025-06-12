@@ -214,19 +214,19 @@ class hPi4Global {
   );
 
   static const TextStyle moveValueGreenTextStyle = TextStyle(
-    fontSize: 18,
+    fontSize: 34,
     fontWeight: FontWeight.bold,
     color: Colors.green,
   );
 
   static const TextStyle moveValueOrangeTextStyle = TextStyle(
-    fontSize: 18,
+    fontSize: 34,
     fontWeight: FontWeight.bold,
     color: Colors.orange,
   );
 
   static const TextStyle moveValueBlueTextStyle = TextStyle(
-    fontSize: 18,
+    fontSize: 34,
     fontWeight: FontWeight.bold,
     color: Colors.blue,
   );
@@ -257,8 +257,8 @@ class hPi4Global {
   );
 
   static const TextStyle movecardSubValueRedTextStyle = TextStyle(
-    fontSize: 12,
-    color: Colors.red,
+    fontSize: 14,
+    color: Colors.orange,
   );
 
   static const TextStyle movecardSubValue2TextStyle = TextStyle(
