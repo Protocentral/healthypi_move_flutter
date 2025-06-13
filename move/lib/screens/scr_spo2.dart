@@ -407,7 +407,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 12,
+          height: SizeConfig.blockSizeVertical * 13,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -556,10 +556,10 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                       ),
                       TextButton(
                         onPressed: () {
-                          //launchURL("");
+                          launchURL("https://www.yalemedicine.org/conditions/pulse-oximetry");
                         },
                         child: Text(
-                          'Harvard Health',
+                          'Yale Medicine',
                           style: TextStyle(fontSize: 14, color: Colors.blue),
                         ),
                       ),

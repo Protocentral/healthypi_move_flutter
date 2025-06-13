@@ -492,9 +492,9 @@ class _ScrActivityState extends State<ScrActivity>
                       Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
-                          //launchURL("");
+                          launchURL("https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/walking/art-20047880");
                         },
-                        child: Text('Harvard Health', style:TextStyle(
+                        child: Text('Mayo Clinic', style:TextStyle(
                           fontSize: 14,
                           color: Colors.blue,
                         )),

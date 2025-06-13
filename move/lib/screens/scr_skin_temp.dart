@@ -414,7 +414,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 12,
+          height: SizeConfig.blockSizeVertical * 13,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -539,7 +539,8 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                       ),
                     ],
                   ),
-                  Row(
+
+                  /*Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
                       Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
@@ -553,8 +554,8 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                         )),
                       )
                     ],
-                  ),
-
+                  ),*/
+                  SizedBox(height: 10.0),
                   displayValuesAlert(),
                 ],
               ),

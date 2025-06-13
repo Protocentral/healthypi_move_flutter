@@ -395,7 +395,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 12,
+          height: SizeConfig.blockSizeVertical * 13,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
