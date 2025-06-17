@@ -91,8 +91,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
         dateFormat: DateFormat.H(),
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
+          color: Colors.grey,
+          fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
         axisLabelFormatter: (AxisLabelRenderDetails details) {
@@ -112,8 +112,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
           return ChartAxisLabel(
             labelText,
             TextStyle(
-              color: Colors.white,
-              fontSize: 14,
+              color: Colors.grey,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -129,8 +129,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
         dateFormat: DateFormat('EEE'), // Show day and hour
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
+          color: Colors.grey,
+          fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
         axisLabelFormatter: (AxisLabelRenderDetails details) {
@@ -146,8 +146,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
             return ChartAxisLabel(
               'Today',
               TextStyle(
-                color: Colors.white,
-                fontSize: 14,
+                color: Colors.grey,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             );
@@ -156,8 +156,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
           return ChartAxisLabel(
             details.text,
             TextStyle(
-              color: Colors.white,
-              fontSize: 14,
+              color: Colors.grey,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -190,8 +190,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
             return ChartAxisLabel(
               'Today',
               TextStyle(
-                color: Colors.white,
-                fontSize: 14,
+                color: Colors.grey,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             );
@@ -200,8 +200,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
           return ChartAxisLabel(
             details.text,
             TextStyle(
-              color: Colors.white,
-              fontSize: 14,
+              color: Colors.grey,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -252,14 +252,28 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                   )
                 : SfCartesianChart(
                     plotAreaBorderWidth: 0,
+                tooltipBehavior: TooltipBehavior(
+                  enable: true,
+                  format: 'point.x : point.high',
+                  textStyle: TextStyle(color: Colors.white, fontSize: 12),
+                  color: Colors.black87,
+                  borderColor: Colors.grey,
+                  borderWidth: 1,
+                ),
+                trackballBehavior: TrackballBehavior(
+                  enable: true,
+                  activationMode: ActivationMode.singleTap,
+                  tooltipDisplayMode: TrackballDisplayMode.groupAllPoints,
+                  //tooltipDisplayMode: TrackballDisplayMode.nearestPoint
+                ),
                     primaryXAxis: dateTimeAxis(),
                     primaryYAxis: NumericAxis(
                       majorGridLines: MajorGridLines(width: 0.05),
                       anchorRangeToVisiblePoints: true,
                       rangePadding: ChartRangePadding.auto,
                       labelStyle: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
+                        color: Colors.grey,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -517,7 +531,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 30,
+          height: SizeConfig.blockSizeVertical * 28,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -588,22 +602,22 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(height: 20),
+                  SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        height: SizeConfig.blockSizeVertical * 35,
+                        height: SizeConfig.blockSizeVertical * 30,
                         width: SizeConfig.blockSizeHorizontal * 88,
                         color: Colors.transparent,
                         child: buildChartBlock(),
                       ),
                     ],
                   ),
-                  SizedBox(height: 20),
+                  SizedBox(height: 10),
                   displayRangeValues(),
-                  SizedBox(height: 20),
+                  SizedBox(height: 10),
                   displayAboutValues(),
                   SizedBox(height: 10),
                 ],

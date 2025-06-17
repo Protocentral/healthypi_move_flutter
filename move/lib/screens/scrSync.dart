@@ -1124,12 +1124,14 @@ class _SyncingScreenState extends State<SyncingScreen> {
       padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
+          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           backgroundColor: Colors.red,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          //minimumSize: Size(SizeConfig.blockSizeHorizontal * 20, 40),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
         onPressed: () async {
           onDisconnectPressed();

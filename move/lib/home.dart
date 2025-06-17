@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int minHR = int.tryParse(row[1]) ?? 0;
         int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
         return HRTrends(date, maxHR, minHR);
       },
       getFileType: (file) => "hr",
@@ -159,10 +159,12 @@ class _HomeScreenState extends State<HomeScreen> {
       today,
     );
 
+    List<HRTrends> allData = await hrDataManager.getDataObjects();
+
     if (monthlyHRTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyHRTrends.last;
-      DateTime lastTime =
-          lastTrend.date; // This is the last day's date in the month with data
+      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.avg.toInt();
       setState(() {
         saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
@@ -179,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
       fromRow: (row) {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int spo2 = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
         return Spo2Trends(date, spo2, 0);
       },
       getFileType: (file) => "spo2",
@@ -191,9 +193,14 @@ class _HomeScreenState extends State<HomeScreen> {
     DateTime today = DateTime.now();
     List<SpO2MonthlyTrend> monthlySpo2Trends =
         await Spo2DataManager.getSpO2MonthlyTrend(today);
+
+
+    List<Spo2Trends> allData = await Spo2DataManager.getDataObjects();
+
     if (monthlySpo2Trends.isNotEmpty) {
       SpO2MonthlyTrend lastTrend = monthlySpo2Trends.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.avg.toInt();
       setState(() {
         saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
@@ -211,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int minHR = int.tryParse(row[1]) ?? 0;
         int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
         return TempTrends(date, maxHR.toDouble(), minHR.toDouble());
       },
       getFileType: (file) => "temp",
@@ -224,10 +231,12 @@ class _HomeScreenState extends State<HomeScreen> {
     List<MonthlyTrend> monthlyTempTrends = await tempDataManager
         .getMonthlyTrend(today);
 
+    List<TempTrends> allData = await tempDataManager.getDataObjects();
+
     if (monthlyTempTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyTempTrends.last;
-      DateTime lastTime =
-          lastTrend.date; // This is the last day's date in the month with data
+     // DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime = allData.last.date;
       double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
       setState(() {
         saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
@@ -244,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
       fromRow: (row) {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int count = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
         return ActivityTrends(date, count);
       },
       getFileType: (file) => "activity",
@@ -257,9 +266,12 @@ class _HomeScreenState extends State<HomeScreen> {
     List<ActivityMonthlyTrend> activityMonthlyTrend =
         await ActivityDataManager.getActivityMonthlyTrend(today);
 
+    List<ActivityTrends> allData = await ActivityDataManager.getDataObjects();
+
     if (activityMonthlyTrend.isNotEmpty) {
       ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
+      DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.steps;
       setState(() {
         saveValue(
@@ -283,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(latestValueString, averageHR.toString());
-    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String());
+    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String().replaceFirst('Z', ''));
   }
 
   // Save a value
@@ -295,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(latestValueString, averageHR.toString());
-    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String());
+    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String().replaceFirst('Z', ''));
   }
 
   // Load the stored value
@@ -311,6 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
       String? lastHRRaw = prefs.getString('lastUpdatedHR');
       lastUpdatedHRDate = _parseDate(lastHRRaw);
       lastUpdatedHR = getRelativeTime(lastUpdatedHRDate);
+
 
       String? lastTempRaw = prefs.getString('lastUpdatedTemp');
       lastUpdatedTempDate = _parseDate(lastTempRaw);
@@ -363,9 +376,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   double getAspectRatio() {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return MediaQuery.of(context).size.aspectRatio * 3.0 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 4.0 / 2;
     } else {
-      return MediaQuery.of(context).size.aspectRatio * 3.0 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 13.5 / 2;
     }
   }
 
@@ -376,10 +389,13 @@ class _HomeScreenState extends State<HomeScreen> {
   late CsvDataManager<ActivityTrends> ActivityDataManager;
 
   Widget _buildMainGrid() {
+    _loadLastVitalInfo();
+    _loadStoredValue();
     return GridView.count(
       primary: false,
       padding: const EdgeInsets.all(12),
-      crossAxisCount: 2, //getGridCount(),
+      //crossAxisCount: 2, //getGridCount(),
+      crossAxisCount: getGridCount(),
       childAspectRatio: getAspectRatio(),
       mainAxisSpacing: 10,
       crossAxisSpacing: 10,
@@ -393,8 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ).pushReplacement(MaterialPageRoute(builder: (_) => ScrHR()));
           },
           child: Card(
-            color: Colors.grey[900],
-
+            color: Colors.green[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -416,22 +431,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestHR.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
                       SizedBox(width: 10.0),
                       Text("bpm", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      /*Text(
-                        "Updated: ",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),*/
                       Text(
                         lastUpdatedHR.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,
@@ -452,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ).pushReplacement(MaterialPageRoute(builder: (_) => ScrSPO2()));
           },
           child: Card(
-            color: Colors.grey[900],
+            color: Colors.orange[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -474,15 +480,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestSpo2.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
                       SizedBox(width: 10.0),
                       Text("%", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
@@ -505,7 +506,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
           child: Card(
-            color: Colors.grey[900],
+            color: Colors.blue[900],
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -527,15 +528,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestTemp,
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
                       SizedBox(width: 10.0),
                       Text("\u00b0 F", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
@@ -563,6 +559,7 @@ class _HomeScreenState extends State<HomeScreen> {
           },
           child: Card(
             color: Colors.grey[900],
+            //color:Color(0xFFBa8e23),
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -583,19 +580,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         lastestActivity.toString(),
                         style: hPi4Global.movecardValueTextStyle,
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
                       SizedBox(width: 10.0),
                       Text("Steps", style: hPi4Global.movecardTextStyle),
                     ],
                   ),
-                  SizedBox(height: 20.0),
                   Row(
                     children: <Widget>[
                       SizedBox(width: 10.0),
-
                       Text(
                         lastUpdatedActivity.toString(),
                         style: hPi4Global.movecardSubValueTextStyle,

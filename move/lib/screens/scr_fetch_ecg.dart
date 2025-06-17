@@ -835,16 +835,14 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                     children: [
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          //backgroundColor: hPi4Global.hpi4Color, // background color
-                          backgroundColor: Colors.red, // background color
-                          foregroundColor: Colors.white, // text color
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          minimumSize: Size(
-                            SizeConfig.blockSizeHorizontal * 60,
-                            40,
-                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: () async {
                           showConfirmationDialog(context);
@@ -893,16 +891,14 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                     children: [
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          //backgroundColor: hPi4Global.hpi4Color, // background color
-                          backgroundColor: Colors.red, // background color
-                          foregroundColor: Colors.white, // text color
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          minimumSize: Size(
-                            SizeConfig.blockSizeHorizontal * 60,
-                            40,
-                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
                         onPressed: () async {
                           await cancelAction();

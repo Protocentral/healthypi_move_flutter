@@ -194,21 +194,15 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           ),
                                           SizedBox(height: 10.0),
                                           /*ElevatedButton(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
+                                           style: ElevatedButton.styleFrom(
+                                              minimumSize: const Size(0, 36),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              backgroundColor: hPi4Global.hpi4Color,
+                                              foregroundColor: Colors.white,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
+                                                borderRadius: BorderRadius.circular(20),
                                               ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             onPressed: () {
                                               Navigator.push(
@@ -248,20 +242,14 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
+                                              minimumSize: const Size(0, 36),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              backgroundColor: hPi4Global.hpi4Color,
+                                              foregroundColor: Colors.white,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
+                                                borderRadius: BorderRadius.circular(20),
                                               ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             onPressed: () {
                                               setState(() {
@@ -303,20 +291,14 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  hPi4Global
-                                                      .hpi4Color, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
+                                              minimumSize: const Size(0, 36),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              backgroundColor: hPi4Global.hpi4Color,
+                                              foregroundColor: Colors.white,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
+                                                borderRadius: BorderRadius.circular(20),
                                               ),
-                                              minimumSize: Size(
-                                                SizeConfig.blockSizeHorizontal *
-                                                    100,
-                                                40,
-                                              ),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             onPressed: () {
                                               Navigator.of(
@@ -325,18 +307,16 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                 MaterialPageRoute(
                                                   builder:
                                                       (_) => ScrScan(
-                                                        tabIndex: "4",
-                                                      ),
+                                                    tabIndex: "4",
+                                                  ),
                                                 ),
                                               );
                                             },
                                             child: Padding(
-                                              padding: const EdgeInsets.all(
-                                                8.0,
-                                              ),
+                                              padding: const EdgeInsets.all(8.0),
                                               child: Row(
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.start,
+                                                mainAxisAlignment: MainAxisAlignment.start,
+                                                mainAxisSize: MainAxisSize.max,
                                                 children: <Widget>[
                                                   Icon(
                                                     Icons.download_for_offline,
@@ -349,7 +329,6 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                       color: Colors.white,
                                                     ),
                                                   ),
-                                                  Spacer(),
                                                 ],
                                               ),
                                             ),
@@ -399,15 +378,14 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  Colors
-                                                      .red, // background color
-                                              foregroundColor:
-                                                  Colors.white, // text color
+                                              minimumSize: const Size(0, 36),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(20),
+                                                borderRadius: BorderRadius.circular(20),
                                               ),
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                             ),
                                             onPressed: () {
                                               showConfirmationDialog(

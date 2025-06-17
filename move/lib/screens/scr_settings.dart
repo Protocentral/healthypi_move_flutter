@@ -332,35 +332,43 @@ class _ScrSettingsState extends State<ScrSettings> {
                         child: Card(
                           color: Colors.grey[900],
                           child: Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
+                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
                               child: Column(
                                   children:[
                                     SizedBox(height:10),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red, // background color
-                                        foregroundColor: Colors.white, // text color
+                                        minimumSize: const Size(0, 36),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(20),
                                         ),
-                                        minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: () {
                                         showConfirmationDialog(context, "all data.");
                                       },
                                       child: Padding(
-                                        padding: const EdgeInsets.all(8.0),
+                                        padding: const EdgeInsets.all(
+                                          8.0,
+                                        ),
                                         child: Row(
-                                          //mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment: MainAxisAlignment.start,
+                                          mainAxisAlignment:
+                                          MainAxisAlignment.start,
                                           children: <Widget>[
                                             Icon(
                                               Icons.delete,
                                               color: Colors.white,
                                             ),
-                                            Text(
+                                            SizedBox(width: 4),
+                                            const Text(
                                               'Erase app data',
-                                              style: TextStyle(fontSize: 16, color: Colors.white),
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.white,
+                                              ),
                                             ),
                                             Spacer(),
                                           ],
@@ -370,12 +378,14 @@ class _ScrSettingsState extends State<ScrSettings> {
                                     SizedBox(height:10),
                                     ElevatedButton(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red, // background color
-                                        foregroundColor: Colors.white, // text color
+                                        minimumSize: const Size(0, 36),
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(20),
                                         ),
-                                        minimumSize: Size(SizeConfig.blockSizeHorizontal * 100, 40),
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                       ),
                                       onPressed: () {
                                         showConfirmationDialog(context, "paired device.");
@@ -390,6 +400,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                                               Icons.delete,
                                               color: Colors.white,
                                             ),
+                                            SizedBox(width: 4),
                                             Text(
                                               'Delete preferred device ',
                                               style: TextStyle(fontSize: 16, color: Colors.white),

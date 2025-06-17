@@ -344,11 +344,14 @@ class _ScrScanState extends State<ScrScan> {
         padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: hPi4Global.hpi4Color, // background color
-            foregroundColor: Colors.white, // text color
+            minimumSize: const Size(0, 36),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            backgroundColor: hPi4Global.hpi4Color,
+            foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
           onPressed: onScanPressed,
           child: Padding(

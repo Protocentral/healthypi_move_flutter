@@ -252,7 +252,7 @@ class hPi4Global {
   );
 
   static const TextStyle movecardSubValue1TextStyle = TextStyle(
-    fontSize: 14,
+    fontSize: 12,
     color: Colors.white,
   );
 

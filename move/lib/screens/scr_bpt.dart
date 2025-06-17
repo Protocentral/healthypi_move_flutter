@@ -1,29 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:move/screens/csvData.dart';
 import 'package:move/screens/showTrendsAlert.dart';
-import '../globals.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../home.dart';
 import '../utils/sizeConfig.dart';
-import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import 'csvData.dart';
 
-class ScrActivity extends StatefulWidget {
-  const ScrActivity({super.key});
+import '../globals.dart';
+import 'package:intl/intl.dart';
+
+class ScrBPT extends StatefulWidget {
+  const ScrBPT({super.key});
   @override
-  State<ScrActivity> createState() => _ScrActivityState();
+  State<ScrBPT> createState() => _ScrBPTState();
 }
 
-class _ScrActivityState extends State<ScrActivity>
-    with SingleTickerProviderStateMixin {
+class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  List<String> timestamp = [];
+  List<String> timestampSys = [];
+  List<String> minSys = [];
+  List<String> maxSys = [];
+  List<String> avgSys = [];
 
-  int totalCount = 0;
-  int Count = 0;
+  int rangeMinSys = 0;
+  int rangeMaxSys = 0;
+  int averageSys = 0;
   late DateTime lastUpdatedTime;
 
-  List<ActivityTrends> ActivityTrendsData = [];
+  List<String> timestampDia = [];
+  List<String> minDia = [];
+  List<String> maxDia = [];
+  List<String> avgDia = [];
+
+  int rangeMinDia = 0;
+  int rangeMaxDia = 0;
+  int averageDia = 0;
 
   @override
   void initState() {
@@ -31,15 +44,16 @@ class _ScrActivityState extends State<ScrActivity>
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    activityDataManager = CsvDataManager<ActivityTrends>(
-      filePrefix: "activity_",
+    hrDataManager = CsvDataManager<HRTrends>(
+      filePrefix: "hr_",
       fromRow: (row) {
         int timestamp = int.tryParse(row[0]) ?? 0;
-        int count = int.tryParse(row[1]) ?? 0;
+        int minHR = int.tryParse(row[1]) ?? 0;
+        int maxHR = int.tryParse(row[2]) ?? 0;
         DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return ActivityTrends(date, count);
+        return HRTrends(date, maxHR, minHR);
       },
-      getFileType: (file) => "activity",
+      getFileType: (file) => "hr",
     );
 
     _loadData();
@@ -47,11 +61,13 @@ class _ScrActivityState extends State<ScrActivity>
 
   @override
   void dispose() {
-    ActivityTrendsData = [];
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
+    hrTrendsData = [];
     super.dispose();
   }
+
+  List<HRTrends> hrTrendsData = [];
 
   void _handleTabChange() {
     setState(() {
@@ -85,8 +101,8 @@ class _ScrActivityState extends State<ScrActivity>
         dateFormat: DateFormat.H(),
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
-          color: Colors.grey,
-          fontSize: 12,
+          color: Colors.white,
+          fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
         axisLabelFormatter: (AxisLabelRenderDetails details) {
@@ -106,8 +122,8 @@ class _ScrActivityState extends State<ScrActivity>
           return ChartAxisLabel(
             labelText,
             TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
+              color: Colors.white,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -123,8 +139,8 @@ class _ScrActivityState extends State<ScrActivity>
         dateFormat: DateFormat('EEE'), // Show day and hour
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
-          color: Colors.grey,
-          fontSize: 12,
+          color: Colors.white,
+          fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
         axisLabelFormatter: (AxisLabelRenderDetails details) {
@@ -140,8 +156,8 @@ class _ScrActivityState extends State<ScrActivity>
             return ChartAxisLabel(
               'Today',
               TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
+                color: Colors.white,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
             );
@@ -150,8 +166,8 @@ class _ScrActivityState extends State<ScrActivity>
           return ChartAxisLabel(
             details.text,
             TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
+              color: Colors.white,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -167,8 +183,8 @@ class _ScrActivityState extends State<ScrActivity>
         dateFormat: DateFormat('dd'), // Show day, month, and hour
         majorGridLines: MajorGridLines(width: 0),
         labelStyle: TextStyle(
-          color: Colors.grey,
-          fontSize: 12,
+          color: Colors.white,
+          fontSize: 14,
           fontWeight: FontWeight.w500,
         ),
         axisLabelFormatter: (AxisLabelRenderDetails details) {
@@ -184,8 +200,8 @@ class _ScrActivityState extends State<ScrActivity>
             return ChartAxisLabel(
               'Today',
               TextStyle(
-                color: Colors.grey,
-                fontSize: 12,
+                color: Colors.white,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
             );
@@ -194,8 +210,8 @@ class _ScrActivityState extends State<ScrActivity>
           return ChartAxisLabel(
             details.text,
             TextStyle(
-              color: Colors.grey,
-              fontSize: 12,
+              color: Colors.white,
+              fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
           );
@@ -233,55 +249,42 @@ class _ScrActivityState extends State<ScrActivity>
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: ActivityTrendsData.isEmpty 
-                ? Center(
-                    child: Text(
-                      "No data available for $periodText",
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  )
-                : SfCartesianChart(
-                    plotAreaBorderWidth: 0,
-                tooltipBehavior: TooltipBehavior(
-                  enable: true,
-                  format: 'point.x : point.high',
-                  textStyle: TextStyle(color: Colors.white, fontSize: 12),
-                  color: Colors.black87,
-                  borderColor: Colors.grey,
-                  borderWidth: 1,
-                ),
-                trackballBehavior: TrackballBehavior(
-                  enable: true,
-                  activationMode: ActivationMode.singleTap,
-                  tooltipDisplayMode: TrackballDisplayMode.groupAllPoints,
-                  //tooltipDisplayMode: TrackballDisplayMode.nearestPoint
-                ),
-                    primaryXAxis: dateTimeAxis(),
-                    primaryYAxis: NumericAxis(
-                      majorGridLines: MajorGridLines(width: 0.05),
-                      anchorRangeToVisiblePoints: false,
-                      labelStyle: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    palette: <Color>[hPi4Global.hpi4Color],
-                    series: <CartesianSeries>[
-                      HiloSeries<ActivityTrends, DateTime>(
-                        dataSource: ActivityTrendsData,
-                        xValueMapper: (ActivityTrends data, _) => data.date,
-                        lowValueMapper: (ActivityTrends data, _) => 0,
-                        highValueMapper: (ActivityTrends data, _) => data.count,
-                        borderWidth: borderWidth(),
-                        animationDuration: 0,
-                      ),
-                    ],
+              child: hrTrendsData.isEmpty
+                  ? Center(
+                child: Text(
+                  "No data available for $periodText",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
                   ),
+                ),
+              )
+                  : SfCartesianChart(
+                plotAreaBorderWidth: 0,
+                primaryXAxis: dateTimeAxis(),
+                primaryYAxis: NumericAxis(
+                  majorGridLines: MajorGridLines(width: 0.05),
+                  anchorRangeToVisiblePoints: true,
+                  rangePadding: ChartRangePadding.auto,
+                  labelStyle: TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                palette: <Color>[hPi4Global.hpi4Color],
+                series: <CartesianSeries>[
+                  HiloSeries<HRTrends, DateTime>(
+                    dataSource: hrTrendsData,
+                    xValueMapper: (HRTrends data, _) => data.date,
+                    lowValueMapper: (HRTrends data, _) => data.minHR,
+                    highValueMapper: (HRTrends data, _) => data.maxHR,
+                    borderWidth: borderWidth(),
+                    animationDuration: 0,
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -290,150 +293,116 @@ class _ScrActivityState extends State<ScrActivity>
   }
 
   // Example usage for HR data:
-  late CsvDataManager<ActivityTrends> activityDataManager;
+  late CsvDataManager<HRTrends> hrDataManager;
 
   Future<void> _loadData() async {
-    List<ActivityTrends> data = await activityDataManager.getDataObjects();
+    List<HRTrends> data = await hrDataManager.getDataObjects();
     if (data.isEmpty) {
-      print('No valid Activity data found in CSV files.');
+      print('No valid HR data found in CSV files.');
       return;
     }
 
     DateTime today = DateTime.now();
 
-    print(today);
-
     if (_tabController.index == 0) {
       // Get the hourly HR trends for today
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityDailyTrend> activityDailyTrend = await activityDataManager
-          .getActivityDailyTrend(today);
-      for (var trend in activityDailyTrend) {
+      hrTrendsData = [];
+      List<HourlyTrend> hourlyHRTrends =
+      await hrDataManager.getHourlyTrendForToday();
+      for (var trend in hourlyHRTrends) {
         setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
+          hrTrendsData.add(
+            HRTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
+          );
         });
-        print('Hour: ${trend.date}, Step: ${trend.steps}');
+        print(
+          'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
       }
+
+      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
+      Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
+        today,
+      );
+
+      setState(() {
+        rangeMinSys = dailyStats['min']!.toInt();
+        rangeMaxSys = dailyStats['max']!.toInt();
+        averageSys = dailyStats['avg']!.toInt();
+      });
+
+      print('Daily Stats: $dailyStats');
     } else if (_tabController.index == 1) {
       // Get the weekly HR trends for the current week
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityWeeklyTrend> activityWeeklyTrend = await activityDataManager
-          .getActivityWeeklyTrend(today);
-      for (var trend in activityWeeklyTrend) {
+      hrTrendsData = [];
+      List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
+        today,
+      );
+      for (var trend in weeklyHRTrends) {
         setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
+          hrTrendsData.add(
+            HRTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
+          );
         });
-        print('week: ${trend.date}, Step: ${trend.steps}');
+
+        print(
+          'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
       }
+
+      Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
+        today,
+      );
+
+      setState(() {
+        rangeMinSys = weeklyStats['min']!.toInt();
+        rangeMaxSys = weeklyStats['max']!.toInt();
+        averageSys = weeklyStats['avg']!.toInt();
+      });
+
+      print('Weekly Stats: $weeklyStats');
     } else if (_tabController.index == 2) {
       // Get the monthly HR trends for the current month
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityMonthlyTrend> activityMonthlyTrend =
-          await activityDataManager.getActivityMonthlyTrend(today);
-      for (var trend in activityMonthlyTrend) {
+      hrTrendsData = [];
+      List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
+        today,
+      );
+      for (var trend in monthlyHRTrends) {
         setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
+          hrTrendsData.add(
+            HRTrends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
         });
 
-        print('Month: ${trend.date}, Step: ${trend.steps}');
+        print(
+          'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+        );
       }
-    }
 
-    /*List<ActivityMonthlyTrend> activityMonthlyTrend = await activityDataManager
-        .getActivityMonthlyTrend(today);
+      Map<String, double> monthlyStats = await hrDataManager
+          .getMonthlyStatistics(today);
 
-    if (activityMonthlyTrend.isNotEmpty) {
-      ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      int lastAvg = lastTrend.steps;
       setState(() {
-       // Count = lastAvg;
+        rangeMinSys = monthlyStats['min']!.toInt();
+        rangeMaxSys = monthlyStats['max']!.toInt();
+        averageSys = monthlyStats['avg']!.toInt();
       });
-      print('Last Time: $lastTime, Min: $lastAvg');
-    } else {
-      print('No monthly HR trends data available.');
-    }*/
-  }
 
- Widget stepsBasedOnTab(){
-    if(_tabController.index == 0){
-     return Column(
-        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        //mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text("Today's total", style: hPi4Global.movecardSubValueTextStyle,),
-            Row(
-                children: <Widget>[
-                  Text((Count.toString() == "0")
-                      ? "--"
-                      : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
-                  ),
-                  SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
-                ]
-            ),
-
-          ]
-      );
-    }else if(_tabController.index == 1){
-      return Column(
-        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        //mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text("This week's total", style: hPi4Global.movecardSubValueTextStyle,),
-            Row(
-                children: <Widget>[
-                  Text((Count.toString() == "0")
-                      ? "--"
-                      : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
-                  ),
-                  SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
-                ]
-            ),
-
-          ]
-      );
-    }else if(_tabController.index == 2){
-      return Column(
-        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        //mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text("This month's total", style: hPi4Global.movecardSubValueTextStyle,),
-            Row(
-                children: <Widget>[
-                  Text((Count.toString() == "0")
-                      ? "--"
-                      : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
-                  ),
-                  SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
-                ]
-            ),
-
-          ]
-      );
-    }else{
-      return Container();
+      print('Monthly Stats: $monthlyStats');
     }
   }
 
-  Widget displayValue() {
+  Widget displayRangeValues() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 12.5,
+          height: SizeConfig.blockSizeVertical * 13,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -442,13 +411,70 @@ class _ScrActivityState extends State<ScrActivity>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: <Widget>[
-                 SizedBox(height: 10.0),
+                  SizedBox(height: 10.0),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     //mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       SizedBox(width: 10.0),
-                      stepsBasedOnTab(),
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text((rangeMinSys.toString() == "0")
+                                      ? "--"
+                                      : rangeMinSys.toString(),
+                                    style: hPi4Global.moveValueGreenTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('bpm', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                ]
+                            ),
+
+                          ]
+                      ),
+                      Column(
+                        //mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (averageSys.toString() == "0")
+                                        ? "--"
+                                        : averageSys.toString(),
+                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('bpm', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                ]
+                            ),
+                          ]
+                      ),
+                      Column(
+                        // mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        //mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Row(
+                                children: <Widget>[
+                                  Text(
+                                    (rangeMaxSys.toString() == "0")
+                                        ? "--"
+                                        : rangeMaxSys.toString(),
+                                    style: hPi4Global.moveValueBlueTextStyle,
+                                  ),
+                                  SizedBox(width: 5.0),
+                                  Text('bpm', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                ]
+                            ),
+
+                          ]
+                      ),
                       SizedBox(width: 10.0),
                     ],
                   ),
@@ -461,13 +487,14 @@ class _ScrActivityState extends State<ScrActivity>
     );
   }
 
+
   Widget displayAboutValues() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         SizedBox(
-          height: SizeConfig.blockSizeVertical * 28,
+          height: SizeConfig.blockSizeVertical * 30,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
             color: Colors.grey[900],
@@ -479,7 +506,7 @@ class _ScrActivityState extends State<ScrActivity>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Text("About Activity",
+                      Text("About Heart Rate",
                         style: hPi4Global.moveValueTextStyle,
                       ),
                       //Icon(Icons.favorite_border, color: Colors.black),
@@ -491,8 +518,8 @@ class _ScrActivityState extends State<ScrActivity>
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          "Step count is estimated using motion sensors in the device. "
-                              "It reflects walking-related movement but may vary based on gait, posture, and activity type.",
+                          "Heart rate is measured using optical PPG sensors on the wrist. "
+                              "The values shown reflect pulse rate and are for general information and personal insight only.",
                           style:
                           hPi4Global.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
@@ -500,15 +527,16 @@ class _ScrActivityState extends State<ScrActivity>
                       ),
                     ],
                   ),
+                  // SizedBox(height: 5.0),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
                       Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
-                          launchURL("https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/walking/art-20047880");
+                          launchURL('https://www.health.harvard.edu/heart-health/all-about-your-heart-rate');
                         },
-                        child: Text('Mayo Clinic', style:TextStyle(
+                        child: Text('Harvard Health', style:TextStyle(
                           fontSize: 14,
                           color: Colors.blue,
                         )),
@@ -526,8 +554,6 @@ class _ScrActivityState extends State<ScrActivity>
     );
   }
 
-
-
   Widget displayCard(String title) {
     return SingleChildScrollView(
       child: Card(
@@ -541,24 +567,25 @@ class _ScrActivityState extends State<ScrActivity>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(height: 10),
+                  SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Container(
-                        height: SizeConfig.blockSizeVertical * 32,
+                        height: SizeConfig.blockSizeVertical * 35,
                         width: SizeConfig.blockSizeHorizontal * 88,
                         color: Colors.transparent,
                         child: buildChartBlock(),
                       ),
                     ],
                   ),
-                  SizedBox(height: 10),
-                  displayValue(),
-                  SizedBox(height: 10),
+                  SizedBox(height: 20),
+                  displayRangeValues(),
+                  SizedBox(height: 20),
                   displayAboutValues(),
                   SizedBox(height: 10),
+                  //displayValuesAlert(),
                 ],
               ),
             ],
@@ -571,6 +598,9 @@ class _ScrActivityState extends State<ScrActivity>
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
+    //return DefaultTabController(
+    //length: 3,
+    // child:
     return Scaffold(
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
@@ -579,14 +609,15 @@ class _ScrActivityState extends State<ScrActivity>
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed:
               () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
+            context,
+          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
         ),
         title: Row(
           mainAxisAlignment: MainAxisAlignment.center,
+          //mainAxisSize: MainAxisSize.max,
           children: [
             const Text(
-              'Activity',
+              'Heart Rate',
               style: TextStyle(
                 fontSize: 16,
                 color: hPi4Global.hpi4AppBarIconsColor,
@@ -638,8 +669,9 @@ class _ScrActivityState extends State<ScrActivity>
   }
 }
 
-class ActivityTrends {
-  ActivityTrends(this.date, this.count);
+class HRTrends {
+  HRTrends(this.date, this.maxHR, this.minHR);
   final DateTime date;
-  final int count;
+  final int maxHR;
+  final int minHR;
 }

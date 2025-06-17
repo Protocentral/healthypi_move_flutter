@@ -148,16 +148,14 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                             SizedBox(height: 10.0),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    hPi4Global.hpi4Color, // background color
-                                foregroundColor: Colors.white, // text color
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                backgroundColor: hPi4Global.hpi4Color,
+                                foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                minimumSize: Size(
-                                  SizeConfig.blockSizeHorizontal * 100,
-                                  40,
-                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () {
                                 Navigator.push(
@@ -197,16 +195,14 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                             SizedBox(height: 10.0),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    hPi4Global.hpi4Color, // background color
-                                foregroundColor: Colors.white, // text color
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                backgroundColor: hPi4Global.hpi4Color,
+                                foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                minimumSize: Size(
-                                  SizeConfig.blockSizeHorizontal * 100,
-                                  40,
-                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () {
                                 Navigator.push(
@@ -243,16 +239,14 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                             SizedBox(height: 10.0),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    hPi4Global.hpi4Color, // background color
-                                foregroundColor: Colors.white, // text color
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                backgroundColor: hPi4Global.hpi4Color,
+                                foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                minimumSize: Size(
-                                  SizeConfig.blockSizeHorizontal * 100,
-                                  40,
-                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () {
                                 Navigator.push(
@@ -289,16 +283,14 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                             SizedBox(height: 10.0),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    hPi4Global.hpi4Color, // background color
-                                foregroundColor: Colors.white, // text color
+                                minimumSize: const Size(0, 36),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                backgroundColor: hPi4Global.hpi4Color,
+                                foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
-                                minimumSize: Size(
-                                  SizeConfig.blockSizeHorizontal * 100,
-                                  40,
-                                ),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
                               onPressed: () {
                                 Navigator.push(
