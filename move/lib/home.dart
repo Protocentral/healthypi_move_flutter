@@ -378,7 +378,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (MediaQuery.of(context).orientation == Orientation.landscape) {
       return MediaQuery.of(context).size.aspectRatio * 4.0 / 2;
     } else {
-      return MediaQuery.of(context).size.aspectRatio * 13.5 / 2;
+      return MediaQuery.of(context).size.aspectRatio * 12.5/ 2;
     }
   }
 
@@ -445,6 +445,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       SizedBox(width: 10.0),
                     ],
                   ),
+
                 ],
               ),
             ),
