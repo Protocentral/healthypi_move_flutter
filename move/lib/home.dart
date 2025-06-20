@@ -15,6 +15,7 @@ import 'screens/scr_hr.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -107,9 +108,12 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? lastUpdatedSpo2Date;
   DateTime? lastUpdatedActivityDate;
 
+  bool _isIpad = false;
+
   @override
   void initState() {
     super.initState();
+    _detectIpad();
     _initPackageInfo();
     _loadLastVitalInfo();
     _loadStoredValue();
@@ -117,9 +121,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initPackageInfo() async {
     final PackageInfo info = await PackageInfo.fromPlatform();
-    setState(() {
-      hPi4Global.hpi4AppVersion = info.version;
-    });
+    if (mounted) {
+      setState(() {
+        hPi4Global.hpi4AppVersion = info.version;
+      });
+    }
+
   }
 
   Future<void> _loadLastVitalInfo() async {
@@ -127,6 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadStoredSpo2Value();
     await _loadStoredTempValue();
     await _loadStoredActivityValue();
+  }
+
+  Future<void> _detectIpad() async {
+    bool ipad = await isIPad();
+    if (mounted) {
+      setState(() {
+        _isIpad = ipad;
+      });
+    }
   }
 
   @override
@@ -166,9 +182,12 @@ class _HomeScreenState extends State<HomeScreen> {
       //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
       DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.avg.toInt();
-      setState(() {
-        saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
-      });
+      if (mounted) {
+        setState(() {
+          saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
+        });
+      }
+
       //print('Last Time: $lastTime, Min: $lastAvg');
     } else {
       //print('No monthly HR trends data available.');
@@ -202,9 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
       //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
       DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.avg.toInt();
-      setState(() {
-        saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
-      });
+      if (mounted) {
+        setState(() {
+          saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
+        });
+      }
+
      // print('Last Time: $lastTime, Min: $lastAvg');
     } else {
      // print('No monthly HR trends data available.');
@@ -238,9 +260,12 @@ class _HomeScreenState extends State<HomeScreen> {
      // DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
       DateTime lastTime = allData.last.date;
       double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
-      setState(() {
-        saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
-      });
+      if (mounted) {
+        setState(() {
+          saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
+        });
+      }
+
       //print('Last Time: $lastTime, Min: $lastAvg');
     } else {
       //print('No monthly Temp trends data available.');
@@ -273,14 +298,17 @@ class _HomeScreenState extends State<HomeScreen> {
       //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
       DateTime lastTime = allData.last.date;
       int lastAvg = lastTrend.steps;
-      setState(() {
-        saveValue(
-          lastTime,
-          lastAvg,
-          "lastUpdatedActivity",
-          "latestActivityCount",
-        );
-      });
+      if (mounted) {
+        setState(() {
+          saveValue(
+            lastTime,
+            lastAvg,
+            "lastUpdatedActivity",
+            "latestActivityCount",
+          );
+        });
+      }
+
      // print('Last Time: $lastTime, steps: $lastAvg');
     } else {
       //print('No monthly Activity trends data available.');
@@ -375,12 +403,32 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   double getAspectRatio() {
-    if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return MediaQuery.of(context).size.aspectRatio * 4.0 / 2;
+    if (_isIpad) {
+      if (MediaQuery.of(context).orientation == Orientation.landscape) {
+        return MediaQuery.of(context).size.aspectRatio * 12 / 2;
+      } else {
+        return MediaQuery.of(context).size.aspectRatio * 14/ 2;
+      }
     } else {
-      return MediaQuery.of(context).size.aspectRatio * 12.5/ 2;
+      if (MediaQuery.of(context).orientation == Orientation.landscape) {
+        return MediaQuery.of(context).size.aspectRatio * 6.2 / 2;
+      } else {
+        return MediaQuery.of(context).size.aspectRatio * 12.5/ 2;
+      }
+
     }
+
   }
+
+  Future<bool> isIPad() async {
+    if (Platform.isIOS) {
+      final deviceInfo = DeviceInfoPlugin();
+      final iosInfo = await deviceInfo.iosInfo;
+      return iosInfo.model?.toLowerCase().contains('ipad') ?? false;
+    }
+    return false;
+  }
+
 
   // Example usage for HR data:
   late CsvDataManager<HRTrends> hrDataManager;
