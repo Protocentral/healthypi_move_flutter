@@ -64,6 +64,8 @@ dependencies:
   circular_countdown_timer: ^0.2.3
   syncfusion_flutter_charts: ^28.2.6
   syncfusion_flutter_sliders: ^28.2.6
+  syncfusion_flutter_pdf: ^28.2.6
+  screenshot: ^3.0.0 # For capturing widget as image
   flutter_blue_plus: ^1.35.5
 
   #mcumgr_flutter: ^0.4.2

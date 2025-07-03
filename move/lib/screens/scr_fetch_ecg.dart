@@ -17,6 +17,7 @@ import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 
 import '../utils/snackbar.dart';
+import 'generatePDF.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
@@ -82,7 +83,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
         await discoverDataChar(widget.device);
-        await _startListeningData();
+        await _startListeningData("initial");
         startFetching();
       }
     });
@@ -321,7 +322,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   bool logIndexReceived = false;
   List<LogHeader> logHeaderList = List.empty(growable: true);
 
-  Future<void> _startListeningData() async {
+  Future<void> _startListeningData(String fetchType) async {
     listeningDataStream = true;
     logConsole("Started listening...");
 
@@ -370,9 +371,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
 
         case hPi4Global.CES_CMDIF_TYPE_DATA:
           final pktPayloadSize = value.length - 1;
-          logConsole(
-            "Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",
-          );
+          logConsole("Data Rx length: ${value.length} | Actual Payload: $pktPayloadSize",);
           currentFileDataCounter += pktPayloadSize;
           _globalReceivedData += pktPayloadSize;
           logData.addAll(value.sublist(1));
@@ -399,7 +398,15 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
               // Optionally trim logData here if needed
             }
 
-            await _writeLogDataToFile(logData, currentFileName);
+            if(fetchType == "logFile"){
+              await _writeLogDataToFile(logData, currentFileName);
+            }else{
+              logConsole(logData.toString());
+              final logDataCopy = List<int>.from(logData);
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => ECGHomePage(device: widget.device, logData: logDataCopy)),
+              );
+            }
 
             await resetFetchVariables();
           }
@@ -408,6 +415,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     });
     widget.device.cancelWhenDisconnected(_streamDataSubscription);
     await dataCharacteristic!.setNotifyValue(true);
+
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -504,8 +512,15 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     Navigator.pop(context);
   }
 
-  Future<void> _fetchLogFile(int sessionID, int sessionSize) async {
-    await _startListeningData();
+  Future<void> _fetchLogFile(int sessionID, int sessionSize, String fetchType) async {
+    if(fetchType == "logFile"){
+      await _startListeningData("logFile");
+    }else if(fetchType == "pdfFile"){
+      await _startListeningData("pdfFile");
+    }else{
+
+    }
+
     logConsole("Fetch logs initiated");
     isTransfering = true;
 
@@ -634,29 +649,41 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                         ],
                                       ),
                                       Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
+                                        mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
-                                          isTransfering
-                                              ? Container()
-                                              : IconButton(
-                                                onPressed: () async {
-                                                  setState(() {
-                                                    isFetchIconTap = true;
-                                                    tappedIndex = index;
-                                                  });
-                                                  _fetchLogFile(
-                                                    logHeaderList[index]
-                                                        .logFileID,
-                                                    logHeaderList[index]
-                                                        .sessionLength,
-                                                  );
-                                                },
-                                                icon: Icon(
-                                                  Icons.download_rounded,
-                                                ),
-                                                color: hPi4Global.hpi4Color,
-                                              ),
+                                          if (!isTransfering)
+                                            IconButton(
+                                              onPressed: () async {
+                                                setState(() {
+                                                  isFetchIconTap = true;
+                                                  tappedIndex = index;
+                                                });
+                                                _fetchLogFile(
+                                                  logHeaderList[index].logFileID,
+                                                  logHeaderList[index].sessionLength,
+                                                  "logFile"
+                                                );
+                                              },
+                                              icon: Icon(Icons.download_rounded),
+                                              color: hPi4Global.hpi4Color,
+                                            ),
+                                          if (!isTransfering)
+                                            IconButton(
+                                              onPressed: () async {
+                                                setState(() {
+                                                  isFetchIconTap = true;
+                                                  tappedIndex = index;
+                                                });
+                                                await _fetchLogFile(
+                                                    logHeaderList[index].logFileID,
+                                                    logHeaderList[index].sessionLength,
+                                                    "pdfFile"
+                                                );
+
+                                              },
+                                              icon: Icon(Icons.event),
+                                              color: hPi4Global.hpi4Color,
+                                            ),
                                         ],
                                       ),
                                       isFetchIconTap
@@ -680,8 +707,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                                               (displayPercent /
                                                                   100),
                                                           minHeight: 25,
-                                                          semanticsLabel:
-                                                              'Receiving Data',
+                                                          semanticsLabel: 'Receiving Data',
                                                         ),
                                                   ),
                                                 ),

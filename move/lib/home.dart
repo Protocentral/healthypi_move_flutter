@@ -12,6 +12,7 @@ import 'screens/scr_spo2.dart';
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
 import 'screens/scr_hr.dart';
+import 'screens/scr_bpt.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
@@ -648,11 +649,59 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+
+        InkWell(
+          onTap: () {
+            Navigator.of(
+              context,
+            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrBPT()));
+          },
+          child: Card(
+            color: Colors.grey[900],
+            //color:Color(0xFFBa8e23),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Icon(Icons.directions_run, color: Colors.white),
+                      SizedBox(width: 10.0),
+                      Text('BPT', style: hPi4Global.movecardTextStyle),
+                      //SizedBox(width: 15.0),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
+                      Text(
+                        lastestActivity.toString(),
+                        style: hPi4Global.movecardValueTextStyle,
+                      ),
+                      SizedBox(width: 10.0),
+                      Text(" ", style: hPi4Global.movecardTextStyle),
+                    ],
+                  ),
+                  Row(
+                    children: <Widget>[
+                      SizedBox(width: 10.0),
+                      Text(lastUpdatedActivity.toString(),
+                        style: hPi4Global.movecardSubValueTextStyle,
+                      ),
+                      SizedBox(width: 10.0),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget liveViewButton() {
+  /*Widget liveViewButton() {
     return Padding(
       padding: const EdgeInsets.all(8.0),
       child: ElevatedButton(
@@ -684,7 +733,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
-  }
+  }*/
 
   void logConsole(String logString) async {
     print("AKW - $logString");
