@@ -30,7 +30,7 @@ class _ECGHomePageState extends State<ECGHomePage> {
   List<ChartData> ecgData = [];
   String pdfPath = '';
 
-  static const double samplingRate = 128.0; // samples per second
+  //static const double samplingRate = 128.0; // samples per second
 
   @override
   void initState() {
@@ -56,6 +56,15 @@ class _ECGHomePageState extends State<ECGHomePage> {
     // Convert 4-byte little-endian list to signed 32-bit integer
     final byteData = ByteData.sublistView(Uint8List.fromList(bytes));
     return byteData.getInt32(0, Endian.little);
+
+  }
+
+  double convertToMillivolts(int rawValue) {
+    const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
+    const double vRef = 3.3; // volts
+    const double gain = 1.0; // amplifier gain
+
+    return (rawValue / maxAdcValue) * (vRef * 1000 / gain); // in millivolts
   }
 
   // Function for converting little-endian bytes to integer
@@ -73,10 +82,12 @@ class _ECGHomePageState extends State<ECGHomePage> {
     for (int i = 0; i < totalPoints; i++) {
       List<int> bytes = rawBytes.sublist(i * 4, i * 4 + 4);
       int value = convertLittleEndianToInteger(bytes);
+      double value1 = convertToMillivolts(value);
       double timeInSeconds = i / samplingRate;
 
       // Optionally scale `value` to millivolts if needed (e.g., value / 1000)
-      chartData.add(ChartData(timeInSeconds, value.toDouble()));
+      //chartData.add(ChartData(timeInSeconds, value.toDouble()));
+      chartData.add(ChartData(timeInSeconds, value1));
     }
 
     return chartData;
@@ -182,8 +193,8 @@ class _ECGHomePageState extends State<ECGHomePage> {
                       ),
                       primaryYAxis: NumericAxis(
                         title: AxisTitle(text: 'mV'),
-                        minimum: -4,
-                        maximum: 4,
+                       // minimum: -4,
+                       // maximum: 4,
                       ),
                       palette: <Color>[hPi4Global.hpi4Color],
                       series: <CartesianSeries>[

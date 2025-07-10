@@ -650,7 +650,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
 
-        InkWell(
+        /*InkWell(
           onTap: () {
             Navigator.of(
               context,
@@ -696,7 +696,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        ),
+        ),*/
       ],
     );
   }
