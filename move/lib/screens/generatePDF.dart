@@ -61,17 +61,15 @@ class _ECGHomePageState extends State<ECGHomePage> {
 
   double convertToMillivolts(int rawValue) {
     const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
-    const double vRef = 3.3; // volts
-    const double gain = 1.0; // amplifier gain
+   // const int maxAdcValue = 131072; // 2^17
+    const double vRef = 1.0; // volts
+    const double gain = 20.0; // amplifier gain
 
-    return (rawValue / maxAdcValue) * (vRef * 1000 / gain); // in millivolts
+   return ((rawValue / maxAdcValue) * (vRef * 1000 / gain)); // in millivolts
+
+    //const double adcRange = 131072.0;         // 2^(18 - 1) = 2^17
+    //return (rawValue * 1000.0) / (adcRange * gain);
   }
-
-  // Function for converting little-endian bytes to integer
-  /*int convertLittleEndianToInteger(List<int> bytes) {
-    List<int> reversedBytes = bytes.reversed.toList();
-    return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
-  }*/
 
   List<ChartData> convertEcgToChartData(List<int> rawBytes) {
     const double samplingRate = 128.0; // Hz
@@ -99,8 +97,8 @@ class _ECGHomePageState extends State<ECGHomePage> {
 
     final PdfDocument document = PdfDocument();
     final PdfPage page = document.pages.add();
-    page.graphics.drawString(
-      'ECG - 30 seconds',
+
+    page.graphics.drawString('30 seconds ECG',
       PdfStandardFont(PdfFontFamily.helvetica, 20),
       bounds: const Rect.fromLTWH(0, 0, 500, 30),
     );
