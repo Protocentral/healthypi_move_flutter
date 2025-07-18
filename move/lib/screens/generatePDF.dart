@@ -91,7 +91,7 @@ class _ECGHomePageState extends State<ECGHomePage> {
     return chartData;
   }
 
-  Future<void> generatePDF() async {
+  /*Future<void> generatePDF() async {
     final Uint8List? chartImage = await screenshotController.capture();
     if (chartImage == null) return;
 
@@ -110,6 +110,49 @@ class _ECGHomePageState extends State<ECGHomePage> {
     document.dispose();
 
     await saveAndSharePdf(bytes, 'ecg_chart.pdf');
+  }*/
+
+  Future<void> generatePDF() async {
+    final Uint8List? chartImage = await screenshotController.capture();
+    if (chartImage == null) return;
+
+    final PdfDocument document = PdfDocument();
+    final PdfPage page = document.pages.add();
+    final PdfFont headerFont = PdfStandardFont(PdfFontFamily.helvetica, 16, style: PdfFontStyle.bold);
+    final PdfFont normalFont = PdfStandardFont(PdfFontFamily.helvetica, 12);
+    final PdfFont smallFont = PdfStandardFont(PdfFontFamily.helvetica, 10);
+
+    double yOffset = 0;
+
+    // Title
+    page.graphics.drawString(
+      'Healthypi Move - ECG',
+      headerFont,
+      bounds: Rect.fromLTWH(0, yOffset, page.getClientSize().width, 20),
+    );
+    yOffset += 30;
+
+    // ECG Chart Image
+    page.graphics.drawImage(
+      PdfBitmap(chartImage),
+      Rect.fromLTWH(0, yOffset, 500, 600),
+    );
+    yOffset += 620;
+
+    // Footer Note
+    const String footerNote =
+        '25 mm/s, 10 mm/mV, 128.000 Hz, Healthypi Move (Watch)';
+
+    page.graphics.drawString(
+      footerNote,
+      smallFont,
+      bounds: Rect.fromLTWH(0, yOffset, page.getClientSize().width, 60),
+    );
+
+    final List<int> bytes = await document.save();
+    document.dispose();
+
+    await saveAndSharePdf(bytes, 'move_ecg.pdf');
   }
 
   Future<void> saveAndSharePdf(List<int> pdfContent, String fileName) async {
