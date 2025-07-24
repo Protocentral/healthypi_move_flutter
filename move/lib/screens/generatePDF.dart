@@ -157,11 +157,14 @@ class _ECGHomePageState extends State<ECGHomePage> {
 
   Future<void> saveAndSharePdf(List<int> pdfContent, String fileName) async {
     Directory directory;
-    if (Platform.isAndroid) {
+    /*if (Platform.isAndroid) {
       directory = Directory("/storage/emulated/0/Download");
     } else {
       directory = await getApplicationDocumentsDirectory();
-    }
+    }*/
+
+    directory = await getApplicationDocumentsDirectory();
+
     final path = directory.path;
     await Directory(path).create(recursive: true);
 

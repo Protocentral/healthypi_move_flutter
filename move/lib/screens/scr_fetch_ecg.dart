@@ -248,19 +248,29 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   // Function for converting little-endian bytes to integer
-  int convertLittleEndianToInteger(List<int> bytes) {
+ /* int convertLittleEndianToInteger(List<int> bytes) {
     List<int> reversedBytes = bytes.reversed.toList();
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
+  }*/
+
+  int convertLittleEndianToInteger(List<int> bytes) {
+    // Convert 4-byte little-endian list to signed 32-bit integer
+    final byteData = ByteData.sublistView(Uint8List.fromList(bytes));
+    return byteData.getInt32(0, Endian.little);
+
   }
 
   /// Save CSV to file and share it to other apps
   Future<void> saveAndShareCsv(String csvContent, String fileName) async {
     Directory directory;
-    if (Platform.isAndroid) {
+    /*if (Platform.isAndroid) {
       directory = Directory("/storage/emulated/0/Download");
     } else {
       directory = await getApplicationDocumentsDirectory();
-    }
+    }*/
+
+    directory = await getApplicationDocumentsDirectory();
+
     final path = directory.path;
     await Directory(path).create(recursive: true);
 
@@ -279,6 +289,18 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     }
   }
 
+  double convertToMillivolts(int rawValue) {
+    const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
+    // const int maxAdcValue = 131072; // 2^17
+    const double vRef = 1.0; // volts
+    const double gain = 20.0; // amplifier gain
+
+    return ((rawValue / maxAdcValue) * (vRef * 1000 / gain)); // in millivolts
+
+    //const double adcRange = 131072.0;         // 2^(18 - 1) = 2^17
+    //return (rawValue * 1000.0) / (adcRange * gain);
+  }
+
   Future<void> _writeLogDataToFile(List<int> mData, int sessionID) async {
     logConsole("Log data size: ${mData.length}");
 
@@ -293,7 +315,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
     List<List<String>> dataList = []; //Outter List which contains the data List
 
     List<String> header = [];
-    header.add("ECG");
+    header.add("ECG(mV)");
 
     dataList.add(header);
 
@@ -302,9 +324,10 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
       List<int> bytes = bdata.buffer.asInt8List(i * 4, 4);
 
       int value1 = convertLittleEndianToInteger(bytes.sublist(0, 4));
+      double value2 = convertToMillivolts(value1);
 
       // Construct the row data
-      List<String> dataRow = [value1.toString()];
+      List<String> dataRow = [value2.toStringAsFixed(2)];
       dataList.add(dataRow);
     }
 
