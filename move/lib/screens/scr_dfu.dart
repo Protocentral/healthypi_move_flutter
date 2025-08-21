@@ -53,7 +53,8 @@ class ScrDFUState extends State<ScrDFU> {
 
   String _currentFWVersion = "";
   String _latestFWVersion = "";
-  String _updateAvailable = "None";
+  //String _updateAvailable = "None";
+  String _updateAvailable = "Available";
   bool _showUpdateCard = false;
   bool _checkingUpdates = false;
 
@@ -238,7 +239,7 @@ class ScrDFUState extends State<ScrDFU> {
     late final destinationDir;
     late final firmwareGHFile;
 
-    if (fwFilePath == "") {
+    //if (fwFilePath == "") {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['zip'],
@@ -262,7 +263,8 @@ class ScrDFUState extends State<ScrDFU> {
 
       destinationDir = Directory('${tempDir.path}/firmware');
       await destinationDir.create();
-    } else {
+   // }
+    /*else {
       showLoadingIndicator("Checking for firmware...", context);
 
       final file = File(fwFilePath);
@@ -281,7 +283,7 @@ class ScrDFUState extends State<ScrDFU> {
       await destinationDir.create();
 
       Navigator.pop(context);
-    }
+    }*/
 
     try {
       await ZipFile.extractToDirectory(

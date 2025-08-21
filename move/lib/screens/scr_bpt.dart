@@ -44,14 +44,14 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    hrDataManager = CsvDataManager<HRTrends>(
+    hrDataManager = CsvDataManager<BPTTrends>(
       filePrefix: "hr_",
       fromRow: (row) {
         int timestamp = int.tryParse(row[0]) ?? 0;
         int minHR = int.tryParse(row[1]) ?? 0;
         int maxHR = int.tryParse(row[2]) ?? 0;
         DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return HRTrends(date, maxHR, minHR);
+        return BPTTrends(date, maxHR, minHR);
       },
       getFileType: (file) => "hr",
     );
@@ -63,11 +63,11 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
   void dispose() {
     _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
-    hrTrendsData = [];
+    BPTTrendsData = [];
     super.dispose();
   }
 
-  List<HRTrends> hrTrendsData = [];
+  List<BPTTrends> BPTTrendsData = [];
 
   void _handleTabChange() {
     setState(() {
@@ -249,7 +249,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
             Expanded(
-              child: hrTrendsData.isEmpty
+              child: BPTTrendsData.isEmpty
                   ? Center(
                 child: Text(
                   "No data available for $periodText",
@@ -273,13 +273,21 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                palette: <Color>[hPi4Global.hpi4Color],
+               // palette: <Color>[hPi4Global.hpi4Color],
                 series: <CartesianSeries>[
-                  HiloSeries<HRTrends, DateTime>(
-                    dataSource: hrTrendsData,
-                    xValueMapper: (HRTrends data, _) => data.date,
-                    lowValueMapper: (HRTrends data, _) => data.minHR,
-                    highValueMapper: (HRTrends data, _) => data.maxHR,
+                  ColumnSeries<BPTTrends, DateTime>(
+                    dataSource: BPTTrendsData,
+                    color: hPi4Global.hpi4Color, // Set color for the first line
+                    xValueMapper: (BPTTrends data, _) => data.date,
+                    yValueMapper: (BPTTrends data, _) => data.minHR,
+                    borderWidth: borderWidth(),
+                    animationDuration: 0,
+                  ),
+                  ColumnSeries<BPTTrends, DateTime>(
+                    dataSource: BPTTrendsData,
+                    color: Colors.blue, // Set color for the first line
+                    xValueMapper: (BPTTrends data, _) => data.date,
+                    yValueMapper: (BPTTrends data, _) => data.maxHR,
                     borderWidth: borderWidth(),
                     animationDuration: 0,
                   ),
@@ -293,10 +301,10 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
   }
 
   // Example usage for HR data:
-  late CsvDataManager<HRTrends> hrDataManager;
+  late CsvDataManager<BPTTrends> hrDataManager;
 
   Future<void> _loadData() async {
-    List<HRTrends> data = await hrDataManager.getDataObjects();
+    List<BPTTrends> data = await hrDataManager.getDataObjects();
     if (data.isEmpty) {
       print('No valid HR data found in CSV files.');
       return;
@@ -306,13 +314,13 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
 
     if (_tabController.index == 0) {
       // Get the hourly HR trends for today
-      hrTrendsData = [];
-      List<HourlyTrend> hourlyHRTrends =
+      BPTTrendsData = [];
+      List<HourlyTrend> hourlyBPTTrends =
       await hrDataManager.getHourlyTrendForToday();
-      for (var trend in hourlyHRTrends) {
+      for (var trend in hourlyBPTTrends) {
         setState(() {
-          hrTrendsData.add(
-            HRTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
+          BPTTrendsData.add(
+            BPTTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
           );
         });
         print(
@@ -334,14 +342,14 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
       print('Daily Stats: $dailyStats');
     } else if (_tabController.index == 1) {
       // Get the weekly HR trends for the current week
-      hrTrendsData = [];
-      List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
+      BPTTrendsData = [];
+      List<WeeklyTrend> weeklyBPTTrends = await hrDataManager.getWeeklyTrend(
         today,
       );
-      for (var trend in weeklyHRTrends) {
+      for (var trend in weeklyBPTTrends) {
         setState(() {
-          hrTrendsData.add(
-            HRTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
+          BPTTrendsData.add(
+            BPTTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
           );
         });
 
@@ -363,14 +371,14 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
       print('Weekly Stats: $weeklyStats');
     } else if (_tabController.index == 2) {
       // Get the monthly HR trends for the current month
-      hrTrendsData = [];
-      List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
+      BPTTrendsData = [];
+      List<MonthlyTrend> monthlyBPTTrends = await hrDataManager.getMonthlyTrend(
         today,
       );
-      for (var trend in monthlyHRTrends) {
+      for (var trend in monthlyBPTTrends) {
         setState(() {
-          hrTrendsData.add(
-            HRTrends(
+          BPTTrendsData.add(
+            BPTTrends(
               trend.date,
               trend.max.toInt(),
               trend.min.toInt(),
@@ -617,7 +625,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
           //mainAxisSize: MainAxisSize.max,
           children: [
             const Text(
-              'Heart Rate',
+              'BPT',
               style: TextStyle(
                 fontSize: 16,
                 color: hPi4Global.hpi4AppBarIconsColor,
@@ -669,8 +677,8 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
   }
 }
 
-class HRTrends {
-  HRTrends(this.date, this.maxHR, this.minHR);
+class BPTTrends {
+  BPTTrends(this.date, this.maxHR, this.minHR);
   final DateTime date;
   final int maxHR;
   final int minHR;

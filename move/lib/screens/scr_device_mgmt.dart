@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_scan.dart';
+import 'package:move/screens/scr_dfu.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
@@ -192,8 +193,8 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                          SizedBox(height: 10.0),
-                                          /*ElevatedButton(
+                                         /*SizedBox(height: 10.0),
+                                          ElevatedButton(
                                            style: ElevatedButton.styleFrom(
                                               minimumSize: const Size(0, 36),
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
