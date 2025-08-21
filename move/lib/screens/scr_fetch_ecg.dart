@@ -690,7 +690,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                               icon: Icon(Icons.download_rounded),
                                               color: hPi4Global.hpi4Color,
                                             ),
-                                          if (!isTransfering)
+                                          /*if (!isTransfering)
                                             IconButton(
                                               onPressed: () async {
                                                 setState(() {
@@ -706,7 +706,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                               },
                                               icon: Icon(Icons.event),
                                               color: hPi4Global.hpi4Color,
-                                            ),
+                                            ),*/
                                         ],
                                       ),
                                       isFetchIconTap
