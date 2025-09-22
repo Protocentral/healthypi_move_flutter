@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
+import '../fileTransfer.dart';
 import '../widgets/scan_result_tile.dart';
 
 class ScrScan extends StatefulWidget {
@@ -236,9 +237,14 @@ class _ScrScanState extends State<ScrScan> {
 
   redirectToScreens(BluetoothDevice device) {
     if (widget.tabIndex == "1") {
-      Navigator.of(context).push(
+      /*Navigator.of(context).push(
         MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
+      );*/
+
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => FileDownloadScreen(device: device)),
       );
+
     } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
       _eraseAllLogs(context, device);
@@ -282,7 +288,7 @@ class _ScrScanState extends State<ScrScan> {
       next: true,
     );
 
-    await device.connect();
+    await device.connect(license:License.values.first);
   }
 
   Future<void> _eraseAllLogs(

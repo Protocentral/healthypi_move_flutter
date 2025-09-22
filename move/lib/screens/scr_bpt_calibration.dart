@@ -284,7 +284,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       next: true,
     );
 
-    await device.connect();
+    await device.connect(license: License.values.first);
   }
 
   showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
@@ -1282,3 +1282,5 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     );
   }
 }
+
+
