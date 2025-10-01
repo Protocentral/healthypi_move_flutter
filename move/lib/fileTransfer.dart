@@ -8,7 +8,7 @@ class FileDownloadScreen extends StatefulWidget {
   const FileDownloadScreen({Key? key, required this.device}) : super(key: key);
 
   @override
-  State<FileDownloadScreen> createState() => _FileDownloadScreenState();
+  State createState() => _FileDownloadScreenState();
 }
 
 class _FileDownloadScreenState extends State<FileDownloadScreen> {
@@ -22,19 +22,23 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
   @override
   void initState() {
     super.initState();
-    // Use device ID string, not the BluetoothDevice object.
-    fsManager = FsManager(widget.device.remoteId.toString());
+    final deviceId = widget.device.remoteId.toString();
+    fsManager = FsManager(deviceId);
+    print('=== FileDownloadScreen initialized with device: $deviceId ===');
   }
 
   String _getMcuMgrErrorMessage(String errorString) {
+    print('--- Parsing McuMgr Error ---');
+    print('Raw error string: $errorString');
+    
     if (errorString.contains('McuMgrErrorException')) {
-      // Extract error code and group from the error message
       final errorMatch = RegExp(r'McuMgr Error: (\d+) \(group: (\d+)\)').firstMatch(errorString);
       if (errorMatch != null) {
         final errorCode = int.parse(errorMatch.group(1)!);
         final groupCode = int.parse(errorMatch.group(2)!);
+        
+        print('Error Code: $errorCode, Group Code: $groupCode');
 
-        // Group 8 is typically the file system group
         if (groupCode == 8) {
           switch (errorCode) {
             case 1:
@@ -66,7 +70,10 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
     return errorString;
   }
 
-  Future<void> checkFileStatus(String filePath) async {
+  Future checkFileStatus(String filePath) async {
+    print('\n========== CHECK FILE STATUS ==========');
+    print('File path: "$filePath"');
+    
     setState(() {
       isLoading = true;
       error = null;
@@ -74,8 +81,8 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
       fileSize = null;
     });
 
-    // Validate file path
     if (filePath.trim().isEmpty) {
+      print('ERROR: Empty file path provided');
       setState(() {
         error = "Please enter a file path";
         isLoading = false;
@@ -87,61 +94,77 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
       setState(() {
         statusMessage = "Checking file status...";
       });
-
+      
+      print('Calling fsManager.status()...');
       final status = await fsManager.status(filePath);
+      print('Status response: $status');
 
       String statusText;
       switch (status) {
         case 0:
           statusText = "File exists and is accessible";
           break;
-        case -2: // ENOENT - No such file or directory
+        case -2:
           statusText = "File does not exist";
           break;
-        case -13: // EACCES - Permission denied
+        case -13:
           statusText = "Permission denied - cannot access file";
           break;
-        case -21: // EISDIR - Is a directory
+        case -21:
           statusText = "Path points to a directory, not a file";
           break;
-        case -36: // ENAMETOOLONG - File name too long
+        case -36:
           statusText = "File path is too long";
           break;
         default:
           statusText = "Status code: $status";
       }
 
+      print('Status result: $statusText');
+      
       setState(() {
         statusMessage = statusText;
-        fileSize = status; // You might want to get actual file size separately
+        fileSize = status;
       });
 
-      // If file exists (status 0), show option to download
       if (status == 0) {
         setState(() {
           statusMessage = "$statusText - Ready to download";
         });
+        print('✓ File is ready for download');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ EXCEPTION in checkFileStatus:');
+      print('Exception type: ${e.runtimeType}');
+      print('Exception message: $e');
+      print('Stack trace:\n$stackTrace');
+      
+      final errorMsg = _getMcuMgrErrorMessage(e.toString());
+      print('Parsed error message: $errorMsg');
+      
       setState(() {
-        error = _getMcuMgrErrorMessage(e.toString());
+        error = errorMsg;
       });
     } finally {
       setState(() {
         isLoading = false;
       });
+      print('========== CHECK FILE STATUS COMPLETE ==========\n');
     }
   }
 
-  Future<void> downloadFile(String filePath) async {
+  Future downloadFile(String filePath) async {
+    print('\n========== DOWNLOAD FILE ==========');
+    print('File path: "$filePath"');
+    
     setState(() {
       isLoading = true;
       error = null;
       fileContents = null;
     });
 
-    // Validate file path
     if (filePath.trim().isEmpty) {
+      print('ERROR: Empty file path provided');
       setState(() {
         error = "Please enter a file path";
         isLoading = false;
@@ -153,36 +176,34 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
       setState(() {
         statusMessage = "Starting download...";
       });
-
+      
+      print('Calling fsManager.download()...');
       final data = await fsManager.download(filePath);
+      print('Download response received');
+    //  print('Data type: ${data.runtimeType}');
+      //print('Data: $data');
 
-      /*if (data == null) throw Exception('No data returned from device');
-
-      String contents;
-      if (data is String) {
-        contents = data;
-      } else if (data is List<int> || data is Iterable<int>) {
-        contents = utf8.decode(List<int>.from(data));
-      } else if (data != null) {
-        // Fallback to toString() for unexpected types
-        contents = data.toString();
-      } else {
-        throw Exception('Received void data from device');
-      }
-
+      // Add your data processing logic here when uncommented
+      
+      print('✓ Download completed successfully');
+      
+    } catch (e, stackTrace) {
+      print('EXCEPTION in downloadFile:');
+      print('Exception type: ${e.runtimeType}');
+      print('Exception message: $e');
+      print('Stack trace:\n$stackTrace');
+      
+      final errorMsg = _getMcuMgrErrorMessage(e.toString());
+      print('Parsed error message: $errorMsg');
+      
       setState(() {
-        fileContents = contents;
-        statusMessage = "Download completed successfully! (${contents.length} characters)";
-      });*/
-
-    } catch (e) {
-      setState(() {
-        error = _getMcuMgrErrorMessage(e.toString());
+        error = errorMsg;
       });
     } finally {
       setState(() {
         isLoading = false;
       });
+      print('========== DOWNLOAD FILE COMPLETE ==========\n');
     }
   }
 
@@ -231,8 +252,7 @@ class _FileDownloadScreenState extends State<FileDownloadScreen> {
               ],
             ),
             SizedBox(height: 16),
-            if (isLoading)
-              CircularProgressIndicator(),
+            if (isLoading) CircularProgressIndicator(),
             if (statusMessage != null)
               Container(
                 padding: EdgeInsets.all(12),
