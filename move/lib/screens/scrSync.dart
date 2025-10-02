@@ -4,7 +4,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:version/version.dart';
-import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import 'dart:io' show File;
 import 'dart:typed_data';
@@ -44,7 +43,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   // MCU Manager for SMP file system access
   late mcumgr.FsManager fsManager;
-  
+
   // Track active download subscriptions for proper cleanup
   final List<StreamSubscription> _activeDownloadSubscriptions = [];
 
@@ -103,13 +102,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
     // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
     Future.delayed(Duration.zero, () async {
       await _connectionStateSubscription.cancel();
-      
+
       // Clean up any active download subscriptions
       for (var subscription in _activeDownloadSubscriptions) {
         await subscription.cancel();
       }
       _activeDownloadSubscriptions.clear();
-      
+
       await onDisconnectPressed();
     });
 
@@ -319,7 +318,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
     var dt = DateTime.now();
     String cdate = DateFormat("yy").format(DateTime.now());
-    logConsole('Setting device time: $cdate/${dt.month}/${dt.day} ${dt.hour}:${dt.minute}:${dt.second}');
+    logConsole(
+      'Setting device time: $cdate/${dt.month}/${dt.day} ${dt.hour}:${dt.minute}:${dt.second}',
+    );
 
     ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
@@ -779,36 +780,40 @@ class _SyncingScreenState extends State<SyncingScreen> {
       setState(() {
         hrProgressPercent = 1.0;
         totalHRBytesFetched += sessionSize;
-        overallHRProgressPercent = totalHRBytesToFetch > 0
-            ? totalHRBytesFetched / totalHRBytesToFetch
-            : 1.0;
+        overallHRProgressPercent =
+            totalHRBytesToFetch > 0
+                ? totalHRBytesFetched / totalHRBytesToFetch
+                : 1.0;
         if (overallHRProgressPercent > 1.0) overallHRProgressPercent = 1.0;
       });
     } else if (trendType == hPi4Global.TempTrend) {
       setState(() {
         tempProgressPercent = 1.0;
         totalTempBytesFetched += sessionSize;
-        overallTempProgressPercent = totalTempBytesToFetch > 0
-            ? totalTempBytesFetched / totalTempBytesToFetch
-            : 1.0;
+        overallTempProgressPercent =
+            totalTempBytesToFetch > 0
+                ? totalTempBytesFetched / totalTempBytesToFetch
+                : 1.0;
         if (overallTempProgressPercent > 1.0) overallTempProgressPercent = 1.0;
       });
     } else if (trendType == hPi4Global.Spo2Trend) {
       setState(() {
         spo2ProgressPercent = 1.0;
         totalSpo2BytesFetched += sessionSize;
-        overallSpo2ProgressPercent = totalSpo2BytesToFetch > 0
-            ? totalSpo2BytesFetched / totalSpo2BytesToFetch
-            : 1.0;
+        overallSpo2ProgressPercent =
+            totalSpo2BytesToFetch > 0
+                ? totalSpo2BytesFetched / totalSpo2BytesToFetch
+                : 1.0;
         if (overallSpo2ProgressPercent > 1.0) overallSpo2ProgressPercent = 1.0;
       });
     } else if (trendType == hPi4Global.ActivityTrend) {
       setState(() {
         activityProgressPercent = 1.0;
         totalActivityBytesFetched += sessionSize;
-        overallActivityProgressPercent = totalActivityBytesToFetch > 0
-            ? totalActivityBytesFetched / totalActivityBytesToFetch
-            : 1.0;
+        overallActivityProgressPercent =
+            totalActivityBytesToFetch > 0
+                ? totalActivityBytesFetched / totalActivityBytesToFetch
+                : 1.0;
         if (overallActivityProgressPercent > 1.0) {
           overallActivityProgressPercent = 1.0;
         }
@@ -854,7 +859,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     try {
       // Set up a completer to wait for download completion
       final completer = Completer<List<int>>();
-      
+
       // Listen for download events from MCU Manager
       late StreamSubscription downloadSubscription;
       downloadSubscription = fsManager.downloadCallbacks.listen((event) {
@@ -868,7 +873,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
             logConsole("Download failed: ${event.cause}");
             downloadSubscription.cancel();
             _activeDownloadSubscriptions.remove(downloadSubscription);
-            completer.completeError(Exception("Download failed: ${event.cause}"));
+            completer.completeError(
+              Exception("Download failed: ${event.cause}"),
+            );
           } else if (event is mcumgr.OnDownloadCancelled) {
             logConsole("Download cancelled");
             downloadSubscription.cancel();
@@ -877,21 +884,25 @@ class _SyncingScreenState extends State<SyncingScreen> {
           } else if (event is mcumgr.OnDownloadProgressChanged) {
             // Update progress
             double progress = event.current / event.total;
-            logConsole("Download progress: ${event.current}/${event.total} bytes (${(progress * 100).toStringAsFixed(1)}%)");
+            logConsole(
+              "Download progress: ${event.current}/${event.total} bytes (${(progress * 100).toStringAsFixed(1)}%)",
+            );
           }
         }
       });
-      
+
       // Track subscription for proper cleanup
       _activeDownloadSubscriptions.add(downloadSubscription);
-      
+
       // Start the download via SMP
       await fsManager.download(deviceFilePath);
       logConsole("Download initiated for $deviceFilePath");
-      
+
       // Wait for download to complete and get binary data
       final List<int> binaryData = await completer.future;
-      logConsole("Successfully downloaded ${binaryData.length} bytes from device");
+      logConsole(
+        "Successfully downloaded ${binaryData.length} bytes from device",
+      );
 
       // Parse binary data and convert to CSV
       if (trendType == hPi4Global.Spo2Trend ||
@@ -906,7 +917,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
       // Update progress to 100% for this file
       _updateProgressForTrend(trendType, sessionSize);
-      
     } catch (e, stackTrace) {
       logConsole('Error downloading file $deviceFilePath: $e');
       logConsole('Stack trace: $stackTrace');
@@ -1106,177 +1116,347 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  Widget displayCloseandCancel() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          backgroundColor: Colors.red,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        onPressed: () async {
-          onDisconnectPressed();
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(Icons.cancel, color: Colors.white),
-              const Text(
-                ' Cancel ',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              Spacer(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget showHRProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallHRProgressPercent,
-        label: "Heart rate",
-      ),
-    );
-  }
-
-  Widget showSpo2Progress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallSpo2ProgressPercent,
-        label: "Spo2",
-      ),
-    );
-  }
-
-  Widget showTempProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallTempProgressPercent,
-        label: "Temperature",
-      ),
-    );
-  }
-
-  Widget showActivityProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallActivityProgressPercent,
-        label: "Activity",
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Calculate overall progress across all metrics
+    int completedCount = 0;
+    if (!_showProgressHR) completedCount++;
+    if (!_showProgressTemp) completedCount++;
+    if (!_showProgressSpo2) completedCount++;
+    if (!_showProgressActivity) completedCount++;
+    
+    int totalMetrics = 4;
+    double overallProgress = completedCount / totalMetrics;
+    
     return ScaffoldMessenger(
-      //key: Snackbar.snackBarKeyC,
       child: Scaffold(
-        backgroundColor: hPi4Global.appBackgroundColor,
+        backgroundColor: Colors.grey[50],
         appBar: AppBar(
+          elevation: 0,
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.close, color: Colors.white),
             onPressed: () async {
               onDisconnectPressed();
-              Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => HomePage()),
+              );
             },
           ),
-          title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            mainAxisSize: MainAxisSize.max,
-            children: <Widget>[
-              Image.asset(
-                'assets/healthypi_move.png',
-                fit: BoxFit.fitWidth,
-                height: 30,
+          title: const Text(
+            'Syncing Data',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          centerTitle: true,
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header Section with Device Info
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: hPi4Global.hpi4AppBarColor,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(30),
+                    bottomRight: Radius.circular(30),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                child: Column(
+                  children: [
+                    // Device connection status
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            widget.device.remoteId.toString(),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Overall progress circle
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          height: 120,
+                          child: CircularProgressIndicator(
+                            value: overallProgress,
+                            strokeWidth: 8,
+                            backgroundColor: Colors.white24,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.greenAccent,
+                            ),
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(overallProgress * 100).toInt()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '$completedCount of $totalMetrics',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Metrics List
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _buildMetricCard(
+                      icon: Icons.favorite,
+                      label: 'Heart Rate',
+                      progress: overallHRProgressPercent,
+                      isVisible: _showProgressHR,
+                      color: Colors.red[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.water_drop,
+                      label: 'SpO₂',
+                      progress: overallSpo2ProgressPercent,
+                      isVisible: _showProgressSpo2,
+                      color: Colors.blue[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.thermostat,
+                      label: 'Temperature',
+                      progress: overallTempProgressPercent,
+                      isVisible: _showProgressTemp,
+                      color: Colors.orange[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.directions_walk,
+                      label: 'Activity',
+                      progress: overallActivityProgressPercent,
+                      isVisible: _showProgressActivity,
+                      color: Colors.purple[400]!,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Cancel Button
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.red[300]!, width: 2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    onPressed: () async {
+                      onDisconnectPressed();
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => HomePage()),
+                      );
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.cancel_outlined, color: Colors.red[300]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Cancel Sync',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red[300],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        body: ListView(
+      ),
+    );
+  }
+  
+  Widget _buildMetricCard({
+    required IconData icon,
+    required String label,
+    required double progress,
+    required bool isVisible,
+    required Color color,
+  }) {
+    if (!isVisible) {
+      // Completed state
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            Center(
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_circle,
+                color: Colors.green[400],
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
-                children: <Widget>[
-                  SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        "Connected to: " + widget.device.remoteId.toString(),
-                        style: TextStyle(fontSize: 16, color: Colors.green),
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
                   ),
-                  SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      const Text(
-                        'Syncing data..',
-                        style: hPi4Global.movecardTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Completed',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.green[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  SizedBox(height: 10),
-                  showHRProgress(_showProgressHR),
-                  SizedBox(height: 10),
-                  showSpo2Progress(_showProgressSpo2),
-                  SizedBox(height: 10),
-                  showActivityProgress(_showProgressActivity),
-                  SizedBox(height: 20),
-                  showTempProgress(_showProgressTemp),
-                  SizedBox(height: 10),
-                  displayCloseandCancel(),
                 ],
               ),
             ),
           ],
         ),
+      );
+    }
+    
+    // In-progress state
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  progress > 0
+                      ? '${(progress * 100).toInt()}% complete'
+                      : 'Starting...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
