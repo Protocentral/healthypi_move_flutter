@@ -1,17 +1,16 @@
 import 'dart:async';
-import 'dart:developer';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:version/version.dart';
-import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
-import '../utils/extra.dart';
-import 'dart:io' show Directory, File, FileSystemEntity, Platform;
+import 'dart:io' show File;
+import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:csv/csv.dart';
-import 'package:intl/intl.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import '../globals.dart';
 import '../home.dart';
@@ -30,13 +29,9 @@ class SyncingScreen extends StatefulWidget {
 class _SyncingScreenState extends State<SyncingScreen> {
   BluetoothConnectionState _connectionState =
       BluetoothConnectionState.disconnected;
-  bool _isConnecting = false;
-  bool _isDisconnecting = false;
 
   late StreamSubscription<BluetoothConnectionState>
   _connectionStateSubscription;
-  late StreamSubscription<bool> _isConnectingSubscription;
-  late StreamSubscription<bool> _isDisconnectingSubscription;
 
   BluetoothService? commandService;
   BluetoothCharacteristic? commandCharacteristic;
@@ -46,19 +41,16 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   late BluetoothCharacteristic deviceFWCharacteristic;
 
+  // MCU Manager for SMP file system access
+  late mcumgr.FsManager fsManager;
+
+  // Track active download subscriptions for proper cleanup
+  final List<StreamSubscription> _activeDownloadSubscriptions = [];
+
   late StreamSubscription<List<int>> _streamDataSubscription;
   bool listeningDataStream = false;
 
-  double displayPercent = 0;
-  double globalDisplayPercentOffset = 0;
-
-  int currentFileDataCounter = 0;
-  int totalFileDataCounter = 0;
-  int checkNoOfWrites = 0;
-
-  List<int> currentFileData = [];
-  List<int> logData = [];
-
+  // Progress tracking for all metric types
   double overallHRProgressPercent = 0.0;
   int totalHRBytesToFetch = 0;
   int totalHRBytesFetched = 0;
@@ -81,35 +73,24 @@ class _SyncingScreenState extends State<SyncingScreen> {
   bool _showProgressActivity = true;
 
   String _currentFWVersion = "";
-  String _fWVersion = "1.2.0";
+  String _fWVersion = "1.6.0";
   String _fwVersionCheck = "";
 
   @override
   void initState() {
+    // Initialize MCU Manager FsManager for file operations
+    final deviceId = widget.device.remoteId.toString();
+    fsManager = mcumgr.FsManager(deviceId);
+    logConsole('FsManager initialized with device: $deviceId');
+
     _connectionStateSubscription = widget.device.connectionState.listen((
       state,
     ) async {
       _connectionState = state;
       if (state == BluetoothConnectionState.connected) {
-        await discoverDataChar(widget.device);
+        await _discoverDataChar(widget.device);
         //await _startListeningData();
-       // startFetching();
-      }
-    });
-
-    _isConnectingSubscription = widget.device.isConnecting.listen((value) {
-      _isConnecting = value;
-      if (mounted) {
-        setState(() {});
-      }
-    });
-
-    _isDisconnectingSubscription = widget.device.isDisconnecting.listen((
-      value,
-    ) {
-      _isDisconnecting = value;
-      if (mounted) {
-        setState(() {});
+        // startFetching();
       }
     });
 
@@ -121,8 +102,13 @@ class _SyncingScreenState extends State<SyncingScreen> {
     // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
     Future.delayed(Duration.zero, () async {
       await _connectionStateSubscription.cancel();
-      await _isConnectingSubscription.cancel();
-      await _isDisconnectingSubscription.cancel();
+
+      // Clean up any active download subscriptions
+      for (var subscription in _activeDownloadSubscriptions) {
+        await subscription.cancel();
+      }
+      _activeDownloadSubscriptions.clear();
+
       await onDisconnectPressed();
     });
 
@@ -135,6 +121,51 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   void logConsole(String logString) async {
     print("HPI - $logString");
+  }
+
+  String _getMcuMgrErrorMessage(String errorString) {
+    logConsole('Parsing McuMgr Error: $errorString');
+
+    if (errorString.contains('McuMgrErrorException')) {
+      final errorMatch = RegExp(
+        r'McuMgr Error: (\d+) \(group: (\d+)\)',
+      ).firstMatch(errorString);
+      if (errorMatch != null) {
+        final errorCode = int.parse(errorMatch.group(1)!);
+        final groupCode = int.parse(errorMatch.group(2)!);
+
+        logConsole('Error Code: $errorCode, Group Code: $groupCode');
+
+        if (groupCode == 8) {
+          // File system errors
+          switch (errorCode) {
+            case 1:
+              return "File system error: Unknown error";
+            case 2:
+              return "File not found or path does not exist";
+            case 3:
+              return "File system is not mounted";
+            case 4:
+              return "File already exists";
+            case 5:
+              return "Invalid file name or path";
+            case 6:
+              return "Not enough space on device";
+            case 7:
+              return "Permission denied";
+            case 8:
+              return "File is too large";
+            case 9:
+              return "Invalid file operation";
+            default:
+              return "File system error code: $errorCode";
+          }
+        } else {
+          return "MCU Manager error: Code $errorCode (Group $groupCode)";
+        }
+      }
+    }
+    return errorString;
   }
 
   Future onDisconnectPressed() async {
@@ -151,7 +182,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  discoverDataChar(BluetoothDevice deviceName) async {
+  Future<void> _discoverDataChar(BluetoothDevice deviceName) async {
     List<BluetoothService> services = await deviceName.discoverServices();
     // Find a service and characteristic by UUID
     for (BluetoothService service in services) {
@@ -172,50 +203,51 @@ class _SyncingScreenState extends State<SyncingScreen> {
       }
       if (service.uuid == Guid("180a")) {
         for (BluetoothCharacteristic characteristic
-        in service.characteristics) {
+            in service.characteristics) {
           if (characteristic.uuid == Guid("2a26")) {
             deviceFWCharacteristic = characteristic;
-            characteristic.read().then((value) {
-              if (mounted) {
-                setState(() {
-                  _currentFWVersion = String.fromCharCodes(value);
-                  _fwVersionCheck = _CompareFWVersion(_currentFWVersion, _fWVersion);
-                  logConsole(
-                    "Current FW version: $_currentFWVersion",
-                  );
-                  if(_fwVersionCheck == "Can_sync"){
-                    startFetching();
-                  }else if(_fwVersionCheck == "Cannot_sync"){
-                    _cannotSyncAndClose();
-                    return;
-                  }else{
-
+            characteristic
+                .read()
+                .then((value) {
+                  if (mounted) {
+                    setState(() {
+                      _currentFWVersion = String.fromCharCodes(value);
+                      _fwVersionCheck = _compareFwVersion(
+                        _currentFWVersion,
+                        _fWVersion,
+                      );
+                      logConsole("Current FW version: $_currentFWVersion");
+                      if (_fwVersionCheck == "Can_sync") {
+                        startFetching();
+                      } else if (_fwVersionCheck == "Cannot_sync") {
+                        _cannotSyncAndClose();
+                        return;
+                      } else {}
+                    });
                   }
-
+                })
+                .catchError((e) {
+                  Snackbar.show(
+                    ABC.c,
+                    prettyException("Read Error:", e),
+                    success: false,
+                  );
                 });
-              }
-            }).catchError((e) {
-              Snackbar.show(
-                ABC.c,
-                prettyException("Read Error:", e),
-                success: false,
-              );
-            });
             break;
           }
         }
       }
-
     }
   }
 
-  String _CompareFWVersion(String versionCurrent, String versionAvail) {
+  String _compareFwVersion(String versionCurrent, String versionAvail) {
     Version availVersion = Version.parse(versionAvail);
     Version currentVersion = Version.parse(versionCurrent);
 
     if (availVersion > currentVersion) {
       return "Cannot_sync";
-    } else if (availVersion == currentVersion || availVersion < currentVersion) {
+    } else if (availVersion == currentVersion ||
+        availVersion < currentVersion) {
       return "Can_sync";
     } else {
       return "None";
@@ -225,41 +257,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
   // Save a value
   _saveValue() async {
     DateTime now = DateTime.now();
-   // String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
+    // String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString('lastSynced', now.toIso8601String());
-  }
-
-  Future<void> _sendCurrentDateTime(
-    BluetoothDevice deviceName,
-    String selectedOption,
-  ) async {
-    List<int> commandDateTimePacket = [];
-
-    var dt = DateTime.now();
-    String cdate = DateFormat("yy").format(DateTime.now());
-    print(cdate);
-    print(dt.month);
-    print(dt.day);
-    print(dt.hour);
-    print(dt.minute);
-    print(dt.second);
-
-    ByteData sessionParametersLength = ByteData(8);
-    commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
-
-    sessionParametersLength.setUint8(0, dt.second);
-    sessionParametersLength.setUint8(1, dt.minute);
-    sessionParametersLength.setUint8(2, dt.hour);
-    sessionParametersLength.setUint8(3, dt.day);
-    sessionParametersLength.setUint8(4, dt.month);
-    sessionParametersLength.setUint8(5, int.parse(cdate));
-
-    Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
-    // logConsole("Sending DateTime information: $cmdByteList");
-    commandDateTimePacket.addAll(cmdByteList);
-    //logConsole("Sending DateTime Command: $commandDateTimePacket");
-    await _sendCommand(commandDateTimePacket, deviceName);
   }
 
   Future<void> _sendCommand(
@@ -310,6 +310,33 @@ class _SyncingScreenState extends State<SyncingScreen> {
     return await completer.future;
   }
 
+  Future<void> _sendCurrentDateTime(
+    BluetoothDevice deviceName,
+    String selectedOption,
+  ) async {
+    List<int> commandDateTimePacket = [];
+
+    var dt = DateTime.now();
+    String cdate = DateFormat("yy").format(DateTime.now());
+    logConsole(
+      'Setting device time: $cdate/${dt.month}/${dt.day} ${dt.hour}:${dt.minute}:${dt.second}',
+    );
+
+    ByteData sessionParametersLength = ByteData(8);
+    commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
+
+    sessionParametersLength.setUint8(0, dt.second);
+    sessionParametersLength.setUint8(1, dt.minute);
+    sessionParametersLength.setUint8(2, dt.hour);
+    sessionParametersLength.setUint8(3, dt.day);
+    sessionParametersLength.setUint8(4, dt.month);
+    sessionParametersLength.setUint8(5, int.parse(cdate));
+
+    Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
+    commandDateTimePacket.addAll(cmdByteList);
+    await _sendCommand(commandDateTimePacket, deviceName);
+  }
+
   void startFetching() async {
     _sendCurrentDateTime(widget.device, "Sync");
     _saveValue();
@@ -342,9 +369,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
     logConsole(
       "HR Session Count: $hrSessionCount, "
-          "Temp Session Count: $tempSessionCount, "
-          "SpO2 Session Count: $spo2SessionCount, "
-          "Activity Session Count: $activitySessionCount",
+      "Temp Session Count: $tempSessionCount, "
+      "SpO2 Session Count: $spo2SessionCount, "
+      "Activity Session Count: $activitySessionCount",
     );
 
     //await _streamDataSubscription.cancel();
@@ -453,7 +480,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  // Function for converting little-endian bytes to integer
+  // Helper function for converting little-endian bytes to integer
   int convertLittleEndianToInteger(List<int> bytes) {
     List<int> reversedBytes = bytes.reversed.toList();
     return reversedBytes.fold(0, (result, byte) => (result << 8) | byte);
@@ -464,78 +491,47 @@ class _SyncingScreenState extends State<SyncingScreen> {
     int sessionID,
     List<int> trendType,
   ) async {
-    // logConsole("Log data size: ${mData.length}");
+    logConsole("Parsing binary log data, size: ${mData.length}");
 
-    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
+    // Skip first byte (packet type) if present
+    int offset =
+        (mData.isNotEmpty && mData[0] == hPi4Global.CES_CMDIF_TYPE_DATA)
+            ? 1
+            : 0;
+    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(offset);
 
-    int logNumberPoints = ((mData.length) ~/ 16);
+    int logNumberPoints = ((mData.length - offset) ~/ 16);
 
-    List<List<String>> dataList = []; //Outter List which contains the data List
-
-    List<String> header = [];
-
-    header.add("Timestamp");
-    header.add("Max");
-    header.add("Min");
-    header.add("avg");
-    header.add("latest");
+    List<List<String>> dataList = [];
+    List<String> header = ["Timestamp", "Max", "Min", "avg", "latest"];
     dataList.add(header);
 
     for (int i = 0; i < logNumberPoints; i++) {
-      // Extracting 16 bytes of data for the current row
-      List<int> bytes = bdata.buffer.asUint8List(i * 16, 16);
+      List<int> bytes = bdata.buffer.asUint8List(i * 16 + offset, 16);
 
-      // Convert the first 8 bytes (timestamp) from little-endian to integer
       int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
-
-      // Extract other data values (2 bytes each) and convert them
       int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
       int value2 = convertLittleEndianToInteger(bytes.sublist(10, 12));
       int value3 = convertLittleEndianToInteger(bytes.sublist(12, 14));
       int value4 = convertLittleEndianToInteger(bytes.sublist(14, 16));
 
-      // Construct the row data
-      List<String> dataRow = [
+      dataList.add([
         timestamp.toString(),
         value1.toString(),
         value2.toString(),
         value3.toString(),
         value4.toString(),
-      ];
-      dataList.add(dataRow);
+      ]);
     }
-
-    // Code to convert logData to CSV file
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory directory0 = Directory("");
-    if (Platform.isAndroid) {
-      directory0 = await getApplicationDocumentsDirectory();
-    } else {
-      directory0 = await getApplicationDocumentsDirectory();
-    }
-
-    final exPath = directory0.path;
-    print("Saved Path: $exPath");
-    await Directory(exPath).create(recursive: true);
-
-    final String directory = exPath;
-    File file;
-
-    if (trendType == hPi4Global.HrTrend) {
-      file = File('$directory/hr_$sessionID.csv');
-    } else if (trendType == hPi4Global.TempTrend) {
-      file = File('$directory/temp_$sessionID.csv');
-    }  else {
-      logConsole("Unknown trend type: $trendType");
-      return;
-    }
-    //file = File('$directory/temp_$sessionID.csv');
+    final directory = await getApplicationDocumentsDirectory();
+    String filePrefix = trendType == hPi4Global.HrTrend ? "hr" : "temp";
+    File file = File('${directory.path}/${filePrefix}_$sessionID.csv');
 
     await file.writeAsString(csv);
-
-    logConsole("File exported successfully!");
+    logConsole("CSV file exported: ${file.path}");
   }
 
   Future<void> _writeSpo2ActivityLogDataToFile(
@@ -543,67 +539,41 @@ class _SyncingScreenState extends State<SyncingScreen> {
     int sessionID,
     List<int> trendType,
   ) async {
-    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(1);
+    logConsole(
+      "Parsing binary log data (SpO2/Activity), size: ${mData.length}",
+    );
 
-    int logNumberPoints = ((mData.length) ~/ 16);
+    // Skip first byte (packet type) if present
+    int offset =
+        (mData.isNotEmpty && mData[0] == hPi4Global.CES_CMDIF_TYPE_DATA)
+            ? 1
+            : 0;
+    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(offset);
 
-    List<List<String>> dataList = []; //Outter List which contains the data List
-    List<String> header = [];
+    int logNumberPoints = ((mData.length - offset) ~/ 16);
 
-    header.add("Timestamp");
-
-    if (trendType == hPi4Global.ActivityTrend) {
-      header.add("Count");
-    } else {
-      header.add("SpO2");
-    }
-    dataList.add(header);
+    List<List<String>> dataList = [];
+    String valueLabel =
+        trendType == hPi4Global.ActivityTrend ? "Count" : "SpO2";
+    dataList.add(["Timestamp", valueLabel]);
 
     for (int i = 0; i < logNumberPoints; i++) {
-      // Extracting 16 bytes of data for the current row
-      List<int> bytes = bdata.buffer.asUint8List(i * 16, 16);
+      List<int> bytes = bdata.buffer.asUint8List(i * 16 + offset, 16);
 
-      // Convert the first 8 bytes (timestamp) from little-endian to integer
       int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
-
-      // Extract other data values (2 bytes each) and convert them
       int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
 
-      // Construct the row data
-      List<String> dataRow = [timestamp.toString(), value1.toString()];
-      dataList.add(dataRow);
+      dataList.add([timestamp.toString(), value1.toString()]);
     }
-
-    // Code to convert logData to CSV file
 
     String csv = const ListToCsvConverter().convert(dataList);
 
-    Directory directory0 = Directory("");
-    if (Platform.isAndroid) {
-      directory0 = await getApplicationDocumentsDirectory();
-    } else {
-      directory0 = await getApplicationDocumentsDirectory();
-    }
-
-    final exPath = directory0.path;
-    print("Saved Path: $exPath");
-    await Directory(exPath).create(recursive: true);
-
-    final String directory = exPath;
-    File file;
-
-    if (trendType == hPi4Global.Spo2Trend) {
-      file = File('$directory/spo2_$sessionID.csv');
-    } else if (trendType == hPi4Global.ActivityTrend) {
-      file = File('$directory/activity_$sessionID.csv');
-    } else {
-      logConsole("Unknown trend type: $trendType");
-      return;
-    }
+    final directory = await getApplicationDocumentsDirectory();
+    String filePrefix = trendType == hPi4Global.Spo2Trend ? "spo2" : "activity";
+    File file = File('${directory.path}/${filePrefix}_$sessionID.csv');
 
     await file.writeAsString(csv);
-
-    logConsole("File exported successfully!");
+    logConsole("CSV file exported: ${file.path}");
   }
 
   double hrProgressPercent = 0.0; // 0.0 to 1.0
@@ -697,51 +667,50 @@ class _SyncingScreenState extends State<SyncingScreen> {
     // Disconnect from device
     await widget.device.disconnect(queue: true);
 
-      // Show dialog to user
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false, // Prevent dismissing by tapping outside
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.orange, size: 28),
-                  SizedBox(width: 10),
-                  Text('Cannot sync the data'),
-                ],
-              ),
-              content:
-              Text(
-                'Please ensure the device has the latest fw version 1.2.0 or greater to sync.',
-                style: TextStyle(fontSize: 16),
-              ),
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close dialog
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => HomePage()),
-                    );
-                  },
-                  child: Text(
-                    'OK',
-                    style: TextStyle(
-                      color: hPi4Global.hpi4Color,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+    // Show dialog to user
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false, // Prevent dismissing by tapping outside
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.orange, size: 28),
+                SizedBox(width: 10),
+                Text('Cannot sync the data'),
+              ],
+            ),
+            content: Text(
+              'Please ensure the device has the latest fw version 1.7.0 or greater to sync.',
+              style: TextStyle(fontSize: 16),
+            ),
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => HomePage()),
+                  );
+                },
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    color: hPi4Global.hpi4Color,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
-            );
-          },
-        );
-      }
+              ),
+            ],
+          );
+        },
+      );
+    }
   }
 
   Future<String> _getLogFilePathByType(int logFileID, String prefix) async {
@@ -800,15 +769,56 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> resetFetchVariables() async {
-    // Reset all fetch variables
-    setState(() {
-      displayPercent = 0;
-      globalDisplayPercentOffset = 0;
-      currentFileDataCounter = 0;
-      checkNoOfWrites = 0;
-      logData.clear();
-      logData = [];
-    });
+    // Variables were used by old custom BLE protocol - no longer needed with SMP
+    // Keeping empty method to avoid breaking existing calls
+  }
+
+  /// Helper method to update progress for a specific trend type
+  /// Updates individual file progress and overall progress based on bytes fetched
+  void _updateProgressForTrend(List<int> trendType, int sessionSize) {
+    if (trendType == hPi4Global.HrTrend) {
+      setState(() {
+        hrProgressPercent = 1.0;
+        totalHRBytesFetched += sessionSize;
+        overallHRProgressPercent =
+            totalHRBytesToFetch > 0
+                ? totalHRBytesFetched / totalHRBytesToFetch
+                : 1.0;
+        if (overallHRProgressPercent > 1.0) overallHRProgressPercent = 1.0;
+      });
+    } else if (trendType == hPi4Global.TempTrend) {
+      setState(() {
+        tempProgressPercent = 1.0;
+        totalTempBytesFetched += sessionSize;
+        overallTempProgressPercent =
+            totalTempBytesToFetch > 0
+                ? totalTempBytesFetched / totalTempBytesToFetch
+                : 1.0;
+        if (overallTempProgressPercent > 1.0) overallTempProgressPercent = 1.0;
+      });
+    } else if (trendType == hPi4Global.Spo2Trend) {
+      setState(() {
+        spo2ProgressPercent = 1.0;
+        totalSpo2BytesFetched += sessionSize;
+        overallSpo2ProgressPercent =
+            totalSpo2BytesToFetch > 0
+                ? totalSpo2BytesFetched / totalSpo2BytesToFetch
+                : 1.0;
+        if (overallSpo2ProgressPercent > 1.0) overallSpo2ProgressPercent = 1.0;
+      });
+    } else if (trendType == hPi4Global.ActivityTrend) {
+      setState(() {
+        activityProgressPercent = 1.0;
+        totalActivityBytesFetched += sessionSize;
+        overallActivityProgressPercent =
+            totalActivityBytesToFetch > 0
+                ? totalActivityBytesFetched / totalActivityBytesToFetch
+                : 1.0;
+        if (overallActivityProgressPercent > 1.0) {
+          overallActivityProgressPercent = 1.0;
+        }
+      });
+    }
   }
 
   Future<void> _fetchLogFile(
@@ -818,131 +828,121 @@ class _SyncingScreenState extends State<SyncingScreen> {
     List<int> trendType,
   ) async {
     logConsole(
-      "Fetch logs file initiated for session: $sessionID, size: $sessionSize",
+      "Fetch logs file initiated for session: $sessionID, size: $sessionSize (via SMP)",
     );
 
-    // Reset counters and buffer
-    currentFileDataCounter = 0;
-    logData.clear();
-
-    // Build command
-    List<int> commandFetchLogFile = [];
-    commandFetchLogFile.addAll(hPi4Global.sessionFetchLogFile);
-    commandFetchLogFile.addAll(trendType);
-    for (int shift = 0; shift <= 56; shift += 8) {
-      commandFetchLogFile.add((sessionID >> shift) & 0xFF);
+    // Determine file prefix and device directory based on trend type using constants
+    String filePrefix;
+    String deviceDirectory;
+    if (trendType == hPi4Global.HrTrend) {
+      filePrefix = hPi4Global.PREFIX_HR;
+      deviceDirectory = hPi4Global.DEVICE_DIR_HR;
+    } else if (trendType == hPi4Global.TempTrend) {
+      filePrefix = hPi4Global.PREFIX_TEMP;
+      deviceDirectory = hPi4Global.DEVICE_DIR_TEMP;
+    } else if (trendType == hPi4Global.Spo2Trend) {
+      filePrefix = hPi4Global.PREFIX_SPO2;
+      deviceDirectory = hPi4Global.DEVICE_DIR_SPO2;
+    } else if (trendType == hPi4Global.ActivityTrend) {
+      filePrefix = hPi4Global.PREFIX_ACTIVITY;
+      deviceDirectory = hPi4Global.DEVICE_DIR_ACTIVITY;
+    } else {
+      logConsole("Unknown trend type: $trendType");
+      return;
     }
 
-    // Completer to wait for full file
-    final completer = Completer<void>();
+    // Construct device file path following SMP/LittleFS convention
+    // Device organizes files in subdirectories: /lfs/trhr/<timestamp>, /lfs/trtemp/<timestamp>, etc.
+    final String deviceFilePath = "/lfs/$deviceDirectory/$sessionID";
+    logConsole("Downloading from device path: $deviceFilePath");
 
-    // Listen for log data packets
-    late StreamSubscription<List<int>> tempSubscription;
-    tempSubscription = dataCharacteristic!.onValueReceived.listen((
-      value,
-    ) async {
-      int pktType = value[0];
-      if (pktType == hPi4Global.CES_CMDIF_TYPE_DATA) {
-        int pktPayloadSize = value.length - 1;
-        currentFileDataCounter += pktPayloadSize;
-        logData.addAll(value.sublist(1));
+    try {
+      // Set up a completer to wait for download completion
+      final completer = Completer<List<int>>();
 
-       // logConsole(logData.toString());
-
-        if (trendType == hPi4Global.HrTrend) {
-          setState(() {
-            hrProgressPercent =
-                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
-            if (hrProgressPercent > 1.0) hrProgressPercent = 1.0;
-
-            // Update overall HR progress
-            totalHRBytesFetched += pktPayloadSize;
-            overallHRProgressPercent =
-                totalHRBytesToFetch > 0
-                    ? totalHRBytesFetched / totalHRBytesToFetch
-                    : 0.0;
-            if (overallHRProgressPercent > 1.0) overallHRProgressPercent = 1.0;
-          });
-        } else if (trendType == hPi4Global.TempTrend) {
-          setState(() {
-            tempProgressPercent =
-                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
-            if (tempProgressPercent > 1.0) tempProgressPercent = 1.0;
-
-            // Update overall Temp progress
-            totalTempBytesFetched += pktPayloadSize;
-            overallTempProgressPercent =
-                totalTempBytesToFetch > 0
-                    ? totalTempBytesFetched / totalTempBytesToFetch
-                    : 0.0;
-            if (overallTempProgressPercent > 1.0) {
-              overallTempProgressPercent = 1.0;
-            }
-          });
-        } else if (trendType == hPi4Global.Spo2Trend) {
-          setState(() {
-            spo2ProgressPercent =
-                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
-            if (spo2ProgressPercent > 1.0) spo2ProgressPercent = 1.0;
-
-            // Update overall SpO2 progress
-            totalSpo2BytesFetched += pktPayloadSize;
-            overallSpo2ProgressPercent =
-                totalSpo2BytesToFetch > 0
-                    ? totalSpo2BytesFetched / totalSpo2BytesToFetch
-                    : 0.0;
-            if (overallSpo2ProgressPercent > 1.0) {
-              overallSpo2ProgressPercent = 1.0;
-            }
-          });
-        } else if (trendType == hPi4Global.ActivityTrend) {
-          setState(() {
-            activityProgressPercent =
-                sessionSize > 0 ? currentFileDataCounter / sessionSize : 0.0;
-            if (activityProgressPercent > 1.0) activityProgressPercent = 1.0;
-
-            // Update overall Activity progress
-            totalActivityBytesFetched += pktPayloadSize;
-            overallActivityProgressPercent =
-                totalActivityBytesToFetch > 0
-                    ? totalActivityBytesFetched / totalActivityBytesToFetch
-                    : 0.0;
-            if (overallActivityProgressPercent > 1.0) {
-              overallActivityProgressPercent = 1.0;
-            }
-          });
+      // Listen for download events from MCU Manager
+      late StreamSubscription downloadSubscription;
+      downloadSubscription = fsManager.downloadCallbacks.listen((event) {
+        if (event.path == deviceFilePath) {
+          if (event is mcumgr.OnDownloadCompleted) {
+            logConsole("Download completed: ${event.data.length} bytes");
+            downloadSubscription.cancel();
+            _activeDownloadSubscriptions.remove(downloadSubscription);
+            completer.complete(event.data);
+          } else if (event is mcumgr.OnDownloadFailed) {
+            logConsole("Download failed: ${event.cause}");
+            downloadSubscription.cancel();
+            _activeDownloadSubscriptions.remove(downloadSubscription);
+            completer.completeError(
+              Exception("Download failed: ${event.cause}"),
+            );
+          } else if (event is mcumgr.OnDownloadCancelled) {
+            logConsole("Download cancelled");
+            downloadSubscription.cancel();
+            _activeDownloadSubscriptions.remove(downloadSubscription);
+            completer.completeError(Exception("Download cancelled"));
+          } else if (event is mcumgr.OnDownloadProgressChanged) {
+            // Update progress
+            double progress = event.current / event.total;
+            logConsole(
+              "Download progress: ${event.current}/${event.total} bytes (${(progress * 100).toStringAsFixed(1)}%)",
+            );
+          }
         }
+      });
 
-        // Check if all data received
-        if (currentFileDataCounter >= sessionSize) {
-          await tempSubscription.cancel();
-          completer.complete();
-        }
+      // Track subscription for proper cleanup
+      _activeDownloadSubscriptions.add(downloadSubscription);
+
+      // Start the download via SMP
+      await fsManager.download(deviceFilePath);
+      logConsole("Download initiated for $deviceFilePath");
+
+      // Wait for download to complete and get binary data
+      final List<int> binaryData = await completer.future;
+      logConsole(
+        "Successfully downloaded ${binaryData.length} bytes from device",
+      );
+
+      // Parse binary data and convert to CSV
+      if (trendType == hPi4Global.Spo2Trend ||
+          trendType == hPi4Global.ActivityTrend) {
+        await _writeSpo2ActivityLogDataToFile(binaryData, sessionID, trendType);
+      } else if (trendType == hPi4Global.TempTrend ||
+          trendType == hPi4Global.HrTrend) {
+        await _writeLogDataToFile(binaryData, sessionID, trendType);
       }
-    });
 
-    widget.device.cancelWhenDisconnected(tempSubscription);
-    await dataCharacteristic!.setNotifyValue(true);
+      // Binary data received directly from SMP - no temp file to clean up
 
-    // Send command to fetch log file
-    await _sendCommand(commandFetchLogFile, deviceName);
+      // Update progress to 100% for this file
+      _updateProgressForTrend(trendType, sessionSize);
+    } catch (e, stackTrace) {
+      logConsole('Error downloading file $deviceFilePath: $e');
+      logConsole('Stack trace: $stackTrace');
 
-    // Wait until all data is received
-    await completer.future;
+      final errorMsg = _getMcuMgrErrorMessage(e.toString());
+      logConsole('Parsed error: $errorMsg');
 
-    if (trendType == hPi4Global.Spo2Trend ||
-        trendType == hPi4Global.ActivityTrend) {
-      await _writeSpo2ActivityLogDataToFile(logData, sessionID, trendType);
-    } else if (trendType == hPi4Global.TempTrend ||
-        trendType == hPi4Global.HrTrend) {
-      await _writeLogDataToFile(logData, sessionID, trendType);
+      // Show error to user
+      if (mounted) {
+        Snackbar.show(
+          ABC.c,
+          "Download error for $filePrefix file: $errorMsg",
+          success: false,
+        );
+      }
+
+      rethrow; // Re-throw to allow caller to handle
     }
   }
 
- // To check timstamp is today
+  // To check timstamp is today
   bool _isToday(LogHeader header) {
     final now = DateTime.now();
-    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID*1000);
+    final headerDate = DateTime.fromMillisecondsSinceEpoch(
+      header.logFileID * 1000,
+    );
 
     return now.year == headerDate.year &&
         now.month == headerDate.month &&
@@ -961,7 +961,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listHRLogIndices) {
-
       // Determine if this header is for today
       bool isToday = _isToday(header);
 
@@ -1006,7 +1005,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listTempLogIndices) {
-
       // Determine if this header is for today
       bool isToday = _isToday(header);
 
@@ -1049,7 +1047,6 @@ class _SyncingScreenState extends State<SyncingScreen> {
     setState(() {});
 
     for (final header in listSpO2LogIndices) {
-
       // Determine if this header is for today
       bool isToday = _isToday(header);
 
@@ -1119,177 +1116,358 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  Widget displayCloseandCancel() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 8, 32, 8),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(0, 36),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          backgroundColor: Colors.red,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        onPressed: () async {
-          onDisconnectPressed();
-          Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(Icons.cancel, color: Colors.white),
-              const Text(
-                ' Cancel ',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-              Spacer(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget showHRProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallHRProgressPercent,
-        label: "Heart rate",
-      ),
-    );
-  }
-
-  Widget showSpo2Progress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallSpo2ProgressPercent,
-        label: "Spo2",
-      ),
-    );
-  }
-
-  Widget showTempProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallTempProgressPercent,
-        label: "Temperature",
-      ),
-    );
-  }
-
-  Widget showActivityProgress(bool isVisible) {
-    if (!isVisible) {
-      return Container();
-    }
-    return SizedBox(
-      height: SizeConfig.blockSizeVertical * 15,
-      width: SizeConfig.blockSizeHorizontal * 95,
-      child: TrendProgressIndicator(
-        progress: overallActivityProgressPercent,
-        label: "Activity",
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    // Calculate overall progress across all metrics
+    int completedCount = 0;
+    if (!_showProgressHR) completedCount++;
+    if (!_showProgressTemp) completedCount++;
+    if (!_showProgressSpo2) completedCount++;
+    if (!_showProgressActivity) completedCount++;
+    
+    int totalMetrics = 4;
+    double overallProgress = completedCount / totalMetrics;
+    
     return ScaffoldMessenger(
-      //key: Snackbar.snackBarKeyC,
       child: Scaffold(
-        backgroundColor: hPi4Global.appBackgroundColor,
+        backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
+          elevation: 0,
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
+            icon: Icon(Icons.close, color: Colors.white),
             onPressed: () async {
               onDisconnectPressed();
-              Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => HomePage()),
+              );
             },
           ),
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            mainAxisSize: MainAxisSize.max,
-            children: <Widget>[
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Image.asset(
                 'assets/healthypi_move.png',
-                fit: BoxFit.fitWidth,
-                height: 30,
+                height: 28,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Syncing Data',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          centerTitle: true,
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // Header Section with Device Info
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: hPi4Global.hpi4AppBarColor,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(30),
+                    bottomRight: Radius.circular(30),
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                child: Column(
+                  children: [
+                    // Device connection status
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            widget.device.remoteId.toString(),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    // Overall progress circle
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 120,
+                          height: 120,
+                          child: CircularProgressIndicator(
+                            value: overallProgress,
+                            strokeWidth: 8,
+                            backgroundColor: Colors.white24,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.greenAccent,
+                            ),
+                          ),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${(overallProgress * 100).toInt()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '$completedCount of $totalMetrics',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 24),
+              
+              // Metrics List
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _buildMetricCard(
+                      icon: Icons.favorite,
+                      label: 'Heart Rate',
+                      progress: overallHRProgressPercent,
+                      isVisible: _showProgressHR,
+                      color: Colors.red[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.water_drop,
+                      label: 'SpO₂',
+                      progress: overallSpo2ProgressPercent,
+                      isVisible: _showProgressSpo2,
+                      color: Colors.blue[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.thermostat,
+                      label: 'Temperature',
+                      progress: overallTempProgressPercent,
+                      isVisible: _showProgressTemp,
+                      color: Colors.orange[400]!,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildMetricCard(
+                      icon: Icons.directions_walk,
+                      label: 'Activity',
+                      progress: overallActivityProgressPercent,
+                      isVisible: _showProgressActivity,
+                      color: Colors.purple[400]!,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Cancel Button
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.red[300]!, width: 2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    onPressed: () async {
+                      onDisconnectPressed();
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => HomePage()),
+                      );
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.cancel_outlined, color: Colors.red[300]),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Cancel Sync',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.red[300],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        body: ListView(
+      ),
+    );
+  }
+  
+  Widget _buildMetricCard({
+    required IconData icon,
+    required String label,
+    required double progress,
+    required bool isVisible,
+    required Color color,
+  }) {
+    if (!isVisible) {
+      // Completed state
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2D2D2D),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            Center(
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.green[50],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.check_circle,
+                color: Colors.green[400],
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
               child: Column(
-                children: <Widget>[
-                  SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        "Connected to: " + widget.device.remoteId.toString(),
-                        style: TextStyle(fontSize: 16, color: Colors.green),
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
                   ),
-                  SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      const Text(
-                        'Syncing data..',
-                        style: hPi4Global.movecardTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Completed',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.green[600],
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  SizedBox(height: 10),
-                  showHRProgress(_showProgressHR),
-                  SizedBox(height: 10),
-                  showSpo2Progress(_showProgressSpo2),
-                  SizedBox(height: 10),
-                  showActivityProgress(_showProgressActivity),
-                  SizedBox(height: 20),
-                  showTempProgress(_showProgressTemp),
-                  SizedBox(height: 10),
-                  displayCloseandCancel(),
                 ],
               ),
             ),
           ],
         ),
+      );
+    }
+    
+    // In-progress state
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2D2D2D),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress > 0 ? progress : null,
+                    minHeight: 6,
+                    backgroundColor: Colors.grey[800],
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  progress > 0
+                      ? '${(progress * 100).toInt()}% complete'
+                      : 'Starting...',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[400],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

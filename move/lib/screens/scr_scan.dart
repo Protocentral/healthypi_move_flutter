@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
+import '../fileTransfer.dart';
 import '../widgets/scan_result_tile.dart';
 
 class ScrScan extends StatefulWidget {
@@ -239,6 +240,11 @@ class _ScrScanState extends State<ScrScan> {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
       );
+
+      /*Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => FileDownloadScreen(device: device)),
+      );*/
+
     } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
       _eraseAllLogs(context, device);
@@ -282,7 +288,7 @@ class _ScrScanState extends State<ScrScan> {
       next: true,
     );
 
-    await device.connect();
+    await device.connect(license:License.values.first);
   }
 
   Future<void> _eraseAllLogs(
@@ -490,7 +496,7 @@ class _ScrScanState extends State<ScrScan> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Row(

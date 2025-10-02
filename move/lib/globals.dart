@@ -181,6 +181,18 @@ class hPi4Global {
   static const List<int> SetBPTCalMode = [0x60];
   static const List<int> EndBPTCal = [0x62];
 
+  // Device filesystem paths for SMP downloads (LittleFS structure)
+  static const String DEVICE_DIR_HR = 'trhr';
+  static const String DEVICE_DIR_TEMP = 'trtemp';
+  static const String DEVICE_DIR_SPO2 = 'trspo2';
+  static const String DEVICE_DIR_ACTIVITY = 'trsteps';
+  
+  // File prefixes for local CSV storage
+  static const String PREFIX_HR = 'hr';
+  static const String PREFIX_TEMP = 'temp';
+  static const String PREFIX_SPO2 = 'spo2';
+  static const String PREFIX_ACTIVITY = 'activity';
+
   static const TextStyle eventStyle = TextStyle(
     fontSize: 30,
     fontWeight: FontWeight.bold,

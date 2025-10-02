@@ -284,7 +284,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       next: true,
     );
 
-    await device.connect();
+    await device.connect(license: License.values.first);
   }
 
   showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
@@ -294,7 +294,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Row(
@@ -385,7 +385,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Row(
@@ -1089,7 +1089,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       //height: SizeConfig.blockSizeVertical * 20,
                       width: SizeConfig.blockSizeHorizontal * 78,
                       child: Card(
-                        color: Colors.grey[900],
+                        color: const Color(0xFF2D2D2D),
                         child: Padding(
                           padding: const EdgeInsets.all(8.0),
                           child: Column(
@@ -1282,3 +1282,5 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     );
   }
 }
+
+

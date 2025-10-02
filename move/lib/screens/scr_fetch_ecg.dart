@@ -589,7 +589,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
             //width: 320,
             //height: 100,
             child: Card(
-              color: Colors.grey[900],
+              color: const Color(0xFF2D2D2D),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8.0),
               ),
@@ -637,7 +637,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                       itemBuilder: (BuildContext context, int index) {
                         return (index >= 0)
                             ? Card(
-                              color: Colors.grey[900],
+                              color: const Color(0xFF2D2D2D),
                               child: Padding(
                                 padding: const EdgeInsets.all(8),
                                 child: ListTile(
@@ -784,7 +784,7 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Text(
