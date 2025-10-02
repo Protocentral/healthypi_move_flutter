@@ -237,13 +237,13 @@ class _ScrScanState extends State<ScrScan> {
 
   redirectToScreens(BluetoothDevice device) {
     if (widget.tabIndex == "1") {
-      /*Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
-      );*/
-
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => FileDownloadScreen(device: device)),
+        MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
       );
+
+      /*Navigator.of(context).push(
+        MaterialPageRoute(builder: (context) => FileDownloadScreen(device: device)),
+      );*/
 
     } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
