@@ -237,8 +237,10 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
     return Padding(
       padding: const EdgeInsets.all(2.0),
       child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        color: Colors.grey[900],
+            elevation: 4,
+            shadowColor: Colors.black54,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: const Color(0xFF2D2D2D),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           children: <Widget>[
@@ -431,7 +433,10 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           height: SizeConfig.blockSizeVertical * 13,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
-            color: Colors.grey[900],
+            elevation: 4,
+            shadowColor: Colors.black54,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            color: const Color(0xFF2D2D2D),
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -522,7 +527,10 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           height: SizeConfig.blockSizeVertical * 28,
           width: SizeConfig.blockSizeHorizontal * 88,
           child: Card(
-            color: Colors.grey[900],
+            elevation: 4,
+            shadowColor: Colors.black54,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            color: const Color(0xFF2D2D2D),
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -584,6 +592,9 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   Widget displayCard(String title) {
     return SingleChildScrollView(
       child: Card(
+            elevation: 4,
+            shadowColor: Colors.black54,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         color: Colors.black,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),

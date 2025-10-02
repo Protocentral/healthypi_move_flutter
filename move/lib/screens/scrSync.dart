@@ -1130,7 +1130,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
     
     return ScaffoldMessenger(
       child: Scaffold(
-        backgroundColor: Colors.grey[50],
+        backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
           elevation: 0,
           backgroundColor: hPi4Global.hpi4AppBarColor,
@@ -1143,13 +1143,24 @@ class _SyncingScreenState extends State<SyncingScreen> {
               );
             },
           ),
-          title: const Text(
-            'Syncing Data',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/healthypi_move.png',
+                height: 28,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Syncing Data',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
           centerTitle: true,
         ),
@@ -1335,11 +1346,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
       // Completed state
       return Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: const Color(0xFF2D2D2D),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -1394,11 +1405,11 @@ class _SyncingScreenState extends State<SyncingScreen> {
     // In-progress state
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFF2D2D2D),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.3),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -1411,7 +1422,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withOpacity(0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -1430,7 +1441,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1439,7 +1450,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
                   child: LinearProgressIndicator(
                     value: progress > 0 ? progress : null,
                     minHeight: 6,
-                    backgroundColor: Colors.grey[200],
+                    backgroundColor: Colors.grey[800],
                     valueColor: AlwaysStoppedAnimation<Color>(color),
                   ),
                 ),
@@ -1450,7 +1461,7 @@ class _SyncingScreenState extends State<SyncingScreen> {
                       : 'Starting...',
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.grey[600],
+                    color: Colors.grey[400],
                   ),
                 ),
               ],

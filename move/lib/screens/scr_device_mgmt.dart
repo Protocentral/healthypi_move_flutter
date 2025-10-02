@@ -75,7 +75,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Text(
@@ -173,7 +173,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
-                                    color: Colors.grey[900],
+                                    color: const Color(0xFF2D2D2D),
                                     child: Padding(
                                       padding: const EdgeInsets.all(8.0),
                                       child: Column(
@@ -193,7 +193,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                               //Icon(Icons.favorite_border, color: Colors.black),
                                             ],
                                           ),
-                                         /*SizedBox(height: 10.0),
+                                          SizedBox(height: 10.0),
                                           ElevatedButton(
                                            style: ElevatedButton.styleFrom(
                                               minimumSize: const Size(0, 36),
@@ -239,7 +239,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                                                 ],
                                               ),
                                             ),
-                                          ),*/
+                                          ),
                                           SizedBox(height: 10.0),
                                           ElevatedButton(
                                             style: ElevatedButton.styleFrom(

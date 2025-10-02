@@ -396,29 +396,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   int getGridCount() {
-    if (MediaQuery.of(context).orientation == Orientation.landscape) {
-      return 1;
+    if (_isIpad) {
+      if (MediaQuery.of(context).orientation == Orientation.landscape) {
+        return 3;
+      } else {
+        return 2;
+      }
     } else {
-      return 1;
+      if (MediaQuery.of(context).orientation == Orientation.landscape) {
+        return 3;
+      } else {
+        return 2;
+      }
     }
   }
 
   double getAspectRatio() {
+    // Aspect ratio for metric cards: width / height
+    // For 2 columns, with proper card height
     if (_isIpad) {
       if (MediaQuery.of(context).orientation == Orientation.landscape) {
-        return MediaQuery.of(context).size.aspectRatio * 12 / 2;
+        return 1.5; // Wider cards in landscape
       } else {
-        return MediaQuery.of(context).size.aspectRatio * 14/ 2;
+        return 1.1; // Slightly tall cards in portrait
       }
     } else {
       if (MediaQuery.of(context).orientation == Orientation.landscape) {
-        return MediaQuery.of(context).size.aspectRatio * 6.2 / 2;
+        return 1.6; // Wider cards in landscape
       } else {
-        return MediaQuery.of(context).size.aspectRatio * 12.5/ 2;
+        return 0.95; // Cards slightly taller than wide for phones
       }
-
     }
-
   }
 
   Future<bool> isIPad() async {
@@ -437,266 +445,173 @@ class _HomeScreenState extends State<HomeScreen> {
   late CsvDataManager<Spo2Trends> Spo2DataManager;
   late CsvDataManager<ActivityTrends> ActivityDataManager;
 
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    required String unit,
+    required String lastUpdated,
+    required IconData icon,
+    required Color accentColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        elevation: 4,
+        shadowColor: Colors.black54,
+        color: const Color(0xFF2D2D2D),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border(
+              left: BorderSide(
+                color: accentColor,
+                width: 4,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: accentColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: accentColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 32,
+                        color: accentColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[400],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  lastUpdated,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMainGrid() {
     _loadLastVitalInfo();
     _loadStoredValue();
     return GridView.count(
       primary: false,
-      padding: const EdgeInsets.all(12),
-      //crossAxisCount: 2, //getGridCount(),
+      padding: const EdgeInsets.all(0),
       crossAxisCount: getGridCount(),
       childAspectRatio: getAspectRatio(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: <Widget>[
-        InkWell(
+        _buildMetricCard(
+          title: 'Heart Rate',
+          value: lastestHR.toString(),
+          unit: 'bpm',
+          lastUpdated: lastUpdatedHR.toString(),
+          icon: Icons.favorite,
+          accentColor: Colors.red[600]!,
           onTap: () {
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrHR()));
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ScrHR()),
+            );
           },
-          child: Card(
-            color: Colors.green[900],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Icons.favorite_border, color: Colors.white),
-                      SizedBox(width: 10.0),
-                      Text('Heart Rate', style: hPi4Global.movecardTextStyle),
-                      //SizedBox(width: 15.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastestHR.toString(),
-                        style: hPi4Global.movecardValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                      Text("bpm", style: hPi4Global.movecardTextStyle),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastUpdatedHR.toString(),
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-
-                ],
-              ),
-            ),
-          ),
         ),
-
-        InkWell(
+        _buildMetricCard(
+          title: 'SpO2',
+          value: lastestSpo2.toString(),
+          unit: '%',
+          lastUpdated: lastUpdatedSpo2.toString(),
+          icon: Symbols.spo2,
+          accentColor: Colors.blue[600]!,
           onTap: () {
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrSPO2()));
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ScrSPO2()),
+            );
           },
-          child: Card(
-            color: Colors.orange[900],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Symbols.spo2, color: Colors.white),
-                      SizedBox(width: 10.0),
-                      Text('SpO2', style: hPi4Global.movecardTextStyle),
-                      //SizedBox(width: 15.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastestSpo2.toString(),
-                        style: hPi4Global.movecardValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                      Text("%", style: hPi4Global.movecardTextStyle),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastUpdatedSpo2.toString(),
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ),
-        InkWell(
+        _buildMetricCard(
+          title: 'Temperature',
+          value: lastestTemp,
+          unit: '°F',
+          lastUpdated: lastUpdatedTemp.toString(),
+          icon: Icons.thermostat,
+          accentColor: Colors.orange[600]!,
           onTap: () {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => ScrSkinTemperature()),
             );
           },
-          child: Card(
-            color: Colors.blue[900],
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Icons.thermostat, color: Colors.white),
-                      SizedBox(width: 10.0),
-                      Text('Temperature', style: hPi4Global.movecardTextStyle),
-                      // SizedBox(width: 15.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastestTemp,
-                        style: hPi4Global.movecardValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                      Text("\u00b0 F", style: hPi4Global.movecardTextStyle),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      /*Text(
-                        "Updated: ",
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),*/
-                      Text(
-                        lastUpdatedTemp.toString(),
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ),
-        InkWell(
+        _buildMetricCard(
+          title: 'Activity',
+          value: lastestActivity.toString(),
+          unit: 'Steps',
+          lastUpdated: lastUpdatedActivity.toString(),
+          icon: Icons.directions_run,
+          accentColor: Colors.green[600]!,
           onTap: () {
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrActivity()));
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => ScrActivity()),
+            );
           },
-          child: Card(
-            color: Colors.grey[900],
-            //color:Color(0xFFBa8e23),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Icons.directions_run, color: Colors.white),
-                      SizedBox(width: 10.0),
-                      Text('Activity', style: hPi4Global.movecardTextStyle),
-                      //SizedBox(width: 15.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastestActivity.toString(),
-                        style: hPi4Global.movecardValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                      Text("Steps", style: hPi4Global.movecardTextStyle),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastUpdatedActivity.toString(),
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ),
-
-        /*InkWell(
-          onTap: () {
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => ScrBPT()));
-          },
-          child: Card(
-            color: Colors.grey[900],
-            //color:Color(0xFFBa8e23),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Icons.directions_run, color: Colors.white),
-                      SizedBox(width: 10.0),
-                      Text('BPT', style: hPi4Global.movecardTextStyle),
-                      //SizedBox(width: 15.0),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(
-                        lastestActivity.toString(),
-                        style: hPi4Global.movecardValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                      Text(" ", style: hPi4Global.movecardTextStyle),
-                    ],
-                  ),
-                  Row(
-                    children: <Widget>[
-                      SizedBox(width: 10.0),
-                      Text(lastUpdatedActivity.toString(),
-                        style: hPi4Global.movecardSubValueTextStyle,
-                      ),
-                      SizedBox(width: 10.0),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),*/
       ],
     );
   }
@@ -761,58 +676,124 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
+        elevation: 0,
         backgroundColor: hPi4Global.hpi4AppBarColor,
         automaticallyImplyLeading: false,
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          mainAxisSize: MainAxisSize.max,
-          children: <Widget>[
+          children: [
             Image.asset(
               'assets/healthypi_move.png',
-              fit: BoxFit.fitWidth,
-              height: 30,
+              height: 32,
+              fit: BoxFit.contain,
             ),
-            Column(children: <Widget>[]),
+            const SizedBox(width: 12),
+            const Text(
+              'HealthyPi Move',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
+        centerTitle: false,
       ),
       body: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
           Center(
             child: Column(
               children: <Widget>[
-                SizedBox(height: 10),
-                // Add this note above "Last synced"
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.max,
-                  children: <Widget>[
-                    SizedBox(width: 10.0),
-                    Text(
-                      "Last synced: $lastSyncedDateTime",
-                      style: hPi4Global.movecardSubValueTextStyle,
+                // Last Synced Card
+                Card(
+                  elevation: 4,
+                  shadowColor: Colors.black54,
+                  color: const Color(0xFF2D2D2D),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: hPi4Global.hpi4Color.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.sync,
+                            color: hPi4Global.hpi4Color,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Last Synced',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[400],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                lastSyncedDateTime.isEmpty ? 'Never' : lastSyncedDateTime,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(width: 10.0),
-                  ],
-                ),
-                
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: Text(
-                    "Note: Sync has to be done manually using the Sync button below.",
-                    style: TextStyle(
-                      color: Colors.orangeAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
                   ),
                 ),
-
-                SizedBox(height: 10),
+                const SizedBox(height: 16),
+                // Info Banner
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[900]!.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.orange[700]!,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.orange[300],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Sync manually using the button below",
+                          style: TextStyle(
+                            color: Colors.orange[100],
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
                 SizedBox(
                   width: SizeConfig.blockSizeHorizontal * 95,
                   child: _buildMainGrid(),
@@ -827,22 +808,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: Theme(
-        data: Theme.of(context).copyWith(
-          floatingActionButtonTheme: FloatingActionButtonThemeData(
-            shape: const CircleBorder(),
-            backgroundColor: Colors.amber, // Changed to a standout color
-            foregroundColor: Colors.black, // Black icon for contrast
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
+          );
+        },
+        backgroundColor: hPi4Global.hpi4Color,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.sync, size: 24),
+        label: const Text(
+          'Sync',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
           ),
-        ),
-        child: FloatingActionButton(
-          onPressed: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-            );
-          },
-          tooltip: 'Sync',
-          child: const Icon(Icons.sync, size: 32),
         ),
       ),
     );

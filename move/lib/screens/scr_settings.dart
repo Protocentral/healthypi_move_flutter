@@ -131,7 +131,7 @@ class _ScrSettingsState extends State<ScrSettings> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Row(
@@ -237,7 +237,7 @@ class _ScrSettingsState extends State<ScrSettings> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Text(
@@ -330,7 +330,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                         //height: SizeConfig.blockSizeVertical * 20,
                         width: SizeConfig.blockSizeHorizontal * 88,
                         child: Card(
-                          color: Colors.grey[900],
+                          color: const Color(0xFF2D2D2D),
                           child: Padding(
                               padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
                               child: Column(
@@ -441,7 +441,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                                   //height: SizeConfig.blockSizeVertical * 20,
                                   width: SizeConfig.blockSizeHorizontal * 88,
                                   child: Card(
-                                    color: Colors.grey[900],
+                                    color: const Color(0xFF2D2D2D),
                                     child: Padding(
                                       padding: const EdgeInsets.all(8.0),
                                       child: Column(

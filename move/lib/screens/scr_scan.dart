@@ -496,7 +496,7 @@ class _ScrScanState extends State<ScrScan> {
         return Theme(
           data: ThemeData.dark().copyWith(
             textTheme: TextTheme(),
-            dialogTheme: DialogThemeData(backgroundColor: Colors.grey[900]),
+            dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
           ),
           child: AlertDialog(
             title: Row(

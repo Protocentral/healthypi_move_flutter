@@ -129,7 +129,7 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                     //height: SizeConfig.blockSizeVertical * 20,
                     width: SizeConfig.blockSizeHorizontal * 88,
                     child: Card(
-                      color: Colors.grey[900],
+                      color: const Color(0xFF2D2D2D),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
                         child: Column(
