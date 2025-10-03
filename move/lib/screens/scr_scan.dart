@@ -12,7 +12,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../fileTransfer.dart';
 import '../widgets/scan_result_tile.dart';
 
 class ScrScan extends StatefulWidget {
@@ -240,10 +239,6 @@ class _ScrScanState extends State<ScrScan> {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
       );
-
-      /*Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => FileDownloadScreen(device: device)),
-      );*/
 
     } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
