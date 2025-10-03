@@ -1,6 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:move/screens/csvData.dart';
+import '../utils/trends_data_manager.dart';
 import 'package:move/screens/showTrendsAlert.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../home.dart';
@@ -9,6 +10,10 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import '../utils/export_helpers.dart';
 
 class ScrHR extends StatefulWidget {
   const ScrHR({super.key});
@@ -37,17 +42,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    hrDataManager = CsvDataManager<HRTrends>(
-      filePrefix: "hr_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int minHR = int.tryParse(row[1]) ?? 0;
-        int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return HRTrends(date, maxHR, minHR);
-      },
-      getFileType: (file) => "hr",
-    );
+    hrDataManager = TrendsDataManager(hPi4Global.PREFIX_HR);
 
     _loadData();
   }
@@ -124,8 +119,8 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
-        // Display a 6-hour interval dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        // Display 7-day range including today (last 6 days + today)
+        minimum: DateTime.now().subtract(Duration(days: 6)), // Start of 7-day range
         maximum: DateTime.now(),
         interval: 1, // 6-hour intervals
         intervalType: DateTimeIntervalType.days,
@@ -167,10 +162,11 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
         },
       );
     } else {
+      final now = DateTime.now();
       return DateTimeAxis(
-        // Display a month-long range dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
-        maximum: DateTime.now(), // Today
+        // Display current calendar month
+        minimum: DateTime(now.year, now.month, 1), // First day of current month
+        maximum: now, // Today
         interval: 6,
         intervalType: DateTimeIntervalType.days,
         dateFormat: DateFormat('dd'), // Show day, month, and hour
@@ -302,82 +298,78 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   }
 
   // Example usage for HR data:
-  late CsvDataManager<HRTrends> hrDataManager;
+  late TrendsDataManager hrDataManager;
 
   Future<void> _loadData() async {
-    List<HRTrends> data = await hrDataManager.getDataObjects();
-    if (data.isEmpty) {
-      print('No valid HR data found in CSV files.');
-      return;
-    }
+    try {
+      if(_tabController.index == 0){
+        // Daily view - Get hourly trends for today
+        hrTrendsData = [];
+        List<HourlyTrend> hourlyTrends = await hrDataManager.getHourlyTrendForToday();
+        
+        if (hourlyTrends.isEmpty) {
+          print('No HR data available for today');
+          setState(() {
+            rangeMinHR = 0;
+            rangeMaxHR = 0;
+            averageHR = 0;
+          });
+          return;
+        }
 
-    DateTime today = DateTime.now();
+        // Convert HourlyTrend to HRTrends for display
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
 
-    if (_tabController.index == 0) {
-      // Get the hourly HR trends for today
-      hrTrendsData = [];
-      List<HourlyTrend> hourlyHRTrends =
-          await hrDataManager.getHourlyTrendForToday();
-      for (var trend in hourlyHRTrends) {
-        setState(() {
+        for (var trend in hourlyTrends) {
+          if (!mounted) return;
+          
           hrTrendsData.add(
-            HRTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
+            HRTrends(
+              trend.hour,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
           );
-        });
-        print(
-          'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
-        );
-      }
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
 
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
-        today,
-      );
-
-      setState(() {
-        rangeMinHR = dailyStats['min']!.toInt();
-        rangeMaxHR = dailyStats['max']!.toInt();
-        averageHR = dailyStats['avg']!.toInt();
-      });
-
-      print('Daily Stats: $dailyStats');
-    } else if (_tabController.index == 1) {
-      // Get the weekly HR trends for the current week
-      hrTrendsData = [];
-      List<WeeklyTrend> weeklyHRTrends = await hrDataManager.getWeeklyTrend(
-        today,
-      );
-      for (var trend in weeklyHRTrends) {
+        if (!mounted) return;
         setState(() {
-          hrTrendsData.add(
-            HRTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
-          );
+          rangeMinHR = minVal;
+          rangeMaxHR = maxVal;
+          averageHR = (sumAvg / count).round();
         });
 
-        print(
-          'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
-        );
-      }
+      } else if(_tabController.index == 1){
+        // Weekly view - Get daily trends for the week
+        hrTrendsData = [];
+        List<WeeklyTrend> weeklyTrends = await hrDataManager.getWeeklyTrends();
+        
+        if (weeklyTrends.isEmpty) {
+          print('No HR data available for this week');
+          setState(() {
+            rangeMinHR = 0;
+            rangeMaxHR = 0;
+            averageHR = 0;
+          });
+          return;
+        }
 
-      Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
-        today,
-      );
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
 
-      setState(() {
-        rangeMinHR = weeklyStats['min']!.toInt();
-        rangeMaxHR = weeklyStats['max']!.toInt();
-        averageHR = weeklyStats['avg']!.toInt();
-      });
-
-      print('Weekly Stats: $weeklyStats');
-    } else if (_tabController.index == 2) {
-      // Get the monthly HR trends for the current month
-      hrTrendsData = [];
-      List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
-        today,
-      );
-      for (var trend in monthlyHRTrends) {
-        setState(() {
+        for (var trend in weeklyTrends) {
+          if (!mounted) return;
+          
           hrTrendsData.add(
             HRTrends(
               trend.date,
@@ -385,24 +377,263 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
               trend.min.toInt(),
             ),
           );
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinHR = minVal;
+          rangeMaxHR = maxVal;
+          averageHR = (sumAvg / count).round();
         });
 
-        print(
-          'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+      } else if(_tabController.index == 2){
+        // Monthly view - Get daily trends for the month
+        hrTrendsData = [];
+        List<MonthlyTrend> monthlyTrends = await hrDataManager.getMonthlyTrends();
+        
+        if (monthlyTrends.isEmpty) {
+          print('No HR data available for this month');
+          setState(() {
+            rangeMinHR = 0;
+            rangeMaxHR = 0;
+            averageHR = 0;
+          });
+          return;
+        }
+
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
+
+        for (var trend in monthlyTrends) {
+          if (!mounted) return;
+          
+          hrTrendsData.add(
+            HRTrends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinHR = minVal;
+          rangeMaxHR = maxVal;
+          averageHR = (sumAvg / count).round();
+        });
+      }
+    } catch (e) {
+      print('Error loading HR data: $e');
+      if (!mounted) return;
+      setState(() {
+        hrTrendsData = [];
+        rangeMinHR = 0;
+        rangeMaxHR = 0;
+        averageHR = 0;
+      });
+    }
+  }
+
+  // Export Dialog
+  Future<void> _showExportDialog() async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF2D2D2D),
+        title: Text(
+          'Export Heart Rate Data',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildExportOption(
+              'Today',
+              Icons.today,
+              () => _exportHRData('today'),
+            ),
+            _buildExportOption(
+              'Last 7 Days',
+              Icons.date_range,
+              () => _exportHRData('week'),
+            ),
+            _buildExportOption(
+              'Last 30 Days',
+              Icons.calendar_month,
+              () => _exportHRData('month'),
+            ),
+            _buildExportOption(
+              'All Data',
+              Icons.all_inclusive,
+              () => _exportHRData('all'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportOption(String label, IconData icon, VoidCallback onTap) {
+    return Card(
+      color: Color(0xFF1E1E1E),
+      child: ListTile(
+        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        title: Text(label, style: TextStyle(color: Colors.white)),
+        trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Future<void> _exportHRData(String range) async {
+    Navigator.pop(context); // Close dialog
+    
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: LoadingIndicator(text: 'Preparing export...'),
+      ),
+    );
+    
+    try {
+      List<List<String>> csvData = [
+        ['Timestamp', 'Min HR (bpm)', 'Max HR (bpm)', 'Avg HR (bpm)'],
+      ];
+      
+      String dateLabel = ExportHelpers.getCurrentDateLabel(range);
+      
+      switch (range) {
+        case 'today':
+          List<HourlyTrend> todayData = await hrDataManager.getHourlyTrendForToday();
+          if (todayData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in todayData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd HH:mm:ss').format(trend.hour),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'week':
+          List<WeeklyTrend> weekData = await hrDataManager.getWeeklyTrends();
+          if (weekData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in weekData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'month':
+          List<MonthlyTrend> monthData = await hrDataManager.getMonthlyTrends();
+          if (monthData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in monthData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'all':
+          // Export monthly data as the most comprehensive view
+          List<MonthlyTrend> allData = await hrDataManager.getMonthlyTrends();
+          if (allData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in allData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+      }
+      
+      // Create CSV content
+      String csv = const ListToCsvConverter().convert(csvData);
+      
+      // Save and share
+      final directory = await getApplicationDocumentsDirectory();
+      final filename = ExportHelpers.generateFilename('hr', dateLabel, 'csv');
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      Navigator.pop(context); // Close loading
+      
+      // Share file
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Heart Rate Data - HealthyPi Move',
+      );
+      
+      if (result.status == ShareResultStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Data exported successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
         );
       }
-
-      Map<String, double> monthlyStats = await hrDataManager
-          .getMonthlyStatistics(today);
-
-      setState(() {
-        rangeMinHR = monthlyStats['min']!.toInt();
-        rangeMaxHR = monthlyStats['max']!.toInt();
-        averageHR = monthlyStats['avg']!.toInt();
-      });
-
-      print('Monthly Stats: $monthlyStats');
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
+  }
+
+  void _showNoDataMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No data available for selected period'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget displayRangeValues() {
@@ -628,9 +859,9 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
               ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          //mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            SizedBox(width: 48), // Balance the leading button
             const Text(
               'Heart Rate',
               style: TextStyle(
@@ -638,7 +869,11 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                 color: hPi4Global.hpi4AppBarIconsColor,
               ),
             ),
-            SizedBox(width: 30.0),
+            IconButton(
+              icon: Icon(Icons.file_download, color: Colors.white),
+              tooltip: 'Export Data',
+              onPressed: _showExportDialog,
+            ),
           ],
         ),
         centerTitle: true,

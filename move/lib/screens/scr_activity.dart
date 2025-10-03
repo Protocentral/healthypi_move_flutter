@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:move/screens/showTrendsAlert.dart';
 import '../globals.dart';
@@ -5,7 +6,11 @@ import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
-import 'csvData.dart';
+import '../utils/trends_data_manager.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import '../utils/export_helpers.dart';
 
 class ScrActivity extends StatefulWidget {
   const ScrActivity({super.key});
@@ -31,16 +36,7 @@ class _ScrActivityState extends State<ScrActivity>
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    activityDataManager = CsvDataManager<ActivityTrends>(
-      filePrefix: "activity_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int count = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return ActivityTrends(date, count);
-      },
-      getFileType: (file) => "activity",
-    );
+    activityDataManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
 
     _loadData();
   }
@@ -115,8 +111,8 @@ class _ScrActivityState extends State<ScrActivity>
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
-        // Display a 6-hour interval dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        // Display 7-day range including today (last 6 days + today)
+        minimum: DateTime.now().subtract(Duration(days: 6)), // Start of 7-day range
         maximum: DateTime.now(),
         interval: 1, // 6-hour intervals
         intervalType: DateTimeIntervalType.days,
@@ -158,10 +154,11 @@ class _ScrActivityState extends State<ScrActivity>
         },
       );
     } else {
+      final now = DateTime.now();
       return DateTimeAxis(
-        // Display a month-long range dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
-        maximum: DateTime.now(), // Today
+        // Display current calendar month
+        minimum: DateTime(now.year, now.month, 1), // First day of current month
+        maximum: now, // Today
         interval: 6,
         intervalType: DateTimeIntervalType.days,
         dateFormat: DateFormat('dd'), // Show day, month, and hour
@@ -291,76 +288,272 @@ class _ScrActivityState extends State<ScrActivity>
     );
   }
 
-  // Example usage for HR data:
-  late CsvDataManager<ActivityTrends> activityDataManager;
+  // Example usage for Activity data:
+  late TrendsDataManager activityDataManager;
 
   Future<void> _loadData() async {
-    List<ActivityTrends> data = await activityDataManager.getDataObjects();
-    if (data.isEmpty) {
-      print('No valid Activity data found in CSV files.');
-      return;
-    }
+    try {
+      if(_tabController.index == 0){
+        // Daily view - Get hourly trends for today
+        Count = 0;
+        ActivityTrendsData = [];
+        List<HourlyTrend> hourlyTrends = await activityDataManager.getHourlyTrendForToday();
+        
+        if (hourlyTrends.isEmpty) {
+          print('No activity data available for today');
+          setState(() {
+            Count = 0;
+          });
+          return;
+        }
 
-    DateTime today = DateTime.now();
+        for (var trend in hourlyTrends) {
+          if (!mounted) return;
+          
+          setState(() {
+            ActivityTrendsData.add(ActivityTrends(trend.hour, trend.avg.toInt()));
+            Count = Count + trend.avg.toInt();
+          });
+          print('Hour: ${trend.hour}, Steps: ${trend.avg}');
+        }
 
-    print(today);
+      } else if(_tabController.index == 1){
+        // Weekly view - Get daily trends for the week
+        Count = 0;
+        ActivityTrendsData = [];
+        List<WeeklyTrend> weeklyTrends = await activityDataManager.getWeeklyTrends();
+        
+        if (weeklyTrends.isEmpty) {
+          print('No activity data available for this week');
+          setState(() {
+            Count = 0;
+          });
+          return;
+        }
 
-    if (_tabController.index == 0) {
-      // Get the hourly HR trends for today
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityDailyTrend> activityDailyTrend = await activityDataManager
-          .getActivityDailyTrend(today);
-      for (var trend in activityDailyTrend) {
-        setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
-        });
-        print('Hour: ${trend.date}, Step: ${trend.steps}');
+        for (var trend in weeklyTrends) {
+          if (!mounted) return;
+          
+          setState(() {
+            ActivityTrendsData.add(ActivityTrends(trend.date, trend.avg.toInt()));
+            Count = Count + trend.avg.toInt();
+          });
+          print('Week: ${trend.date}, Steps: ${trend.avg}');
+        }
+
+      } else if(_tabController.index == 2){
+        // Monthly view - Get daily trends for the month
+        Count = 0;
+        ActivityTrendsData = [];
+        List<MonthlyTrend> monthlyTrends = await activityDataManager.getMonthlyTrends();
+        
+        if (monthlyTrends.isEmpty) {
+          print('No activity data available for this month');
+          setState(() {
+            Count = 0;
+          });
+          return;
+        }
+
+        for (var trend in monthlyTrends) {
+          if (!mounted) return;
+          
+          setState(() {
+            ActivityTrendsData.add(ActivityTrends(trend.date, trend.avg.toInt()));
+            Count = Count + trend.avg.toInt();
+          });
+          print('Month: ${trend.date}, Steps: ${trend.avg}');
+        }
       }
-    } else if (_tabController.index == 1) {
-      // Get the weekly HR trends for the current week
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityWeeklyTrend> activityWeeklyTrend = await activityDataManager
-          .getActivityWeeklyTrend(today);
-      for (var trend in activityWeeklyTrend) {
-        setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
-        });
-        print('week: ${trend.date}, Step: ${trend.steps}');
-      }
-    } else if (_tabController.index == 2) {
-      // Get the monthly HR trends for the current month
-      Count = 0;
-      ActivityTrendsData = [];
-      List<ActivityMonthlyTrend> activityMonthlyTrend =
-          await activityDataManager.getActivityMonthlyTrend(today);
-      for (var trend in activityMonthlyTrend) {
-        setState(() {
-          ActivityTrendsData.add(ActivityTrends(trend.date, trend.steps));
-          Count = Count + trend.steps;
-        });
-
-        print('Month: ${trend.date}, Step: ${trend.steps}');
-      }
-    }
-
-    /*List<ActivityMonthlyTrend> activityMonthlyTrend = await activityDataManager
-        .getActivityMonthlyTrend(today);
-
-    if (activityMonthlyTrend.isNotEmpty) {
-      ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      int lastAvg = lastTrend.steps;
+    } catch (e) {
+      print('Error loading activity data: $e');
+      if (!mounted) return;
       setState(() {
-       // Count = lastAvg;
+        ActivityTrendsData = [];
+        Count = 0;
       });
-      print('Last Time: $lastTime, Min: $lastAvg');
-    } else {
-      print('No monthly HR trends data available.');
-    }*/
+    }
+  }
+
+  // Export Dialog
+  Future<void> _showExportDialog() async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF2D2D2D),
+        title: Text(
+          'Export Activity Data',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildExportOption(
+              'Today',
+              Icons.today,
+              () => _exportActivityData('today'),
+            ),
+            _buildExportOption(
+              'Last 7 Days',
+              Icons.date_range,
+              () => _exportActivityData('week'),
+            ),
+            _buildExportOption(
+              'Last 30 Days',
+              Icons.calendar_month,
+              () => _exportActivityData('month'),
+            ),
+            _buildExportOption(
+              'All Data',
+              Icons.all_inclusive,
+              () => _exportActivityData('all'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportOption(String label, IconData icon, VoidCallback onTap) {
+    return Card(
+      color: Color(0xFF1E1E1E),
+      child: ListTile(
+        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        title: Text(label, style: TextStyle(color: Colors.white)),
+        trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Future<void> _exportActivityData(String range) async {
+    Navigator.pop(context); // Close dialog
+    
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: LoadingIndicator(text: 'Preparing export...'),
+      ),
+    );
+    
+    try {
+      List<List<String>> csvData = [
+        ['Timestamp', 'Steps'],
+      ];
+      
+      String dateLabel = ExportHelpers.getCurrentDateLabel(range);
+      
+      switch (range) {
+        case 'today':
+          List<HourlyTrend> todayData = await activityDataManager.getHourlyTrendForToday();
+          if (todayData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in todayData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd HH:mm:ss').format(trend.hour),
+              trend.avg.toStringAsFixed(0),
+            ]);
+          }
+          break;
+          
+        case 'week':
+          List<WeeklyTrend> weekData = await activityDataManager.getWeeklyTrends();
+          if (weekData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in weekData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.avg.toStringAsFixed(0),
+            ]);
+          }
+          break;
+          
+        case 'month':
+          List<MonthlyTrend> monthData = await activityDataManager.getMonthlyTrends();
+          if (monthData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in monthData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.avg.toStringAsFixed(0),
+            ]);
+          }
+          break;
+          
+        case 'all':
+          // Export monthly data as the most comprehensive view
+          List<MonthlyTrend> allData = await activityDataManager.getMonthlyTrends();
+          if (allData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in allData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.avg.toStringAsFixed(0),
+            ]);
+          }
+          break;
+      }
+      
+      // Create CSV content
+      String csv = const ListToCsvConverter().convert(csvData);
+      
+      // Save and share
+      final directory = await getApplicationDocumentsDirectory();
+      final filename = ExportHelpers.generateFilename('activity', dateLabel, 'csv');
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      Navigator.pop(context); // Close loading
+      
+      // Share file
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Activity Data - HealthyPi Move',
+      );
+      
+      if (result.status == ShareResultStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Data exported successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _showNoDataMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No data available for selected period'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
  Widget stepsBasedOnTab(){
@@ -594,8 +787,9 @@ class _ScrActivityState extends State<ScrActivity>
               ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            SizedBox(width: 48),
             const Text(
               'Activity',
               style: TextStyle(
@@ -603,7 +797,11 @@ class _ScrActivityState extends State<ScrActivity>
                 color: hPi4Global.hpi4AppBarIconsColor,
               ),
             ),
-            SizedBox(width: 30.0),
+            IconButton(
+              icon: Icon(Icons.file_download, color: Colors.white),
+              tooltip: 'Export Data',
+              onPressed: _showExportDialog,
+            ),
           ],
         ),
         centerTitle: true,

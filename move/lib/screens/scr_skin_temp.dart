@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/showTrendsAlert.dart';
@@ -7,7 +8,11 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 import '../globals.dart';
 import 'package:intl/intl.dart';
 
-import 'csvData.dart';
+import '../utils/trends_data_manager.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import '../utils/export_helpers.dart';
 
 class ScrSkinTemperature extends StatefulWidget {
   const ScrSkinTemperature({super.key});
@@ -39,17 +44,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    tempDataManager = CsvDataManager<TempTrends>(
-      filePrefix: "temp_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int minTemp = int.tryParse(row[1]) ?? 0;
-        int maxTemp = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return TempTrends(date, minTemp.toDouble(), maxTemp.toDouble());
-      },
-      getFileType: (file) => "temp",
-    );
+    tempDataManager = TrendsDataManager(hPi4Global.PREFIX_TEMP);
 
     _loadData();
   }
@@ -129,8 +124,8 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
-        // Display a 6-hour interval dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        // Display 7-day range including today (last 6 days + today)
+        minimum: DateTime.now().subtract(Duration(days: 6)), // Start of 7-day range
         maximum: DateTime.now(),
         interval: 1, // 6-hour intervals
         intervalType: DateTimeIntervalType.days,
@@ -170,10 +165,11 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
         },
       );
     } else {
+      final now = DateTime.now();
       return DateTimeAxis(
-        // Display a month-long range dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
-        maximum: DateTime.now(), // Today
+        // Display current calendar month
+        minimum: DateTime(now.year, now.month, 1), // First day of current month
+        maximum: now, // Today
         interval: 6,
         intervalType: DateTimeIntervalType.days,
         dateFormat: DateFormat('dd'), // Show day, month, and hour
@@ -307,121 +303,342 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }
 
   // Example usage for HR data:
-  late CsvDataManager<TempTrends> tempDataManager;
+  late TrendsDataManager tempDataManager;
 
   Future<void> _loadData() async {
-    List<TempTrends> data = await tempDataManager.getDataObjects();
-    if (data.isEmpty) {
-      print('No valid HR data found in CSV files.');
-      return;
-    }
+    try {
+      if(_tabController.index == 0){
+        // Daily view - Get hourly trends for today
+        TempTrendsData = [];
+        List<HourlyTrend> hourlyTrends = await tempDataManager.getHourlyTrendForToday();
+        
+        if (hourlyTrends.isEmpty) {
+          print('No temperature data available for today');
+          setState(() {
+            rangeMinTemp = 0;
+            rangeMaxTemp = 0;
+            averageTemp = 0;
+          });
+          return;
+        }
 
-    DateTime today = DateTime.now();
+        // Convert HourlyTrend to TempTrends for display
+        double minVal = double.infinity;
+        double maxVal = double.negativeInfinity;
+        double sumAvg = 0;
+        int count = 0;
 
-    if(_tabController.index == 0){
-      // Get the hourly HR trends for today
-      TempTrendsData = [];
-      List<HourlyTrend> hourlyHRTrends =
-      await tempDataManager.getHourlyTrendForToday();
-      for (var trend in hourlyHRTrends) {
-
-        setState((){
+        for (var trend in hourlyTrends) {
+          if (!mounted) return;
+          
           TempTrendsData.add(
             TempTrends(
               trend.hour,
-              trend.max.toDouble(),
-              trend.min.toDouble(),
+              trend.max,
+              trend.min,
             ),
           );
+          
+          if (trend.min < minVal) minVal = trend.min;
+          if (trend.max > maxVal) maxVal = trend.max;
+          sumAvg += trend.avg;
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinTemp = floorToOneDecimal(minVal / 100.0);
+          rangeMaxTemp = floorToOneDecimal(maxVal / 100.0);
+          averageTemp = floorToOneDecimal((sumAvg / count) / 100.0);
         });
-        print(
-          'Hour: ${trend.hour}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
-        );
-      }
 
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> dailyStats = await tempDataManager.getDailyStatistics(
-        today,
-      );
+      } else if(_tabController.index == 1){
+        // Weekly view - Get daily trends for the week
+        TempTrendsData = [];
+        List<WeeklyTrend> weeklyTrends = await tempDataManager.getWeeklyTrends();
+        
+        if (weeklyTrends.isEmpty) {
+          print('No temperature data available for this week');
+          setState(() {
+            rangeMinTemp = 0;
+            rangeMaxTemp = 0;
+            averageTemp = 0;
+          });
+          return;
+        }
 
-      setState((){
-        rangeMinTemp = floorToOneDecimal(dailyStats['min']!/100.toDouble());
-        rangeMaxTemp = floorToOneDecimal(dailyStats['max']!/100.toDouble());
-        averageTemp = floorToOneDecimal(dailyStats['avg']!/100.toDouble());
-      });
+        double minVal = double.infinity;
+        double maxVal = double.negativeInfinity;
+        double sumAvg = 0;
+        int count = 0;
 
-      print('Daily Stats: $dailyStats');
-
-    }else if(_tabController.index == 1){
-      // Get the weekly HR trends for the current week
-      TempTrendsData = [];
-      List<WeeklyTrend> weeklyHRTrends = await tempDataManager.getWeeklyTrend(
-        today,
-      );
-      for (var trend in weeklyHRTrends) {
-        setState((){
+        for (var trend in weeklyTrends) {
+          if (!mounted) return;
+          
           TempTrendsData.add(
             TempTrends(
               trend.date,
-              trend.max.toDouble(),
-              trend.min.toDouble(),
+              trend.max,
+              trend.min,
             ),
           );
+          
+          if (trend.min < minVal) minVal = trend.min;
+          if (trend.max > maxVal) maxVal = trend.max;
+          sumAvg += trend.avg;
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinTemp = floorToOneDecimal(minVal / 100.0);
+          rangeMaxTemp = floorToOneDecimal(maxVal / 100.0);
+          averageTemp = floorToOneDecimal((sumAvg / count) / 100.0);
         });
 
-        print(
-          'Date: ${trend.date}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
-        );
+      } else if(_tabController.index == 2){
+        // Monthly view - Get daily trends for the month
+        TempTrendsData = [];
+        List<MonthlyTrend> monthlyTrends = await tempDataManager.getMonthlyTrends();
+        
+        if (monthlyTrends.isEmpty) {
+          print('No temperature data available for this month');
+          setState(() {
+            rangeMinTemp = 0;
+            rangeMaxTemp = 0;
+            averageTemp = 0;
+          });
+          return;
+        }
 
-      }
+        double minVal = double.infinity;
+        double maxVal = double.negativeInfinity;
+        double sumAvg = 0;
+        int count = 0;
 
-      Map<String, double> weeklyStats = await tempDataManager.getWeeklyStatistics(
-        today,
-      );
-
-      setState((){
-        rangeMinTemp = floorToOneDecimal(weeklyStats['min']!/100.toDouble());
-        rangeMaxTemp = floorToOneDecimal(weeklyStats['max']!/100.toDouble());
-        averageTemp = floorToOneDecimal(weeklyStats['avg']!/100.toDouble());
-      });
-
-      print('Weekly Stats: $weeklyStats');
-
-    }else if(_tabController.index == 2){
-      // Get the monthly HR trends for the current month
-      TempTrendsData = [];
-      List<MonthlyTrend> monthlyHRTrends = await tempDataManager.getMonthlyTrend(
-        today,
-      );
-      for (var trend in monthlyHRTrends) {
-
-        setState((){
+        for (var trend in monthlyTrends) {
+          if (!mounted) return;
+          
           TempTrendsData.add(
             TempTrends(
               trend.date,
-              trend.max.toDouble(),
-              trend.min.toDouble(),
+              trend.max,
+              trend.min,
             ),
           );
+          
+          if (trend.min < minVal) minVal = trend.min;
+          if (trend.max > maxVal) maxVal = trend.max;
+          sumAvg += trend.avg;
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinTemp = floorToOneDecimal(minVal / 100.0);
+          rangeMaxTemp = floorToOneDecimal(maxVal / 100.0);
+          averageTemp = floorToOneDecimal((sumAvg / count) / 100.0);
         });
-
-        print(
-          'Date: ${trend.date.day}, Min Temp: ${trend.min}, Max Temp: ${trend.max}, Avg Temp: ${trend.avg}',
-        );
       }
-
-      Map<String, double> monthlyStats = await tempDataManager.getMonthlyStatistics(
-        today,
-      );
-
-      setState((){
-        rangeMinTemp =  floorToOneDecimal(monthlyStats['min']!/100.toDouble());
-        rangeMaxTemp =  floorToOneDecimal(monthlyStats['max']!/100.toDouble());
-        averageTemp =  floorToOneDecimal(monthlyStats['avg']!/100.toDouble());
+    } catch (e) {
+      print('Error loading temperature data: $e');
+      if (!mounted) return;
+      setState(() {
+        TempTrendsData = [];
+        rangeMinTemp = 0;
+        rangeMaxTemp = 0;
+        averageTemp = 0;
       });
-      print('Monthly Stats: $monthlyStats');
     }
+  }
 
+  // Export Dialog
+  Future<void> _showExportDialog() async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF2D2D2D),
+        title: Text(
+          'Export Temperature Data',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildExportOption(
+              'Today',
+              Icons.today,
+              () => _exportTempData('today'),
+            ),
+            _buildExportOption(
+              'Last 7 Days',
+              Icons.date_range,
+              () => _exportTempData('week'),
+            ),
+            _buildExportOption(
+              'Last 30 Days',
+              Icons.calendar_month,
+              () => _exportTempData('month'),
+            ),
+            _buildExportOption(
+              'All Data',
+              Icons.all_inclusive,
+              () => _exportTempData('all'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExportOption(String label, IconData icon, VoidCallback onTap) {
+    return Card(
+      color: Color(0xFF1E1E1E),
+      child: ListTile(
+        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        title: Text(label, style: TextStyle(color: Colors.white)),
+        trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Future<void> _exportTempData(String range) async {
+    Navigator.pop(context); // Close dialog
+    
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: LoadingIndicator(text: 'Preparing export...'),
+      ),
+    );
+    
+    try {
+      List<List<String>> csvData = [
+        ['Timestamp', 'Min Temp (°C)', 'Max Temp (°C)', 'Avg Temp (°C)'],
+      ];
+      
+      String dateLabel = ExportHelpers.getCurrentDateLabel(range);
+      
+      switch (range) {
+        case 'today':
+          List<HourlyTrend> todayData = await tempDataManager.getHourlyTrendForToday();
+          if (todayData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in todayData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd HH:mm:ss').format(trend.hour),
+              (trend.min / 100).toStringAsFixed(2),
+              (trend.max / 100).toStringAsFixed(2),
+              (trend.avg / 100).toStringAsFixed(2),
+            ]);
+          }
+          break;
+          
+        case 'week':
+          List<WeeklyTrend> weekData = await tempDataManager.getWeeklyTrends();
+          if (weekData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in weekData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              (trend.min / 100).toStringAsFixed(2),
+              (trend.max / 100).toStringAsFixed(2),
+              (trend.avg / 100).toStringAsFixed(2),
+            ]);
+          }
+          break;
+          
+        case 'month':
+          List<MonthlyTrend> monthData = await tempDataManager.getMonthlyTrends();
+          if (monthData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in monthData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              (trend.min / 100).toStringAsFixed(2),
+              (trend.max / 100).toStringAsFixed(2),
+              (trend.avg / 100).toStringAsFixed(2),
+            ]);
+          }
+          break;
+          
+        case 'all':
+          // Export monthly data as the most comprehensive view
+          List<MonthlyTrend> allData = await tempDataManager.getMonthlyTrends();
+          if (allData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in allData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              (trend.min / 100).toStringAsFixed(2),
+              (trend.max / 100).toStringAsFixed(2),
+              (trend.avg / 100).toStringAsFixed(2),
+            ]);
+          }
+          break;
+      }
+      
+      // Create CSV content
+      String csv = const ListToCsvConverter().convert(csvData);
+      
+      // Save and share
+      final directory = await getApplicationDocumentsDirectory();
+      final filename = ExportHelpers.generateFilename('temp', dateLabel, 'csv');
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      Navigator.pop(context); // Close loading
+      
+      // Share file
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Temperature Data - HealthyPi Move',
+      );
+      
+      if (result.status == ShareResultStatus.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Data exported successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  void _showNoDataMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No data available for selected period'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget displayRangeValues() {
@@ -647,9 +864,9 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
           ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
         ),
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          //mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
+            SizedBox(width: 48),
             const Text(
               'Temperature',
               style: TextStyle(
@@ -657,7 +874,11 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 color: hPi4Global.hpi4AppBarIconsColor,
               ),
             ),
-            SizedBox(width: 30.0),
+            IconButton(
+              icon: Icon(Icons.file_download, color: Colors.white),
+              tooltip: 'Export Data',
+              onPressed: _showExportDialog,
+            ),
           ],
         ),
         centerTitle: true,

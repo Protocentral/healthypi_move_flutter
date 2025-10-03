@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:move/screens/csvData.dart';
+import '../utils/trends_data_manager.dart';
 import 'package:move/screens/showTrendsAlert.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../home.dart';
@@ -44,17 +44,8 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    hrDataManager = CsvDataManager<BPTTrends>(
-      filePrefix: "hr_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int minHR = int.tryParse(row[1]) ?? 0;
-        int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return BPTTrends(date, maxHR, minHR);
-      },
-      getFileType: (file) => "hr",
-    );
+    // Initialize SQLite data manager for blood pressure trends (uses HR data)
+    dataManager = TrendsDataManager(hPi4Global.PREFIX_HR);
 
     _loadData();
   }
@@ -131,8 +122,8 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
-        // Display a 6-hour interval dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        // Display 7-day range including today (last 6 days + today)
+        minimum: DateTime.now().subtract(Duration(days: 6)), // Start of 7-day range
         maximum: DateTime.now(),
         interval: 1, // 6-hour intervals
         intervalType: DateTimeIntervalType.days,
@@ -174,10 +165,11 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
         },
       );
     } else {
+      final now = DateTime.now();
       return DateTimeAxis(
-        // Display a month-long range dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
-        maximum: DateTime.now(), // Today
+        // Display current calendar month
+        minimum: DateTime(now.year, now.month, 1), // First day of current month
+        maximum: now, // Today
         interval: 6,
         intervalType: DateTimeIntervalType.days,
         dateFormat: DateFormat('dd'), // Show day, month, and hour
@@ -302,107 +294,107 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Example usage for HR data:
-  late CsvDataManager<BPTTrends> hrDataManager;
+  // SQLite data manager for blood pressure trends (uses HR data)
+  late TrendsDataManager dataManager;
 
   Future<void> _loadData() async {
-    List<BPTTrends> data = await hrDataManager.getDataObjects();
-    if (data.isEmpty) {
-      print('No valid HR data found in CSV files.');
-      return;
-    }
-
-    DateTime today = DateTime.now();
-
     if (_tabController.index == 0) {
-      // Get the hourly HR trends for today
+      // Get the hourly trends for today
+      List<HourlyTrend> hourlyTrends = await dataManager.getHourlyTrendForToday();
+      
+      // Compute statistics inline from aggregated data
+      int minVal = double.maxFinite.toInt();
+      int maxVal = 0;
+      int sumAvg = 0;
+      
       BPTTrendsData = [];
-      List<HourlyTrend> hourlyBPTTrends =
-      await hrDataManager.getHourlyTrendForToday();
-      for (var trend in hourlyBPTTrends) {
-        setState(() {
-          BPTTrendsData.add(
-            BPTTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
-          );
-        });
+      for (var trend in hourlyTrends) {
+        BPTTrendsData.add(
+          BPTTrends(trend.hour, trend.max.toInt(), trend.min.toInt()),
+        );
+        
+        if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+        if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+        sumAvg += trend.avg.toInt();
+        
         print(
-          'Hour: ${trend.hour}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Hour: ${trend.hour}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}',
         );
       }
 
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> dailyStats = await hrDataManager.getDailyStatistics(
-        today,
-      );
-
       setState(() {
-        rangeMinSys = dailyStats['min']!.toInt();
-        rangeMaxSys = dailyStats['max']!.toInt();
-        averageSys = dailyStats['avg']!.toInt();
+        rangeMinSys = hourlyTrends.isEmpty ? 0 : minVal;
+        rangeMaxSys = hourlyTrends.isEmpty ? 0 : maxVal;
+        averageSys = hourlyTrends.isEmpty ? 0 : (sumAvg / hourlyTrends.length).round();
       });
 
-      print('Daily Stats: $dailyStats');
+      print('Daily Stats - Min: $minVal, Max: $maxVal, Avg: $averageSys');
     } else if (_tabController.index == 1) {
-      // Get the weekly HR trends for the current week
+      // Get the weekly trends for the current week
+      List<WeeklyTrend> weeklyTrends = await dataManager.getWeeklyTrends();
+      
+      // Compute statistics inline from aggregated data
+      int minVal = double.maxFinite.toInt();
+      int maxVal = 0;
+      int sumAvg = 0;
+      
       BPTTrendsData = [];
-      List<WeeklyTrend> weeklyBPTTrends = await hrDataManager.getWeeklyTrend(
-        today,
-      );
-      for (var trend in weeklyBPTTrends) {
-        setState(() {
-          BPTTrendsData.add(
-            BPTTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
-          );
-        });
+      for (var trend in weeklyTrends) {
+        BPTTrendsData.add(
+          BPTTrends(trend.date, trend.max.toInt(), trend.min.toInt()),
+        );
+        
+        if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+        if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+        sumAvg += trend.avg.toInt();
 
         print(
-          'Date: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Date: ${trend.date}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}',
         );
       }
 
-      Map<String, double> weeklyStats = await hrDataManager.getWeeklyStatistics(
-        today,
-      );
-
       setState(() {
-        rangeMinSys = weeklyStats['min']!.toInt();
-        rangeMaxSys = weeklyStats['max']!.toInt();
-        averageSys = weeklyStats['avg']!.toInt();
+        rangeMinSys = weeklyTrends.isEmpty ? 0 : minVal;
+        rangeMaxSys = weeklyTrends.isEmpty ? 0 : maxVal;
+        averageSys = weeklyTrends.isEmpty ? 0 : (sumAvg / weeklyTrends.length).round();
       });
 
-      print('Weekly Stats: $weeklyStats');
+      print('Weekly Stats - Min: $minVal, Max: $maxVal, Avg: $averageSys');
     } else if (_tabController.index == 2) {
-      // Get the monthly HR trends for the current month
+      // Get the monthly trends for the current month
+      List<MonthlyTrend> monthlyTrends = await dataManager.getMonthlyTrends();
+      
+      // Compute statistics inline from aggregated data
+      int minVal = double.maxFinite.toInt();
+      int maxVal = 0;
+      int sumAvg = 0;
+      
       BPTTrendsData = [];
-      List<MonthlyTrend> monthlyBPTTrends = await hrDataManager.getMonthlyTrend(
-        today,
-      );
-      for (var trend in monthlyBPTTrends) {
-        setState(() {
-          BPTTrendsData.add(
-            BPTTrends(
-              trend.date,
-              trend.max.toInt(),
-              trend.min.toInt(),
-            ),
-          );
-        });
+      for (var trend in monthlyTrends) {
+        BPTTrendsData.add(
+          BPTTrends(
+            trend.date,
+            trend.max.toInt(),
+            trend.min.toInt(),
+          ),
+        );
+        
+        if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+        if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+        sumAvg += trend.avg.toInt();
 
         print(
-          'Date: ${trend.date.day}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
+          'Date: ${trend.date.day}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}',
         );
       }
 
-      Map<String, double> monthlyStats = await hrDataManager
-          .getMonthlyStatistics(today);
-
       setState(() {
-        rangeMinSys = monthlyStats['min']!.toInt();
-        rangeMaxSys = monthlyStats['max']!.toInt();
-        averageSys = monthlyStats['avg']!.toInt();
+        rangeMinSys = monthlyTrends.isEmpty ? 0 : minVal;
+        rangeMaxSys = monthlyTrends.isEmpty ? 0 : maxVal;
+        averageSys = monthlyTrends.isEmpty ? 0 : (sumAvg / monthlyTrends.length).round();
       });
 
-      print('Monthly Stats: $monthlyStats');
+      print('Monthly Stats - Min: $minVal, Max: $maxVal, Avg: $averageSys');
     }
   }
 

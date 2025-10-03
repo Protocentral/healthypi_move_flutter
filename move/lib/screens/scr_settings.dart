@@ -12,6 +12,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/device_info.dart';
+import '../utils/device_manager.dart';
+import 'scr_device_settings.dart';
+
 class ScrSettings extends StatefulWidget {
   ScrSettings({super.key});
 
@@ -317,6 +321,83 @@ class _ScrSettingsState extends State<ScrSettings> {
           Center(
             child: Column(
               children: <Widget>[
+                SizedBox(
+                  height: 10.0,
+                ),
+                // Device Management Section
+                Card(
+                  color: Colors.black,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: SizeConfig.blockSizeHorizontal * 88,
+                        child: Card(
+                          color: const Color(0xFF2D2D2D),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    'Device Management',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                FutureBuilder<DeviceInfo?>(
+                                  future: DeviceManager.getPairedDevice(),
+                                  builder: (context, snapshot) {
+                                    final deviceInfo = snapshot.data;
+                                    return ListTile(
+                                      leading: Icon(
+                                        Icons.watch,
+                                        color: hPi4Global.hpi4Color,
+                                      ),
+                                      title: Text(
+                                        'Paired Device',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        deviceInfo?.displayName ?? 'No device paired',
+                                        style: TextStyle(
+                                          color: Colors.grey[400],
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      trailing: Icon(
+                                        Icons.arrow_forward_ios,
+                                        size: 16,
+                                        color: Colors.grey[500],
+                                      ),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => ScrDeviceSettings(),
+                                          ),
+                                        );
+                                      },
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 SizedBox(
                   height: 10.0,
                 ),

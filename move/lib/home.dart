@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Directory, File, FileSystemEntity, Platform;
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
-import 'package:move/screens/csvData.dart';
+import 'utils/trends_data_manager.dart';
 import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
@@ -156,149 +156,77 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   _loadStoredHRValue() {
-    hrDataManager = CsvDataManager<HRTrends>(
-      filePrefix: "hr_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int minHR = int.tryParse(row[1]) ?? 0;
-        int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
-        return HRTrends(date, maxHR, minHR);
-      },
-      getFileType: (file) => "hr",
-    );
+    hrDataManager = TrendsDataManager(hPi4Global.PREFIX_HR);
     _loadHRData();
   }
 
   Future<void> _loadHRData() async {
-    DateTime today = DateTime.now();
-    List<MonthlyTrend> monthlyHRTrends = await hrDataManager.getMonthlyTrend(
-      today,
-    );
+    List<MonthlyTrend> monthlyTrends = await hrDataManager.getMonthlyTrends();
 
-    List<HRTrends> allData = await hrDataManager.getDataObjects();
-
-    if (monthlyHRTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyHRTrends.last;
-      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      DateTime lastTime = allData.last.date;
+    if (monthlyTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyTrends.last;
+      DateTime lastTime = lastTrend.date;
       int lastAvg = lastTrend.avg.toInt();
       if (mounted) {
         setState(() {
           saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
         });
       }
-
-      //print('Last Time: $lastTime, Min: $lastAvg');
-    } else {
-      //print('No monthly HR trends data available.');
     }
   }
 
   _loadStoredSpo2Value() {
-    Spo2DataManager = CsvDataManager<Spo2Trends>(
-      filePrefix: "spo2_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int spo2 = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
-        return Spo2Trends(date, spo2, 0);
-      },
-      getFileType: (file) => "spo2",
-    );
+    spo2DataManager = TrendsDataManager(hPi4Global.PREFIX_SPO2);
     _loadSpo2Data();
   }
 
   Future<void> _loadSpo2Data() async {
-    DateTime today = DateTime.now();
-    List<SpO2MonthlyTrend> monthlySpo2Trends =
-        await Spo2DataManager.getSpO2MonthlyTrend(today);
+    List<MonthlyTrend> monthlyTrends = await spo2DataManager.getMonthlyTrends();
 
-
-    List<Spo2Trends> allData = await Spo2DataManager.getDataObjects();
-
-    if (monthlySpo2Trends.isNotEmpty) {
-      SpO2MonthlyTrend lastTrend = monthlySpo2Trends.last;
-      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      DateTime lastTime = allData.last.date;
+    if (monthlyTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyTrends.last;
+      DateTime lastTime = lastTrend.date;
       int lastAvg = lastTrend.avg.toInt();
       if (mounted) {
         setState(() {
           saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
         });
       }
-
-     // print('Last Time: $lastTime, Min: $lastAvg');
-    } else {
-     // print('No monthly HR trends data available.');
     }
   }
 
   _loadStoredTempValue() {
-    tempDataManager = CsvDataManager<TempTrends>(
-      filePrefix: "temp_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int minHR = int.tryParse(row[1]) ?? 0;
-        int maxHR = int.tryParse(row[2]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
-        return TempTrends(date, maxHR.toDouble(), minHR.toDouble());
-      },
-      getFileType: (file) => "temp",
-    );
+    tempDataManager = TrendsDataManager(hPi4Global.PREFIX_TEMP);
     _loadTempData();
   }
 
   Future<void> _loadTempData() async {
-    DateTime today = DateTime.now();
-    List<MonthlyTrend> monthlyTempTrends = await tempDataManager
-        .getMonthlyTrend(today);
+    List<MonthlyTrend> monthlyTrends = await tempDataManager.getMonthlyTrends();
 
-    List<TempTrends> allData = await tempDataManager.getDataObjects();
-
-    if (monthlyTempTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyTempTrends.last;
-     // DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      DateTime lastTime = allData.last.date;
+    if (monthlyTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyTrends.last;
+      DateTime lastTime = lastTrend.date;
       double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
       if (mounted) {
         setState(() {
           saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
         });
       }
-
-      //print('Last Time: $lastTime, Min: $lastAvg');
-    } else {
-      //print('No monthly Temp trends data available.');
     }
   }
 
   _loadStoredActivityValue() {
-    ActivityDataManager = CsvDataManager<ActivityTrends>(
-      filePrefix: "activity_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int count = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: true);
-        return ActivityTrends(date, count);
-      },
-      getFileType: (file) => "activity",
-    );
+    activityDataManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
     _loadActivityData();
   }
 
   Future<void> _loadActivityData() async {
-    DateTime today = DateTime.now();
-    List<ActivityMonthlyTrend> activityMonthlyTrend =
-        await ActivityDataManager.getActivityMonthlyTrend(today);
+    List<MonthlyTrend> monthlyTrends = await activityDataManager.getMonthlyTrends();
 
-    List<ActivityTrends> allData = await ActivityDataManager.getDataObjects();
-
-    if (activityMonthlyTrend.isNotEmpty) {
-      ActivityMonthlyTrend lastTrend = activityMonthlyTrend.last;
-      //DateTime lastTime = lastTrend.date; // This is the last day's date in the month with data
-      DateTime lastTime = allData.last.date;
-      int lastAvg = lastTrend.steps;
+    if (monthlyTrends.isNotEmpty) {
+      MonthlyTrend lastTrend = monthlyTrends.last;
+      DateTime lastTime = lastTrend.date;
+      int lastAvg = lastTrend.avg.toInt();
       if (mounted) {
         setState(() {
           saveValue(
@@ -309,10 +237,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         });
       }
-
-     // print('Last Time: $lastTime, steps: $lastAvg');
-    } else {
-      //print('No monthly Activity trends data available.');
     }
   }
 
@@ -439,11 +363,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
 
-  // Example usage for HR data:
-  late CsvDataManager<HRTrends> hrDataManager;
-  late CsvDataManager<TempTrends> tempDataManager;
-  late CsvDataManager<Spo2Trends> Spo2DataManager;
-  late CsvDataManager<ActivityTrends> ActivityDataManager;
+  // SQLite data managers for dashboard metrics
+  late TrendsDataManager hrDataManager;
+  late TrendsDataManager tempDataManager;
+  late TrendsDataManager spo2DataManager;
+  late TrendsDataManager activityDataManager;
 
   Widget _buildMetricCard({
     required String title,
