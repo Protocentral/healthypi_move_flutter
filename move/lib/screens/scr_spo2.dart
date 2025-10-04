@@ -1,12 +1,17 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:move/screens/showTrendsAlert.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
-import 'csvData.dart';
+import '../utils/trends_data_manager.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
+import 'package:share_plus/share_plus.dart';
+import '../utils/export_helpers.dart';
+import '../widgets/export_dialogs.dart';
 
 class ScrSPO2 extends StatefulWidget {
   const ScrSPO2({super.key});
@@ -37,16 +42,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
     _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(_handleTabChange);
 
-    spo2DataManager = CsvDataManager<Spo2Trends>(
-      filePrefix: "spo2_",
-      fromRow: (row) {
-        int timestamp = int.tryParse(row[0]) ?? 0;
-        int spo2 = int.tryParse(row[1]) ?? 0;
-        DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
-        return Spo2Trends(date, spo2, 0);
-      },
-      getFileType: (file) => "spo2",
-    );
+    spo2DataManager = TrendsDataManager(hPi4Global.PREFIX_SPO2);
 
     _loadData();
   }
@@ -121,8 +117,8 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       );
     } else if (_tabController.index == 1) {
       return DateTimeAxis(
-        // Display a 6-hour interval dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 7)), // 7 days before
+        // Display 7-day range including today (last 6 days + today)
+        minimum: DateTime.now().subtract(Duration(days: 6)), // Start of 7-day range
         maximum: DateTime.now(),
         interval: 1, // 6-hour intervals
         intervalType: DateTimeIntervalType.days,
@@ -164,10 +160,11 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
         },
       );
     } else {
+      final now = DateTime.now();
       return DateTimeAxis(
-        // Display a month-long range dynamically based on slider values
-        minimum: DateTime.now().subtract(Duration(days: 30)), // 30 days ago
-        maximum: DateTime.now(), // Today
+        // Display current calendar month
+        minimum: DateTime(now.year, now.month, 1), // First day of current month
+        maximum: now, // Today
         interval: 6,
         intervalType: DateTimeIntervalType.days,
         dateFormat: DateFormat('dd'), // Show day, month, and hour
@@ -320,101 +317,371 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
     );
   }
 
-  // Example usage for HR data:
-  late CsvDataManager<Spo2Trends> spo2DataManager;
+  // Example usage for SpO2 data:
+  late TrendsDataManager spo2DataManager;
 
   Future<void> _loadData() async {
-    List<Spo2Trends> data = await spo2DataManager.getDataObjects();
-    if (data.isEmpty) {
-      print('No valid HR data found in CSV files.');
-      return;
+    try {
+      if(_tabController.index == 0){
+        // Daily view - Get hourly trends for today
+        Spo2TrendsData = [];
+        List<HourlyTrend> hourlyTrends = await spo2DataManager.getHourlyTrendForToday();
+        
+        if (hourlyTrends.isEmpty) {
+          print('No SpO2 data available for today');
+          setState(() {
+            rangeMinSpo2 = 0;
+            rangeMaxSpo2 = 0;
+            averageSpo2 = 0;
+          });
+          return;
+        }
+
+        // Convert HourlyTrend to Spo2Trends for display
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
+
+        for (var trend in hourlyTrends) {
+          if (!mounted) return;
+          
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.hour,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinSpo2 = minVal;
+          rangeMaxSpo2 = maxVal;
+          averageSpo2 = (sumAvg / count).round();
+        });
+
+      } else if(_tabController.index == 1){
+        // Weekly view - Get daily trends for the week
+        Spo2TrendsData = [];
+        List<WeeklyTrend> weeklyTrends = await spo2DataManager.getWeeklyTrends();
+        
+        if (weeklyTrends.isEmpty) {
+          print('No SpO2 data available for this week');
+          setState(() {
+            rangeMinSpo2 = 0;
+            rangeMaxSpo2 = 0;
+            averageSpo2 = 0;
+          });
+          return;
+        }
+
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
+
+        for (var trend in weeklyTrends) {
+          if (!mounted) return;
+          
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinSpo2 = minVal;
+          rangeMaxSpo2 = maxVal;
+          averageSpo2 = (sumAvg / count).round();
+        });
+
+      } else if(_tabController.index == 2){
+        // Monthly view - Get daily trends for the month
+        Spo2TrendsData = [];
+        List<MonthlyTrend> monthlyTrends = await spo2DataManager.getMonthlyTrends();
+        
+        if (monthlyTrends.isEmpty) {
+          print('No SpO2 data available for this month');
+          setState(() {
+            rangeMinSpo2 = 0;
+            rangeMaxSpo2 = 0;
+            averageSpo2 = 0;
+          });
+          return;
+        }
+
+        int minVal = double.maxFinite.toInt();
+        int maxVal = 0;
+        int sumAvg = 0;
+        int count = 0;
+
+        for (var trend in monthlyTrends) {
+          if (!mounted) return;
+          
+          Spo2TrendsData.add(
+            Spo2Trends(
+              trend.date,
+              trend.max.toInt(),
+              trend.min.toInt(),
+            ),
+          );
+          
+          if (trend.min.toInt() < minVal) minVal = trend.min.toInt();
+          if (trend.max.toInt() > maxVal) maxVal = trend.max.toInt();
+          sumAvg += trend.avg.toInt();
+          count++;
+        }
+
+        if (!mounted) return;
+        setState(() {
+          rangeMinSpo2 = minVal;
+          rangeMaxSpo2 = maxVal;
+          averageSpo2 = (sumAvg / count).round();
+        });
+      }
+    } catch (e) {
+      print('Error loading SpO2 data: $e');
+      if (!mounted) return;
+      setState(() {
+        Spo2TrendsData = [];
+        rangeMinSpo2 = 0;
+        rangeMaxSpo2 = 0;
+        averageSpo2 = 0;
+      });
     }
+  }
 
-    DateTime today = DateTime.now();
+  // Export Dialog
+  Future<void> _showExportDialog() async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF2D2D2D),
+        title: Text(
+          'Export SpO2 Data',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildExportOption(
+              'Today',
+              Icons.today,
+              () => _exportSpo2Data('today'),
+            ),
+            _buildExportOption(
+              'Last 7 Days',
+              Icons.date_range,
+              () => _exportSpo2Data('week'),
+            ),
+            _buildExportOption(
+              'Last 30 Days',
+              Icons.calendar_month,
+              () => _exportSpo2Data('month'),
+            ),
+            _buildExportOption(
+              'All Data',
+              Icons.all_inclusive,
+              () => _exportSpo2Data('all'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-    if (_tabController.index == 0) {
-      // Get the hourly HR trends for today
-      Spo2TrendsData = [];
-      List<SpO2DailyTrend> hourlySpo2Trends = await spo2DataManager
-          .getSpO2DailyTrend(today);
-      for (var trend in hourlySpo2Trends) {
-        setState(() {
-          Spo2TrendsData.add(
-            Spo2Trends(trend.date, trend.max.toInt(), trend.min.toInt()),
-          );
-        });
-        print(
-          'Hour: ${trend.date}, Min HR: ${trend.min}, Max HR: ${trend.max}, Avg HR: ${trend.avg}',
-        );
+  Widget _buildExportOption(String label, IconData icon, VoidCallback onTap) {
+    return Card(
+      color: Color(0xFF1E1E1E),
+      child: ListTile(
+        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        title: Text(label, style: TextStyle(color: Colors.white)),
+        trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Future<void> _exportSpo2Data(String range) async {
+    Navigator.pop(context); // Close range selection dialog
+    
+    // Show action dialog (Share or Save)
+    final action = await showExportActionDialog(context);
+    if (action == null) return; // User cancelled
+    
+    // Show loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: LoadingIndicator(text: 'Preparing export...'),
+      ),
+    );
+    
+    try {
+      List<List<String>> csvData = [
+        ['Timestamp', 'Min SpO2 (%)', 'Max SpO2 (%)', 'Avg SpO2 (%)'],
+      ];
+      
+      String dateLabel = ExportHelpers.getCurrentDateLabel(range);
+      
+      switch (range) {
+        case 'today':
+          List<HourlyTrend> todayData = await spo2DataManager.getHourlyTrendForToday();
+          if (todayData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in todayData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd HH:mm:ss').format(trend.hour),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'week':
+          List<WeeklyTrend> weekData = await spo2DataManager.getWeeklyTrends();
+          if (weekData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in weekData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'month':
+          List<MonthlyTrend> monthData = await spo2DataManager.getMonthlyTrends();
+          if (monthData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in monthData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
+          
+        case 'all':
+          // Export monthly data as the most comprehensive view
+          List<MonthlyTrend> allData = await spo2DataManager.getMonthlyTrends();
+          if (allData.isEmpty) {
+            Navigator.pop(context);
+            _showNoDataMessage();
+            return;
+          }
+          for (var trend in allData) {
+            csvData.add([
+              DateFormat('yyyy-MM-dd').format(trend.date),
+              trend.min.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0),
+              trend.avg.toStringAsFixed(1),
+            ]);
+          }
+          break;
       }
-
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> dailyStats = await spo2DataManager
-          .getSpO2DailyStatistics(today);
-
-      setState(() {
-        rangeMinSpo2 = dailyStats['min']!.toInt();
-        rangeMaxSpo2 = dailyStats['max']!.toInt();
-        averageSpo2 = dailyStats['avg']!.toInt();
-      });
-
-      print('Daily Stats: $dailyStats');
-    } else if (_tabController.index == 1) {
-      // Get the weekly HR trends for the current week
-      Spo2TrendsData = [];
-      List<SpO2WeeklyTrend> weeklySpo2Trends = await spo2DataManager
-          .getSpO2WeeklyTrend(today);
-      for (var trend in weeklySpo2Trends) {
-        setState(() {
-          Spo2TrendsData.add(
-            Spo2Trends(trend.date, trend.max.toInt(), trend.min.toInt()),
-          );
-        });
-
-        print(
-          'Date: ${trend.date}, Min: ${trend.min}, Max: ${trend.max}, Avg : ${trend.avg}',
+      
+      // Create CSV content
+      String csv = const ListToCsvConverter().convert(csvData);
+      String filename = ExportHelpers.generateFilename('spo2', dateLabel, 'csv');
+      
+      Navigator.pop(context); // Close loading
+      
+      if (action == 'share') {
+        // Save to temp and share
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$filename');
+        await file.writeAsString(csv);
+        
+        final result = await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'SpO2 Data - HealthyPi Move',
         );
-      }
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> weeklyStats = await spo2DataManager
-          .getSpO2WeeklyStatistics(today);
-
-      setState(() {
-        rangeMinSpo2 = weeklyStats['min']!.toInt();
-        rangeMaxSpo2 = weeklyStats['max']!.toInt();
-        averageSpo2 = weeklyStats['avg']!.toInt();
-      });
-
-      print('Daily Stats: $weeklyStats');
-    } else if (_tabController.index == 2) {
-      // Get the monthly HR trends for the current month
-      Spo2TrendsData = [];
-      List<SpO2MonthlyTrend> monthlySpo2Trends = await spo2DataManager
-          .getSpO2MonthlyTrend(today);
-      for (var trend in monthlySpo2Trends) {
-        setState(() {
-          Spo2TrendsData.add(
-            Spo2Trends(trend.date, trend.max.toInt(), trend.min.toInt()),
+        
+        if (result.status == ShareResultStatus.success) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ Data shared successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
           );
-        });
-
-        print(
-          'Date: ${trend.date.day}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}',
-        );
+        }
+      } else if (action == 'save') {
+        // Save to device
+        final result = await ExportHelpers.saveToDevice(csv, filename);
+        
+        if (!mounted) return;
+        if (result['success']) {
+          showSaveSuccessDialog(
+            context,
+            result['directory'],
+            result['filename'],
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Save failed: ${result['error']}'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
-
-      // Call functions to get the weekly, hourly, and monthly min, max and average statistics
-      Map<String, double> monthlyStats = await spo2DataManager
-          .getSpO2MonthlyStatistics(today);
-
-      setState(() {
-        rangeMinSpo2 = monthlyStats['min']!.toInt();
-        rangeMaxSpo2 = monthlyStats['max']!.toInt();
-        averageSpo2 = monthlyStats['avg']!.toInt();
-      });
-
-      print('Daily Stats: $monthlyStats');
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
+  }
+
+  void _showNoDataMessage() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('No data available for selected period'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget displayRangeValues() {
@@ -647,16 +914,9 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
-        ),
+        automaticallyImplyLeading: false, // Remove back button
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          //mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
               'Spo2',
@@ -665,10 +925,14 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                 color: hPi4Global.hpi4AppBarIconsColor,
               ),
             ),
-            SizedBox(width: 30.0),
+            IconButton(
+              icon: Icon(Icons.file_download, color: Colors.white),
+              tooltip: 'Export Data',
+              onPressed: _showExportDialog,
+            ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),
           child: ClipRRect(

@@ -8,12 +8,12 @@ import '../utils/snackbar.dart';
 import 'dart:io' show File;
 import 'dart:typed_data';
 import 'package:convert/convert.dart';
-import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import '../globals.dart';
 import '../home.dart';
+import '../utils/database_helper.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
@@ -465,6 +465,21 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   Future<void> _showSyncCompleteDialog() async {
+    // Log database statistics
+    try {
+      final stats = await DatabaseHelper.instance.getDatabaseStats();
+      logConsole('=== SQLite Database Stats ===');
+      logConsole('Total records: ${stats['total_records']}');
+      logConsole('HR records: ${stats['hr_records']}');
+      logConsole('Temp records: ${stats['temp_records']}');
+      logConsole('SpO2 records: ${stats['spo2_records']}');
+      logConsole('Activity records: ${stats['activity_records']}');
+      logConsole('Database size: ${(stats['database_size_bytes'] / 1024).toStringAsFixed(2)} KB');
+      logConsole('============================');
+    } catch (e) {
+      logConsole('Note: Could not retrieve database stats: $e');
+    }
+    
     // Cancel data stream subscription if active
     if (listeningDataStream) {
       await _streamDataSubscription.cancel();
@@ -498,40 +513,27 @@ class _SyncingScreenState extends State<SyncingScreen> {
         (mData.isNotEmpty && mData[0] == hPi4Global.CES_CMDIF_TYPE_DATA)
             ? 1
             : 0;
-    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(offset);
 
-    int logNumberPoints = ((mData.length - offset) ~/ 16);
-
-    List<List<String>> dataList = [];
-    List<String> header = ["Timestamp", "Max", "Min", "avg", "latest"];
-    dataList.add(header);
-
-    for (int i = 0; i < logNumberPoints; i++) {
-      List<int> bytes = bdata.buffer.asUint8List(i * 16 + offset, 16);
-
-      int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
-      int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
-      int value2 = convertLittleEndianToInteger(bytes.sublist(10, 12));
-      int value3 = convertLittleEndianToInteger(bytes.sublist(12, 14));
-      int value4 = convertLittleEndianToInteger(bytes.sublist(14, 16));
-
-      dataList.add([
-        timestamp.toString(),
-        value1.toString(),
-        value2.toString(),
-        value3.toString(),
-        value4.toString(),
-      ]);
+    // Write to SQLite database
+    try {
+      String trendTypeStr = trendType == hPi4Global.HrTrend 
+          ? hPi4Global.PREFIX_HR 
+          : hPi4Global.PREFIX_TEMP;
+      
+      // Get binary data without packet type header
+      List<int> binaryData = mData.sublist(offset);
+      
+      int recordCount = await DatabaseHelper.instance.insertTrendsFromBinary(
+        binaryData,
+        trendTypeStr,
+        sessionID,
+      );
+      
+      logConsole("SQLite: Inserted $recordCount $trendTypeStr records from session $sessionID");
+    } catch (e) {
+      logConsole("Error: SQLite write failed: $e");
+      rethrow; // Propagate error since we have no fallback
     }
-
-    String csv = const ListToCsvConverter().convert(dataList);
-
-    final directory = await getApplicationDocumentsDirectory();
-    String filePrefix = trendType == hPi4Global.HrTrend ? "hr" : "temp";
-    File file = File('${directory.path}/${filePrefix}_$sessionID.csv');
-
-    await file.writeAsString(csv);
-    logConsole("CSV file exported: ${file.path}");
   }
 
   Future<void> _writeSpo2ActivityLogDataToFile(
@@ -548,32 +550,27 @@ class _SyncingScreenState extends State<SyncingScreen> {
         (mData.isNotEmpty && mData[0] == hPi4Global.CES_CMDIF_TYPE_DATA)
             ? 1
             : 0;
-    ByteData bdata = Uint8List.fromList(mData).buffer.asByteData(offset);
 
-    int logNumberPoints = ((mData.length - offset) ~/ 16);
-
-    List<List<String>> dataList = [];
-    String valueLabel =
-        trendType == hPi4Global.ActivityTrend ? "Count" : "SpO2";
-    dataList.add(["Timestamp", valueLabel]);
-
-    for (int i = 0; i < logNumberPoints; i++) {
-      List<int> bytes = bdata.buffer.asUint8List(i * 16 + offset, 16);
-
-      int timestamp = convertLittleEndianToInteger(bytes.sublist(0, 8));
-      int value1 = convertLittleEndianToInteger(bytes.sublist(8, 10));
-
-      dataList.add([timestamp.toString(), value1.toString()]);
+    // Write to SQLite database
+    try {
+      String trendTypeStr = trendType == hPi4Global.Spo2Trend
+          ? hPi4Global.PREFIX_SPO2
+          : hPi4Global.PREFIX_ACTIVITY;
+      
+      // Get binary data without packet type header
+      List<int> binaryData = mData.sublist(offset);
+      
+      int recordCount = await DatabaseHelper.instance.insertTrendsFromBinary(
+        binaryData,
+        trendTypeStr,
+        sessionID,
+      );
+      
+      logConsole("SQLite: Inserted $recordCount $trendTypeStr records from session $sessionID");
+    } catch (e) {
+      logConsole("Error: SQLite write failed: $e");
+      rethrow; // Propagate error since we have no fallback
     }
-
-    String csv = const ListToCsvConverter().convert(dataList);
-
-    final directory = await getApplicationDocumentsDirectory();
-    String filePrefix = trendType == hPi4Global.Spo2Trend ? "spo2" : "activity";
-    File file = File('${directory.path}/${filePrefix}_$sessionID.csv');
-
-    await file.writeAsString(csv);
-    logConsole("CSV file exported: ${file.path}");
   }
 
   double hrProgressPercent = 0.0; // 0.0 to 1.0

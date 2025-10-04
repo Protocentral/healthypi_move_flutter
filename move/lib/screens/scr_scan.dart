@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Directory, File, FileSystemEntity, Platform;
+import 'dart:io' show Directory, File;
 import 'package:convert/convert.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -12,6 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../home.dart';
+import '../models/device_info.dart';
+import '../utils/device_manager.dart';
 import '../widgets/scan_result_tile.dart';
 
 class ScrScan extends StatefulWidget {
@@ -59,7 +61,10 @@ class _ScrScanState extends State<ScrScan> {
 
   bool _autoConnecting = false;
   bool _deviceNotFound = false;
-  String _deviceNotFoundMessage = "";
+  
+  String? _pairedDeviceMac;
+  String? _pairedDeviceName;
+  bool _autoConnectEnabled = true;
 
   Future<String?> getPairedDeviceMac() async {
     try {
@@ -72,6 +77,77 @@ class _ScrScanState extends State<ScrScan> {
       return null;
     }
   }
+  
+  Future<void> _loadPairedDeviceInfo() async {
+    final deviceInfo = await DeviceManager.getPairedDevice();
+    final prefs = await SharedPreferences.getInstance();
+    final autoConnect = prefs.getBool('auto_connect_enabled') ?? true;
+    
+    if (mounted) {
+      setState(() {
+        _pairedDeviceMac = deviceInfo?.macAddress;
+        _pairedDeviceName = deviceInfo?.displayName;
+        _autoConnectEnabled = autoConnect;
+      });
+    }
+  }
+  
+  Future<void> _unpairDevice() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Color(0xFF2D2D2D),
+        title: Text(
+          'Unpair Device?',
+          style: TextStyle(color: Colors.white, fontSize: 18),
+        ),
+        content: Text(
+          'This will remove the paired device. You\'ll need to pair again to use automatic connection.',
+          style: TextStyle(color: Colors.grey[300], fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400]),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: Text('Unpair'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        // Use DeviceManager to unpair (handles both new and legacy formats)
+        await DeviceManager.unpairDevice();
+        
+        setState(() {
+          _pairedDeviceMac = null;
+          _pairedDeviceName = null;
+        });
+        
+        Snackbar.show(
+          ABC.b,
+          'Device unpaired successfully',
+          success: true,
+        );
+      } catch (e) {
+        Snackbar.show(
+          ABC.b,
+          'Failed to unpair device: $e',
+          success: false,
+        );
+      }
+    }
+  }
 
   Future<void> _tryAutoConnectToPairedDevice() async {
     String? pairedMac = await getPairedDeviceMac();
@@ -79,7 +155,6 @@ class _ScrScanState extends State<ScrScan> {
       setState(() {
         _autoConnecting = true;
         _deviceNotFound = false;
-        _deviceNotFoundMessage = "";
       });
       await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
       StreamSubscription? tempSub;
@@ -94,7 +169,6 @@ class _ScrScanState extends State<ScrScan> {
               setState(() {
                 _autoConnecting = false;
                 _deviceNotFound = false;
-                _deviceNotFoundMessage = "";
               });
             await onConnectPressed(result.device);
             return;
@@ -109,8 +183,6 @@ class _ScrScanState extends State<ScrScan> {
           setState(() {
             _autoConnecting = false;
             _deviceNotFound = true;
-            _deviceNotFoundMessage =
-                "Device not found. Please make sure your paired device is turned on and in range.";
           });
         }
       });
@@ -150,7 +222,11 @@ class _ScrScanState extends State<ScrScan> {
       }
     });
 
-    _tryAutoConnectToPairedDevice();
+    _loadPairedDeviceInfo().then((_) {
+      if (_autoConnectEnabled && _pairedDeviceMac != null) {
+        _tryAutoConnectToPairedDevice();
+      }
+    });
   }
 
   @override
@@ -158,7 +234,7 @@ class _ScrScanState extends State<ScrScan> {
     _scanResultsSubscription.cancel();
     _isScanningSubscription.cancel();
 
-    _connectionStateSubscription!.cancel();
+    _connectionStateSubscription.cancel();
     super.dispose();
   }
 
@@ -263,6 +339,9 @@ class _ScrScanState extends State<ScrScan> {
       _connectionState = state;
 
       if (_connectionState == BluetoothConnectionState.connected) {
+        // Update last connected timestamp
+        await DeviceManager.updateLastConnected();
+        
         SharedPreferences prefs = await SharedPreferences.getInstance();
         String? pairedStatus = "";
         setState(() {
@@ -374,89 +453,382 @@ class _ScrScanState extends State<ScrScan> {
     }
   }
 
-  Widget _buildScanCard(BuildContext context) {
-    // --- Auto-Connect UI ---
-    if (_autoConnecting) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text(
-                "Connecting to your paired device...",
-                style: TextStyle(color: Colors.white),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-    // --- End Auto-Connect UI ---
+  Widget _buildScanContent(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Auto-connecting state
+        if (_autoConnecting) ...[
+          _buildAutoConnectingCard(),
+          const SizedBox(height: 16),
+        ],
+        
+        // Device not found state
+        if (_deviceNotFound) ...[
+          _buildDeviceNotFoundCard(),
+          const SizedBox(height: 16),
+        ],
+        
+        // Paired device card (only show when not auto-connecting or showing error)
+        if (_pairedDeviceMac != null && !_autoConnecting && !_deviceNotFound) ...[
+          _buildPairedDeviceCard(),
+          const SizedBox(height: 16),
+        ],
+        
+        // Scan section (only when not auto-connecting)
+        if (!_autoConnecting) ...[
+          _buildScanCard(),
+        ],
+      ],
+    );
+  }
 
-    // --- Device Not Found Message UI ---
-    if (_deviceNotFound) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, color: Colors.redAccent, size: 50),
-              SizedBox(height: 20),
-              Text(
-                _deviceNotFoundMessage,
-                style: TextStyle(color: Colors.redAccent, fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+  Widget _buildAutoConnectingCard() {
+    return Card(
+      color: const Color(0xFF2D2D2D),
+      elevation: 4,
+      shadowColor: Colors.black54,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 60,
+                  height: 60,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation(hPi4Global.hpi4Color),
                   ),
                 ),
-                onPressed: () {
-                  setState(() {
-                    _deviceNotFound = false;
-                    _deviceNotFoundMessage = "";
-                  });
-                  _tryAutoConnectToPairedDevice();
-                },
-                child: Text("Try Again"),
+                Icon(Icons.watch, color: hPi4Global.hpi4Color, size: 30),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Connecting...',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _pairedDeviceName ?? _pairedDeviceMac ?? "HealthyPi Move",
+              style: TextStyle(
+                color: hPi4Global.hpi4Color,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Make sure your device is nearby and turned on',
+              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            TextButton.icon(
+              onPressed: () async {
+                await FlutterBluePlus.stopScan();
+                setState(() {
+                  _autoConnecting = false;
+                });
+              },
+              icon: const Icon(Icons.close),
+              label: const Text('Cancel'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey[400],
+              ),
+            ),
+          ],
         ),
-      );
-    }
-    // --- End Device Not Found Message UI ---
+      ),
+    );
+  }
 
-    // ...existing code...
+  Widget _buildDeviceNotFoundCard() {
     return Card(
-      color: Colors.grey[800],
+      color: const Color(0xFF2D2D2D),
+      elevation: 4,
+      shadowColor: Colors.black54,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(24),
         child: Column(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                'Select the device',
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.bluetooth_disabled,
+                color: Colors.redAccent,
+                size: 40,
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Device Not Found',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Could not find "${_pairedDeviceName ?? "your device"}" nearby',
+              style: TextStyle(color: Colors.grey[300], fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Please check:',
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ...[
+                    'Device is turned on',
+                    'Device is within range',
+                    'Battery is not depleted',
+                  ].map((tip) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline,
+                            color: Colors.grey[500], size: 16),
+                        const SizedBox(width: 10),
+                        Text(tip,
+                            style: TextStyle(
+                                color: Colors.grey[300], fontSize: 13)),
+                      ],
+                    ),
+                  )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _unpairDevice,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[300],
+                      side: BorderSide(color: Colors.grey[600]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('Pair Different Device'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _deviceNotFound = false;
+                      });
+                      _tryAutoConnectToPairedDevice();
+                    },
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Try Again'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: hPi4Global.hpi4Color,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPairedDeviceCard() {
+    return Card(
+      color: const Color(0xFF2D2D2D),
+      elevation: 4,
+      shadowColor: Colors.black54,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.check_circle, color: Colors.green, size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Paired Device',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _pairedDeviceName ?? _pairedDeviceMac!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, color: Colors.red[300]),
+                  onPressed: _unpairDevice,
+                  tooltip: 'Unpair device',
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.autorenew, color: hPi4Global.hpi4Color, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Auto-Connect',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          'Automatically connect on app launch',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _autoConnectEnabled,
+                    onChanged: (value) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setBool('auto_connect_enabled', value);
+                      setState(() {
+                        _autoConnectEnabled = value;
+                      });
+                    },
+                    activeColor: hPi4Global.hpi4Color,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScanCard() {
+    return Card(
+      color: const Color(0xFF2D2D2D),
+      elevation: 4,
+      shadowColor: Colors.black54,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              _pairedDeviceMac != null
+                  ? 'Scan for Other Devices'
+                  : 'Scan for Devices',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            if (_pairedDeviceMac == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Find your HealthyPi Move device',
                 style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.grey[400],
                 ),
                 textAlign: TextAlign.center,
               ),
-            ),
+            ],
+            const SizedBox(height: 20),
             buildScanButton(context),
-            ..._buildScanResultTiles(context),
+            if (_scanResults.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const Divider(color: Color(0xFF1E1E1E), thickness: 1),
+              const SizedBox(height: 16),
+              Text(
+                'Available Devices',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[400],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ..._buildScanResultTiles(context),
+            ],
           ],
         ),
       ),
@@ -485,6 +857,8 @@ class _ScrScanState extends State<ScrScan> {
   }
 
   showPairDeviceDialog(BuildContext context, BluetoothDevice device) {
+    final TextEditingController nicknameController = TextEditingController();
+    
     return showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -496,62 +870,159 @@ class _ScrScanState extends State<ScrScan> {
           child: AlertDialog(
             title: Row(
               children: [
-                SizedBox(width: 10),
+                Icon(Icons.watch, color: hPi4Global.hpi4Color, size: 28),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Do you wish to use this as the preferred device ?',
-                    style: TextStyle(fontSize: 18, color: Colors.white),
-                    maxLines: 2, // or however many lines you want
-                    //overflow: TextOverflow.fade, // or clip/ellipsis
+                    'Pair New Device',
+                    style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
             ),
-            content: Text(
-              ' Please click "Yes" to set',
-              style: TextStyle(fontSize: 16, color: Colors.white),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () async {
-                  try {
-                    final Directory appDocDir =
-                        await getApplicationDocumentsDirectory();
-                    final String filePath =
-                        '${appDocDir.path}/paired_device_mac.txt';
-                    final File macFile = File(filePath);
-                    await macFile.writeAsString(device.id.id);
-                    //logConsole("...........Paired status saved");
-                    SharedPreferences prefs =
-                        await SharedPreferences.getInstance();
-                    setState(() {
-                      prefs.setString('pairedStatus', 'paired');
-                    });
-                    Navigator.pop(context);
-                    redirectToScreens(device);
-                  } catch (e) {}
-                },
-                child: Text(
-                  'Yes',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Device Found:',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 14),
+                ),
+                SizedBox(height: 8),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: hPi4Global.hpi4Color.withOpacity(0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.bluetooth, color: Colors.blue, size: 16),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              device.name.isNotEmpty ? device.name : 'HealthyPi Move',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        device.id.id,
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
+                SizedBox(height: 20),
+                Text(
+                  'What happens when you pair:',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                SizedBox(height: 8),
+                _buildFeatureItem('Automatic reconnection on app launch'),
+                _buildFeatureItem('Seamless data syncing'),
+                _buildFeatureItem('Access to all health metrics'),
+                SizedBox(height: 20),
+                TextField(
+                  controller: nicknameController,
+                  style: TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Device Nickname (Optional)',
+                    labelStyle: TextStyle(color: Colors.grey[400]),
+                    hintText: 'e.g., "My Watch", "Work Device"',
+                    hintStyle: TextStyle(color: Colors.grey[600]),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: Colors.grey[700]!),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: hPi4Global.hpi4Color),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: Icon(Icons.edit, color: Colors.grey[500]),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
               TextButton(
                 onPressed: () async {
                   Navigator.pop(context);
                   redirectToScreens(device);
                 },
                 child: Text(
-                  'No',
+                  'Skip',
                   style: TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: Colors.grey[400],
                   ),
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  try {
+                    // Create DeviceInfo with nickname
+                    final deviceInfo = DeviceInfo(
+                      macAddress: device.id.id,
+                      deviceName: device.name.isNotEmpty ? device.name : 'healthypi move',
+                      nickname: nicknameController.text.trim(),
+                      firstPaired: DateTime.now(),
+                      lastConnected: DateTime.now(),
+                    );
+                    
+                    // Save using DeviceManager (also saves legacy format for compatibility)
+                    await DeviceManager.savePairedDevice(deviceInfo);
+                    
+                    setState(() {
+                      _pairedDeviceMac = deviceInfo.macAddress;
+                      _pairedDeviceName = deviceInfo.displayName;
+                    });
+                    
+                    Navigator.pop(context);
+                    
+                    Snackbar.show(
+                      ABC.b,
+                      '✓ Device paired successfully!',
+                      success: true,
+                    );
+                    
+                    redirectToScreens(device);
+                  } catch (e) {
+                    Snackbar.show(
+                      ABC.b,
+                      'Failed to pair device: $e',
+                      success: false,
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: Icon(Icons.check),
+                label: Text(
+                  'Pair Device',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -587,6 +1058,24 @@ class _ScrScanState extends State<ScrScan> {
     }
   }
 
+  Widget _buildFeatureItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: Colors.green, size: 16),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: Colors.grey[300], fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
       context: context,
@@ -610,34 +1099,44 @@ class _ScrScanState extends State<ScrScan> {
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
       child: Scaffold(
-        backgroundColor: hPi4Global.appBackgroundColor,
+        backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
+          elevation: 0,
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
-            onPressed:
-                () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => HomePage()),
-                ),
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => HomePage()),
+            ),
           ),
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            mainAxisSize: MainAxisSize.max,
-            children: <Widget>[
+            children: [
               Image.asset(
                 'assets/healthypi_move.png',
-                fit: BoxFit.fitWidth,
-                height: 30,
+                height: 32,
+                fit: BoxFit.contain,
               ),
-              const Text('Find Devices', style: hPi4Global.movecardTextStyle),
+              const SizedBox(width: 12),
+              const Text(
+                'Pair Device',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
+          centerTitle: false,
         ),
         body: RefreshIndicator(
           onRefresh: onRefresh,
+          color: hPi4Global.hpi4Color,
           child: ListView(
-            shrinkWrap: true,
-            children: <Widget>[Column(children: []), _buildScanCard(context)],
+            padding: const EdgeInsets.all(20),
+            children: [
+              _buildScanContent(context),
+            ],
           ),
         ),
       ),
