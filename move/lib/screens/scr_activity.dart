@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:move/screens/showTrendsAlert.dart';
 import '../globals.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -307,15 +306,22 @@ class _ScrActivityState extends State<ScrActivity>
           return;
         }
 
+        // For steps, use max value (step count for that hour) and sum for daily total
+        int totalDailySteps = 0;
         for (var trend in hourlyTrends) {
           if (!mounted) return;
           
-          setState(() {
-            ActivityTrendsData.add(ActivityTrends(trend.hour, trend.avg.toInt()));
-            Count = Count + trend.avg.toInt();
-          });
-          print('Hour: ${trend.hour}, Steps: ${trend.avg}');
+          // Use max value as it represents the step count for this hour
+          int hourlySteps = trend.max.toInt();
+          ActivityTrendsData.add(ActivityTrends(trend.hour, hourlySteps));
+          totalDailySteps += hourlySteps;
+          print('Hour: ${trend.hour}, Steps: $hourlySteps');
         }
+        
+        if (!mounted) return;
+        setState(() {
+          Count = totalDailySteps; // Sum all hourly steps for the day
+        });
 
       } else if(_tabController.index == 1){
         // Weekly view - Get daily trends for the week
@@ -331,15 +337,22 @@ class _ScrActivityState extends State<ScrActivity>
           return;
         }
 
+        // Sum up the daily step counts for the week
+        int totalWeeklySteps = 0;
         for (var trend in weeklyTrends) {
           if (!mounted) return;
           
-          setState(() {
-            ActivityTrendsData.add(ActivityTrends(trend.date, trend.avg.toInt()));
-            Count = Count + trend.avg.toInt();
-          });
-          print('Week: ${trend.date}, Steps: ${trend.avg}');
+          // Use max value as it represents the step count for the day
+          int dailySteps = trend.max.toInt();
+          ActivityTrendsData.add(ActivityTrends(trend.date, dailySteps));
+          totalWeeklySteps += dailySteps;
+          print('Date: ${trend.date}, Steps: $dailySteps');
         }
+        
+        if (!mounted) return;
+        setState(() {
+          Count = totalWeeklySteps;
+        });
 
       } else if(_tabController.index == 2){
         // Monthly view - Get daily trends for the month
@@ -355,15 +368,22 @@ class _ScrActivityState extends State<ScrActivity>
           return;
         }
 
+        // Sum up the daily step counts for the month
+        int totalMonthlySteps = 0;
         for (var trend in monthlyTrends) {
           if (!mounted) return;
           
-          setState(() {
-            ActivityTrendsData.add(ActivityTrends(trend.date, trend.avg.toInt()));
-            Count = Count + trend.avg.toInt();
-          });
-          print('Month: ${trend.date}, Steps: ${trend.avg}');
+          // Use max value as it represents the step count for the day
+          int dailySteps = trend.max.toInt();
+          ActivityTrendsData.add(ActivityTrends(trend.date, dailySteps));
+          totalMonthlySteps += dailySteps;
+          print('Date: ${trend.date}, Steps: $dailySteps');
         }
+        
+        if (!mounted) return;
+        setState(() {
+          Count = totalMonthlySteps;
+        });
       }
     } catch (e) {
       print('Error loading activity data: $e');
@@ -456,7 +476,7 @@ class _ScrActivityState extends State<ScrActivity>
           for (var trend in todayData) {
             csvData.add([
               DateFormat('yyyy-MM-dd HH:mm:ss').format(trend.hour),
-              trend.avg.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0), // Use max (cumulative step count)
             ]);
           }
           break;
@@ -471,7 +491,7 @@ class _ScrActivityState extends State<ScrActivity>
           for (var trend in weekData) {
             csvData.add([
               DateFormat('yyyy-MM-dd').format(trend.date),
-              trend.avg.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0), // Use max (cumulative step count)
             ]);
           }
           break;
@@ -486,7 +506,7 @@ class _ScrActivityState extends State<ScrActivity>
           for (var trend in monthData) {
             csvData.add([
               DateFormat('yyyy-MM-dd').format(trend.date),
-              trend.avg.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0), // Use max (cumulative step count)
             ]);
           }
           break;
@@ -502,7 +522,7 @@ class _ScrActivityState extends State<ScrActivity>
           for (var trend in allData) {
             csvData.add([
               DateFormat('yyyy-MM-dd').format(trend.date),
-              trend.avg.toStringAsFixed(0),
+              trend.max.toStringAsFixed(0), // Use max (cumulative step count)
             ]);
           }
           break;
@@ -779,17 +799,10 @@ class _ScrActivityState extends State<ScrActivity>
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
-        ),
+        automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            SizedBox(width: 48),
             const Text(
               'Activity',
               style: TextStyle(
@@ -804,7 +817,7 @@ class _ScrActivityState extends State<ScrActivity>
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),
           child: ClipRRect(

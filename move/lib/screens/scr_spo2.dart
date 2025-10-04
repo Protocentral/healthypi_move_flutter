@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:move/screens/showTrendsAlert.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -886,17 +885,10 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
-        ),
+        automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            SizedBox(width: 48),
             const Text(
               'Spo2',
               style: TextStyle(
@@ -911,7 +903,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),
           child: ClipRRect(

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/showTrendsAlert.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 import '../globals.dart';
@@ -856,17 +855,10 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-            context,
-          ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
-        ),
+        automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            SizedBox(width: 48),
             const Text(
               'Temperature',
               style: TextStyle(
@@ -881,7 +873,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),
           child: ClipRRect(

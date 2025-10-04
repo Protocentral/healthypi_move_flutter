@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import '../utils/trends_data_manager.dart';
 import 'package:move/screens/showTrendsAlert.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../home.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
 
@@ -851,17 +850,10 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
-          onPressed:
-              () => Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage())),
-        ),
+        automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            SizedBox(width: 48), // Balance the leading button
             const Text(
               'Heart Rate',
               style: TextStyle(
@@ -876,7 +868,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
             ),
           ],
         ),
-        centerTitle: true,
+        centerTitle: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(40),
           child: ClipRRect(

@@ -3,16 +3,12 @@ import 'dart:io' show Directory, File, FileSystemEntity, Platform;
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'utils/trends_data_manager.dart';
-import 'package:move/screens/scr_activity.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
+import 'package:move/screens/scr_trends.dart';
 import 'screens/scr_scan.dart';
-import 'screens/scr_skin_temp.dart';
-import 'screens/scr_spo2.dart';
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
-import 'screens/scr_hr.dart';
-import 'screens/scr_bpt.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
@@ -28,50 +24,69 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = [HomeScreen(), ScrDeviceMgmt(), ScrSettings()];
-
-  bottomBarHeight() {
-    if (Platform.isIOS) {
-      return 110.0;
-    }
-  }
+  final List<Widget> _screens = [
+    HomeScreen(),
+    ScrTrends(),
+    ScrDeviceMgmt(),
+    ScrSettings(),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: Theme(
-        data: Theme.of(context).copyWith(
-          canvasColor: hPi4Global.hpi4Color,
-        ), // sets the inactive color of the `BottomNavigationBar`
-        child: Container(
-          color: hPi4Global.hpi4AppBarColor,
-          height: bottomBarHeight(),
-          padding: const EdgeInsets.all(8.0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10.0),
-            child: BottomNavigationBar(
-              type: BottomNavigationBarType.shifting, // Shifting
-              selectedItemColor: hPi4Global.oldHpi4Color,
-              unselectedItemColor: Colors.white,
-              currentIndex: _currentIndex,
-              onTap: (index) {
-                setState(() {
-                  _currentIndex = index;
-                });
-              },
-              items: [
-                BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.devices),
-                  label: 'Device',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(Icons.settings),
-                  label: 'Settings',
-                ),
-              ],
+      bottomNavigationBar: Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2D2D2D),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
             ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BottomNavigationBar(
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            selectedItemColor: hPi4Global.hpi4Color,
+            unselectedItemColor: Colors.grey[500],
+            selectedFontSize: 12,
+            unselectedFontSize: 11,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+            currentIndex: _currentIndex,
+            onTap: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_rounded, size: 24),
+                activeIcon: Icon(Icons.home_rounded, size: 26),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.trending_up_rounded, size: 24),
+                activeIcon: Icon(Icons.trending_up_rounded, size: 26),
+                label: 'Trends',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.watch_rounded, size: 24),
+                activeIcon: Icon(Icons.watch_rounded, size: 26),
+                label: 'Device',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings_rounded, size: 24),
+                activeIcon: Icon(Icons.settings_rounded, size: 26),
+                label: 'Settings',
+              ),
+            ],
           ),
         ),
       ),
@@ -110,6 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? lastUpdatedActivityDate;
 
   bool _isIpad = false;
+  bool _isLoadingData = false;
 
   @override
   void initState() {
@@ -131,10 +147,19 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadLastVitalInfo() async {
-    await _loadStoredHRValue();
-    await _loadStoredSpo2Value();
-    await _loadStoredTempValue();
-    await _loadStoredActivityValue();
+    if (_isLoadingData) return; // Prevent concurrent loads
+    _isLoadingData = true;
+    
+    try {
+      await Future.wait<void>([
+        _loadStoredHRValue(),
+        _loadStoredSpo2Value(),
+        _loadStoredTempValue(),
+        _loadStoredActivityValue(),
+      ]);
+    } finally {
+      _isLoadingData = false;
+    }
   }
 
   Future<void> _detectIpad() async {
@@ -155,9 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return (value * 10).floor() / 10;
   }
 
-  _loadStoredHRValue() {
+  Future<void> _loadStoredHRValue() async {
     hrDataManager = TrendsDataManager(hPi4Global.PREFIX_HR);
-    _loadHRData();
+    await _loadHRData();
   }
 
   Future<void> _loadHRData() async {
@@ -175,9 +200,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  _loadStoredSpo2Value() {
+  Future<void> _loadStoredSpo2Value() async {
     spo2DataManager = TrendsDataManager(hPi4Global.PREFIX_SPO2);
-    _loadSpo2Data();
+    await _loadSpo2Data();
   }
 
   Future<void> _loadSpo2Data() async {
@@ -195,9 +220,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  _loadStoredTempValue() {
+  Future<void> _loadStoredTempValue() async {
     tempDataManager = TrendsDataManager(hPi4Global.PREFIX_TEMP);
-    _loadTempData();
+    await _loadTempData();
   }
 
   Future<void> _loadTempData() async {
@@ -215,9 +240,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  _loadStoredActivityValue() {
+  Future<void> _loadStoredActivityValue() async {
     activityDataManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
-    _loadActivityData();
+    await _loadActivityData();
   }
 
   Future<void> _loadActivityData() async {
@@ -226,12 +251,13 @@ class _HomeScreenState extends State<HomeScreen> {
     if (monthlyTrends.isNotEmpty) {
       MonthlyTrend lastTrend = monthlyTrends.last;
       DateTime lastTime = lastTrend.date;
-      int lastAvg = lastTrend.avg.toInt();
+      // For steps, use max value (cumulative count) not avg
+      int lastStepCount = lastTrend.max.toInt();
       if (mounted) {
         setState(() {
           saveValue(
             lastTime,
-            lastAvg,
+            lastStepCount,
             "lastUpdatedActivity",
             "latestActivityCount",
           );
@@ -357,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (Platform.isIOS) {
       final deviceInfo = DeviceInfoPlugin();
       final iosInfo = await deviceInfo.iosInfo;
-      return iosInfo.model?.toLowerCase().contains('ipad') ?? false;
+      return iosInfo.model.toLowerCase().contains('ipad');
     }
     return false;
   }
@@ -436,12 +462,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 32,
-                        color: accentColor,
-                        fontWeight: FontWeight.bold,
+                    Flexible(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 32,
+                          color: accentColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -472,8 +501,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMainGrid() {
-    _loadLastVitalInfo();
-    _loadStoredValue();
+    // Data loading is handled in initState() and should not be called here
+    // to avoid repeated database queries on every build
     return GridView.count(
       primary: false,
       padding: const EdgeInsets.all(0),
@@ -492,8 +521,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.favorite,
           accentColor: Colors.red[600]!,
           onTap: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrHR()),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ScrTrends(initialMetric: 'hr'),
+              ),
             );
           },
         ),
@@ -505,8 +536,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Symbols.spo2,
           accentColor: Colors.blue[600]!,
           onTap: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrSPO2()),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ScrTrends(initialMetric: 'spo2'),
+              ),
             );
           },
         ),
@@ -518,8 +551,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.thermostat,
           accentColor: Colors.orange[600]!,
           onTap: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrSkinTemperature()),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ScrTrends(initialMetric: 'temp'),
+              ),
             );
           },
         ),
@@ -531,8 +566,10 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icons.directions_run,
           accentColor: Colors.green[600]!,
           onTap: () {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => ScrActivity()),
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ScrTrends(initialMetric: 'activity'),
+              ),
             );
           },
         ),
@@ -605,23 +642,10 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         backgroundColor: hPi4Global.hpi4AppBarColor,
         automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/healthypi_move.png',
-              height: 32,
-              fit: BoxFit.contain,
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'HealthyPi Move',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        title: Image.asset(
+          'assets/healthypi_move.png',
+          height: 32,
+          fit: BoxFit.contain,
         ),
         centerTitle: false,
       ),
