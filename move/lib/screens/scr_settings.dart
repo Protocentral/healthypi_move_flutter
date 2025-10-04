@@ -14,8 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:sqflite/sqflite.dart';
 import '../utils/trends_data_manager.dart';
 import '../utils/export_helpers.dart';
+import '../utils/database_helper.dart';
+import '../utils/device_manager.dart';
 import '../widgets/export_dialogs.dart';
 
 class ScrSettings extends StatefulWidget {
@@ -338,62 +341,163 @@ class _ScrSettingsState extends State<ScrSettings> {
     }
   }
 
-  Future<void> deleteAllFiles() async {
+  /// Erase all app data including database, files, and preferences
+  Future<void> deleteAllAppData() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final files = dir.listSync();
-
-      for (var file in files) {
-        if (file is File) {
-          await file.delete();
+      int deletedRecords = 0;
+      int deletedFiles = 0;
+      
+      // 1. Close and delete the SQLite database
+      try {
+        // Close the database first
+        await DatabaseHelper.instance.close();
+        
+        // Get database path and delete it
+        final dbPath = await getDatabasesPath();
+        final dbFile = File('$dbPath/healthypi_trends.db');
+        if (await dbFile.exists()) {
+          await dbFile.delete();
+          deletedRecords = 1; // Flag that database was deleted
+          print('Database deleted successfully');
         }
+      } catch (e) {
+        print('Error deleting database: $e');
       }
-      print('All files deleted.');
-      showSuccessDialog(context, "Deleted all files");
+      
+      // 2. Delete all files in app documents directory
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        if (await dir.exists()) {
+          final files = dir.listSync(recursive: true);
+          for (var entity in files) {
+            if (entity is File) {
+              await entity.delete();
+              deletedFiles++;
+            }
+          }
+          print('Deleted $deletedFiles files from documents directory');
+        }
+      } catch (e) {
+        print('Error deleting files: $e');
+      }
+      
+      // 3. Unpair device (removes pairing info from SharedPreferences and files)
+      try {
+        await DeviceManager.unpairDevice();
+        print('Device unpaired successfully');
+      } catch (e) {
+        print('Error unpairing device: $e');
+      }
+      
+      // 4. Clear all SharedPreferences data
+      try {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        print('SharedPreferences cleared');
+      } catch (e) {
+        print('Error clearing SharedPreferences: $e');
+      }
+      
+      if (!mounted) return;
+      
+      // Show success dialog with details
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return Theme(
+            data: ThemeData.dark().copyWith(
+              dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF2D2D2D)),
+            ),
+            child: AlertDialog(
+              title: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    'Data Erased',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'All app data has been successfully deleted:',
+                    style: TextStyle(fontSize: 16, color: Colors.white),
+                  ),
+                  SizedBox(height: 12),
+                  _buildDeletedItem('Database', deletedRecords > 0),
+                  _buildDeletedItem('Files', deletedFiles > 0),
+                  _buildDeletedItem('Device pairing', true),
+                  _buildDeletedItem('Settings', true),
+                  SizedBox(height: 12),
+                  Text(
+                    'The app has been reset to its initial state.',
+                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(
+                    'OK',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: hPi4Global.hpi4Color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
     } catch (e) {
-      print('Error deleting files: $e');
+      print('Error during data deletion: $e');
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error erasing data: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
-
-  Future<void> deletePairedDeviceFile() async {
-    final Directory appDocDir = await getApplicationDocumentsDirectory();
-    final String filePath = '${appDocDir.path}/paired_device_mac.txt';
-    final file = File(filePath);
-
-    if (await file.exists()) {
-      await file.delete();
-      print('File deleted');
-    } else {
-      print('File does not exist');
-    }
+  
+  Widget _buildDeletedItem(String label, bool success) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            success ? Icons.check_circle : Icons.cancel,
+            color: success ? Colors.green : Colors.red,
+            size: 18,
+          ),
+          SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
-
-  // Load the stored value
-  _resetStoredValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      prefs.setString('lastSynced', '0');
-      prefs.setString('latestHR', '0');
-      prefs.setString('latestTemp', '0');
-      prefs.setString('latestSpo2', '0');
-      prefs.setString('latestActivityCount', '0');
-      prefs.setString('lastUpdatedHR', '0');
-      prefs.setString('lastUpdatedTemp', '0');
-      prefs.setString('lastUpdatedSpo2', '0');
-      prefs.setString('lastUpdatedActivity', '0');
-      prefs.setString('fetchStatus', '0');
-      prefs.setString('pairedStatus', '0');
-    });
-  }
-
-  // Load the stored value
-  _resetStoredPairedValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      prefs.setString('pairedStatus', '0');
-    });
-  }
-
 
   showConfirmationDialog(BuildContext context, String action) {
     return showDialog(
@@ -426,11 +530,9 @@ class _ScrSettingsState extends State<ScrSettings> {
                 onPressed: () {
                   Navigator.pop(context);
                   if(action == "all data."){
-                    deleteAllFiles();
-                    _resetStoredValue();
+                    deleteAllAppData();
                   }else if(action == "paired device."){
-                    deletePairedDeviceFile();
-                    _resetStoredPairedValue();
+                    DeviceManager.unpairDevice();
                   }else{
 
                   }
