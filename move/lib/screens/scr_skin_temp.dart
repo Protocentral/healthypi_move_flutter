@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
+import '../widgets/export_dialogs.dart';
 
 class ScrSkinTemperature extends StatefulWidget {
   const ScrSkinTemperature({super.key});
@@ -503,9 +504,14 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   }
 
   Future<void> _exportTempData(String range) async {
-    Navigator.pop(context); // Close dialog
+    Navigator.pop(context); // Close range selection dialog
+    
+    // Show action dialog (Share or Save)
+    final action = await showExportActionDialog(context);
+    if (action == null) return; // User cancelled
     
     // Show loading
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -594,32 +600,55 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
       
       // Create CSV content
       String csv = const ListToCsvConverter().convert(csvData);
-      
-      // Save and share
-      final directory = await getApplicationDocumentsDirectory();
-      final filename = ExportHelpers.generateFilename('temp', dateLabel, 'csv');
-      final file = File('${directory.path}/$filename');
-      await file.writeAsString(csv);
+      String filename = ExportHelpers.generateFilename('temp', dateLabel, 'csv');
       
       Navigator.pop(context); // Close loading
       
-      // Share file
-      final result = await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Temperature Data - HealthyPi Move',
-      );
-      
-      if (result.status == ShareResultStatus.success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✓ Data exported successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
+      if (action == 'share') {
+        // Save to temp and share
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$filename');
+        await file.writeAsString(csv);
+        
+        final result = await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Temperature Data - HealthyPi Move',
         );
+        
+        if (result.status == ShareResultStatus.success) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ Data shared successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (action == 'save') {
+        // Save to device
+        final result = await ExportHelpers.saveToDevice(csv, filename);
+        
+        if (!mounted) return;
+        if (result['success']) {
+          showSaveSuccessDialog(
+            context,
+            result['directory'],
+            result['filename'],
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Save failed: ${result['error']}'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
       }
     } catch (e) {
       Navigator.pop(context); // Close loading
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Export failed: $e'),

@@ -34,6 +34,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF121212), // Dark background to match theme
       body: _screens[_currentIndex],
       bottomNavigationBar: Container(
         margin: const EdgeInsets.all(16),
@@ -246,21 +247,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadActivityData() async {
-    List<MonthlyTrend> monthlyTrends = await activityDataManager.getMonthlyTrends();
+    // Get today's hourly data to calculate today's total steps
+    List<HourlyTrend> todayTrends = await activityDataManager.getHourlyTrendForToday();
 
-    if (monthlyTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyTrends.last;
-      DateTime lastTime = lastTrend.date;
-      // For steps, use max value (cumulative count) not avg
-      int lastStepCount = lastTrend.max.toInt();
+    if (todayTrends.isNotEmpty) {
+      // Calculate today's total steps by summing all hourly steps
+      int todayStepCount = 0;
+      for (var trend in todayTrends) {
+        todayStepCount += trend.max.toInt(); // Sum each hour's step count
+      }
+      
       if (mounted) {
         setState(() {
+          // Store today's steps with "Today" as the timestamp
+          lastestActivity = todayStepCount.toString();
+          lastUpdatedActivity = "Today";
+          
+          // Also save to SharedPreferences
           saveValue(
-            lastTime,
-            lastStepCount,
+            DateTime.now(),
+            todayStepCount,
             "lastUpdatedActivity",
             "latestActivityCount",
           );
+        });
+      }
+    } else {
+      // No data for today
+      if (mounted) {
+        setState(() {
+          lastestActivity = '--';
+          lastUpdatedActivity = "Today";
         });
       }
     }
@@ -312,9 +329,8 @@ class _HomeScreenState extends State<HomeScreen> {
       lastUpdatedSpo2Date = _parseDate(lastSpo2Raw);
       lastUpdatedSpo2 = getRelativeTime(lastUpdatedSpo2Date);
 
-      String? lastActivityRaw = prefs.getString('lastUpdatedActivity');
-      lastUpdatedActivityDate = _parseDate(lastActivityRaw);
-      lastUpdatedActivity = getRelativeTime(lastUpdatedActivityDate);
+      // Activity always shows "Today" since we only show today's step count
+      lastUpdatedActivity = "Today";
 
       // The rest remain unchanged
       lastestHR = (prefs.getString('latestHR') ?? '--') == "0"

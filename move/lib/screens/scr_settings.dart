@@ -11,6 +11,12 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:csv/csv.dart';
+import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
+import '../utils/trends_data_manager.dart';
+import '../utils/export_helpers.dart';
+import '../widgets/export_dialogs.dart';
 
 class ScrSettings extends StatefulWidget {
   ScrSettings({super.key});
@@ -158,6 +164,178 @@ class _ScrSettingsState extends State<ScrSettings> {
         );
       },
     );
+  }
+
+  Future<void> _exportAllData() async {
+    // Show action dialog (Share or Save)
+    final action = await showExportActionDialog(context);
+    if (action == null) return; // User cancelled
+    
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Center(
+        child: Card(
+          color: const Color(0xFF2D2D2D),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: hPi4Global.hpi4Color),
+                SizedBox(height: 16),
+                Text(
+                  'Preparing complete data export...',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      // Create comprehensive CSV with all health data
+      List<List<String>> csvData = [
+        ['Timestamp', 'Metric', 'Value', 'Min', 'Max', 'Avg', 'Period'],
+      ];
+
+      // Export Heart Rate Data
+      final hrManager = TrendsDataManager(hPi4Global.PREFIX_HR);
+      List<MonthlyTrend> hrMonthly = await hrManager.getMonthlyTrends();
+      for (var trend in hrMonthly) {
+        csvData.add([
+          DateFormat('yyyy-MM-dd').format(trend.date),
+          'Heart Rate',
+          '${trend.avg.toStringAsFixed(1)} bpm',
+          trend.min.toStringAsFixed(0),
+          trend.max.toStringAsFixed(0),
+          trend.avg.toStringAsFixed(1),
+          'Daily',
+        ]);
+      }
+
+      // Export SpO2 Data
+      final spo2Manager = TrendsDataManager(hPi4Global.PREFIX_SPO2);
+      List<MonthlyTrend> spo2Monthly = await spo2Manager.getMonthlyTrends();
+      for (var trend in spo2Monthly) {
+        csvData.add([
+          DateFormat('yyyy-MM-dd').format(trend.date),
+          'SpO2',
+          '${trend.avg.toStringAsFixed(1)}%',
+          trend.min.toStringAsFixed(0),
+          trend.max.toStringAsFixed(0),
+          trend.avg.toStringAsFixed(1),
+          'Daily',
+        ]);
+      }
+
+      // Export Temperature Data
+      final tempManager = TrendsDataManager(hPi4Global.PREFIX_TEMP);
+      List<MonthlyTrend> tempMonthly = await tempManager.getMonthlyTrends();
+      for (var trend in tempMonthly) {
+        csvData.add([
+          DateFormat('yyyy-MM-dd').format(trend.date),
+          'Temperature',
+          '${(trend.avg / 100).toStringAsFixed(2)}°C',
+          (trend.min / 100).toStringAsFixed(2),
+          (trend.max / 100).toStringAsFixed(2),
+          (trend.avg / 100).toStringAsFixed(2),
+          'Daily',
+        ]);
+      }
+
+      // Export Activity Data
+      final activityManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
+      List<MonthlyTrend> activityMonthly = await activityManager.getMonthlyTrends();
+      for (var trend in activityMonthly) {
+        csvData.add([
+          DateFormat('yyyy-MM-dd').format(trend.date),
+          'Steps',
+          trend.max.toStringAsFixed(0),
+          trend.min.toStringAsFixed(0),
+          trend.max.toStringAsFixed(0),
+          trend.avg.toStringAsFixed(1),
+          'Daily',
+        ]);
+      }
+
+      if (csvData.length <= 1) {
+        Navigator.pop(context); // Close loading
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No data available to export'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      // Create CSV content
+      String csv = const ListToCsvConverter().convert(csvData);
+      String timestamp = DateFormat('yyyy-MM-dd_HHmmss').format(DateTime.now());
+      String filename = 'healthypi_complete_data_$timestamp.csv';
+      
+      Navigator.pop(context); // Close loading
+      
+      if (action == 'share') {
+        // Save to temp and share
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$filename');
+        await file.writeAsString(csv);
+        
+        final result = await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Complete Health Data - HealthyPi Move',
+        );
+        
+        if (result.status == ShareResultStatus.success) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ Data exported successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (action == 'save') {
+        // Save to device
+        final result = await ExportHelpers.saveToDevice(csv, filename);
+        
+        if (!mounted) return;
+        if (result['success']) {
+          showSaveSuccessDialog(
+            context,
+            result['directory'],
+            result['filename'],
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Save failed: ${result['error']}'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Future<void> deleteAllFiles() async {
@@ -333,6 +511,35 @@ class _ScrSettingsState extends State<ScrSettings> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: hPi4Global.hpi4Color,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: _exportAllData,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.download_rounded, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Download All Data',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(

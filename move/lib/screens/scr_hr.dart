@@ -13,6 +13,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
+import '../widgets/export_dialogs.dart';
 
 class ScrHR extends StatefulWidget {
   const ScrHR({super.key});
@@ -498,9 +499,14 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _exportHRData(String range) async {
-    Navigator.pop(context); // Close dialog
+    Navigator.pop(context); // Close range selection dialog
+    
+    // Show action dialog (Share or Save)
+    final action = await showExportActionDialog(context);
+    if (action == null) return; // User cancelled
     
     // Show loading
+    if (!mounted) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -589,39 +595,61 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       
       // Create CSV content
       String csv = const ListToCsvConverter().convert(csvData);
-      
-      // Save and share
-      final directory = await getApplicationDocumentsDirectory();
       final filename = ExportHelpers.generateFilename('hr', dateLabel, 'csv');
-      final file = File('${directory.path}/$filename');
-      await file.writeAsString(csv);
       
       Navigator.pop(context); // Close loading
       
-      // Share file
-      final result = await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Heart Rate Data - HealthyPi Move',
-      );
-      
-      if (result.status == ShareResultStatus.success) {
+      if (action == 'share') {
+        // Share file
+        final directory = await getApplicationDocumentsDirectory();
+        final file = File('${directory.path}/$filename');
+        await file.writeAsString(csv);
+        
+        final result = await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Heart Rate Data - HealthyPi Move',
+        );
+        
+        if (result.status == ShareResultStatus.success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ Data shared successfully!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (action == 'save') {
+        // Save to device
+        final result = await ExportHelpers.saveToDevice(csv, filename);
+        
+        if (result['success'] && mounted) {
+          showSaveSuccessDialog(
+            context,
+            filename,
+            result['directory'],
+          );
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Save failed: ${result['error']}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading if still open
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✓ Data exported successfully!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
-    } catch (e) {
-      Navigator.pop(context); // Close loading
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Export failed: $e'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
     }
   }
 
