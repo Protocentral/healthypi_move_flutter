@@ -1,0 +1,86 @@
+name: Android Build & Deploy
+
+on:
+  push:
+    branches: [ main, 'release/**' ]
+    tags: ['*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build AAB and APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            move/.dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('move/pubspec.yaml') }}
+
+      - name: Install dependencies
+        run: |
+          cd move
+          flutter pub get
+          flutter pub upgrade
+
+      - name: Run analyzer
+        run: |
+          cd move
+          flutter analyze || true
+
+      - name: Build AAB (release)
+        run: |
+          cd move
+          flutter build appbundle --release --no-shrink
+
+      - name: Build APK (release)
+        run: |
+          cd move
+          flutter build apk --release --no-shrink
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-builds
+          path: |
+            move/build/app/outputs/bundle/release/*.aab
+            move/build/app/outputs/flutter-apk/app-release.apk
+
+  publish:
+    name: Publish to Google Play (Internal)
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-builds
+
+      - name: Publish to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: 'com.protocentral.healthypi_move'
+          releaseFiles: |
+            move/build/app/outputs/bundle/release/*.aab
+          track: internal
