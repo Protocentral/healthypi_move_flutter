@@ -1,0 +1,56 @@
+name: iOS Build & Deploy
+
+on:
+  push:
+    branches: [ main, 'release/**' ]
+  workflow_dispatch:
+
+jobs:
+  build-and-upload:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby (for fastlane)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods -v 1.12.0 || true
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Install dependencies
+        run: |
+          cd move
+          flutter pub get
+          cd ios
+          pod install --repo-update
+
+      - name: Build iOS (ipa)
+        env:
+          LANG: en_US.UTF-8
+        run: |
+          cd move
+          flutter build ipa --release --export-method app-store
+
+      - name: Setup Fastlane credentials
+        run: |
+          mkdir -p ~/fastlane
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY }}" > ~/fastlane/app_store_connect_api_key.json
+
+      - name: Upload to App Store via Fastlane
+        working-directory: move/ios
+        run: |
+          # ensure bundler deps (if present)
+          bundle install || true
+          # run fastlane with the app-specific password and API key path
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD="${{ secrets.APP_SPECIFIC_PASSWORD }}" \
+          APP_STORE_CONNECT_API_KEY_PATH=~/fastlane/app_store_connect_api_key.json \
+          bundle exec fastlane ios release
