@@ -24,6 +24,17 @@ jobs:
         with:
           flutter-version: '3.35.4'
 
+      - name: Prepare CI keystore from GitHub Secrets
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "Decoding GitHub secret keystore to move/ci_keystore.jks"
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > move/ci_keystore.jks
+          echo "Exporting signing env vars"
+          if [ -n "${{ secrets.KEY_ALIAS }}" ]; then echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.KEY_PASSWORD }}" ]; then echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ secrets.STORE_PASSWORD }}" ]; then echo "STORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> $GITHUB_ENV; fi
+
+
       - name: Cache pub
         uses: actions/cache@v4
         with:
