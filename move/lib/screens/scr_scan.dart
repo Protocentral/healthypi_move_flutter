@@ -79,9 +79,12 @@ class _ScrScanState extends State<ScrScan> {
   }
   
   Future<void> _loadPairedDeviceInfo() async {
+    logConsole('Loading paired device info...');
     final deviceInfo = await DeviceManager.getPairedDevice();
     final prefs = await SharedPreferences.getInstance();
     final autoConnect = prefs.getBool('auto_connect_enabled') ?? true;
+    
+    logConsole('DeviceInfo: mac=${deviceInfo?.macAddress}, name=${deviceInfo?.displayName}, autoConnect=$autoConnect');
     
     if (mounted) {
       setState(() {
@@ -150,8 +153,11 @@ class _ScrScanState extends State<ScrScan> {
   }
 
   Future<void> _tryAutoConnectToPairedDevice() async {
-    String? pairedMac = await getPairedDeviceMac();
+    logConsole('_tryAutoConnectToPairedDevice called');
+    String? pairedMac = _pairedDeviceMac; // Use the already-loaded MAC address
+    logConsole('Using paired MAC: $pairedMac');
     if (pairedMac != null && pairedMac.isNotEmpty) {
+      logConsole('Starting scan for paired device $pairedMac');
       setState(() {
         _autoConnecting = true;
         _deviceNotFound = false;
@@ -223,8 +229,12 @@ class _ScrScanState extends State<ScrScan> {
     });
 
     _loadPairedDeviceInfo().then((_) {
+      logConsole('Auto-connect check: enabled=$_autoConnectEnabled, paired=$_pairedDeviceMac');
       if (_autoConnectEnabled && _pairedDeviceMac != null) {
+        logConsole('Starting auto-connect to $_pairedDeviceMac');
         _tryAutoConnectToPairedDevice();
+      } else {
+        logConsole('Auto-connect skipped: enabled=$_autoConnectEnabled, hasPairedDevice=${_pairedDeviceMac != null}');
       }
     });
   }
@@ -475,8 +485,8 @@ class _ScrScanState extends State<ScrScan> {
           const SizedBox(height: 16),
         ],
         
-        // Scan section (only when not auto-connecting)
-        if (!_autoConnecting) ...[
+        // Scan section (only when not auto-connecting AND no paired device OR device not found)
+        if (!_autoConnecting && (_pairedDeviceMac == null || _deviceNotFound)) ...[
           _buildScanCard(),
         ],
       ],

@@ -325,7 +325,13 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       if(_tabController.index == 0){
         // Daily view - Get hourly trends for today
         Spo2TrendsData = [];
+        print('SPO2: Loading daily data for today...');
         List<HourlyTrend> hourlyTrends = await spo2DataManager.getHourlyTrendForToday();
+        
+        print('SPO2: Received ${hourlyTrends.length} hourly trends');
+        for (var trend in hourlyTrends) {
+          print('  Hour: ${trend.hour}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}');
+        }
         
         if (hourlyTrends.isEmpty) {
           print('No SpO2 data available for today');
