@@ -171,7 +171,7 @@ class _ECGHomePageState extends State<ECGHomePage> {
     final file = File('$path/$fileName');
     await file.writeAsBytes(pdfContent);
 
-    final result = await Share.shareXFiles([XFile(file.path)], text: "ECG Log File");
+    final result = await Share.shareXFiles([XFile(file.path)]);
 
     if (result.status == ShareResultStatus.success) {
       print("File shared successfully!");

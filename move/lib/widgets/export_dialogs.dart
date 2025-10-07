@@ -1,91 +1,13 @@
 import 'package:flutter/material.dart';
 import '../globals.dart';
 
-/// Shows a dialog to choose between Share and Save to Device
+/// Returns 'share' action for export (Save to Device option removed)
 Future<String?> showExportActionDialog(BuildContext context) async {
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      backgroundColor: const Color(0xFF2D2D2D),
-      title: const Text(
-        'Export Data',
-        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Choose how to export your data:',
-            style: TextStyle(color: Colors.grey, fontSize: 14),
-          ),
-          const SizedBox(height: 16),
-          
-          // Share option
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: hPi4Global.hpi4Color.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(Icons.share, color: hPi4Global.hpi4Color, size: 20),
-              ),
-              title: const Text(
-                'Share',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text(
-                'Send via email, messaging, etc.',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-              onTap: () => Navigator.pop(context, 'share'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // Save to device option
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.download, color: Colors.green, size: 20),
-              ),
-              title: const Text(
-                'Save to Device',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-              ),
-              subtitle: const Text(
-                'Save directly to Downloads folder',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
-              onTap: () => Navigator.pop(context, 'save'),
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Cancel',
-            style: TextStyle(color: Colors.grey[400]),
-          ),
-        ),
-      ],
-    ),
-  );
+  // Directly return 'share' without showing a dialog
+  return 'share';
 }
 
-/// Shows a success message for saved file
+/// Shows a success message for saved file (deprecated - no longer used)
 void showSaveSuccessDialog(BuildContext context, String filename, String directory) {
   showDialog(
     context: context,
