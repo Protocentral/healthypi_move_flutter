@@ -34,7 +34,6 @@ class ExportHelpers {
     
     return await Share.shareXFiles(
       [XFile(file.path)],
-      text: description,
     );
   }
   

@@ -649,6 +649,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _handleRefresh() async {
+    // Navigate to sync screen to sync data
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
+    );
+    
+    // Reload data after returning from sync
+    if (mounted) {
+      await _loadLastVitalInfo();
+      await _loadStoredValue();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     SizeConfig().init(context);
@@ -665,9 +678,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         centerTitle: false,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        color: hPi4Global.hpi4Color,
+        backgroundColor: const Color(0xFF2D2D2D),
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
           Center(
             child: Column(
               children: <Widget>[
@@ -746,7 +763,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          "Sync manually using the button below",
+                          "Pull down to refresh or tap the Sync button",
                           style: TextStyle(
                             color: Colors.orange[100],
                             fontSize: 13,
@@ -771,6 +788,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {

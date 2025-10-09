@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import '../globals.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -65,16 +66,67 @@ class DatabaseHelper {
     int recordCount = ((binaryData.length - offset) ~/ 16);
     int inserted = 0;
     
+    print('DatabaseHelper.insertTrendsFromBinary: trendType=$trendType, sessionId=$sessionId');
+    print('  Binary data length: ${binaryData.length}, offset: $offset, expected records: $recordCount');
+    
     await db.transaction((txn) async {
       for (int i = 0; i < recordCount; i++) {
         int pos = i * 16 + offset;
         
         // Read little-endian values
         int timestamp = _readInt64LE(binaryData, pos);
-        int valueMax = _readInt16LE(binaryData, pos + 8);
-        int valueMin = _readInt16LE(binaryData, pos + 10);
+        
+        // SPO2 binary format has min/max fields swapped compared to HR/Temp
+        int valueMax, valueMin;
+        if (trendType == hPi4Global.PREFIX_SPO2) {
+          valueMin = _readInt16LE(binaryData, pos + 8);  // SPO2: min at offset 8
+          valueMax = _readInt16LE(binaryData, pos + 10); // SPO2: max at offset 10
+        } else {
+          valueMax = _readInt16LE(binaryData, pos + 8);  // HR/Temp: max at offset 8
+          valueMin = _readInt16LE(binaryData, pos + 10); // HR/Temp: min at offset 10
+        }
+        
         int valueAvg = _readInt16LE(binaryData, pos + 12);
         int valueLatest = _readInt16LE(binaryData, pos + 14);
+
+        // Special-case sanitization for SpO2 prefix values
+        // Some device binary formats pack flags or unused bytes into fields
+        // which can yield values like 8194 (0x2002). Prefer plausible human
+        // SpO2 range (30-100) and collapse values to a single sane number when
+        // only one field contains a valid reading.
+        if (trendType == hPi4Global.PREFIX_SPO2) {
+          bool maxValid = valueMax >= 30 && valueMax <= 100;
+          bool minValid = valueMin >= 30 && valueMin <= 100;
+          bool avgValid = valueAvg >= 30 && valueAvg <= 100;
+          bool latestValid = valueLatest >= 30 && valueLatest <= 100;
+
+          if (maxValid || minValid || avgValid || latestValid) {
+            final int chosen = maxValid
+                ? valueMax
+                : (minValid ? valueMin : (avgValid ? valueAvg : valueLatest));
+            valueMax = chosen;
+            valueMin = chosen;
+            valueAvg = chosen;
+            valueLatest = chosen;
+          } else {
+            // Try low-byte heuristic: some firmware packs value in low byte
+            final int lowByte = valueMax & 0xFF;
+            if (lowByte >= 30 && lowByte <= 100) {
+              valueMax = lowByte;
+              valueMin = lowByte;
+              valueAvg = lowByte;
+              valueLatest = lowByte;
+            } else {
+              // Unusual values; log for later inspection but still insert raw values
+              print('DatabaseHelper: Unusual SPO2 parsed values max=$valueMax min=$valueMin avg=$valueAvg latest=$valueLatest at ts $timestamp');
+            }
+          }
+        }
+        
+        if (i < 3 || i == recordCount - 1) {
+          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)}), '
+                'max=$valueMax, min=$valueMin, avg=$valueAvg, latest=$valueLatest');
+        }
         
         // Validate timestamp (reject if invalid - must be between 2020 and 2030)
         if (timestamp < 1577836800 || timestamp > 1893456000) {
@@ -113,8 +165,8 @@ class DatabaseHelper {
     DateTime day,
   ) async {
     final db = await database;
+    // DON'T convert to UTC - device timestamps are in local time
     int dayStart = DateTime(day.year, day.month, day.day)
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     int dayEnd = dayStart + 86400;
     
@@ -132,12 +184,30 @@ class DatabaseHelper {
     DateTime day,
   ) async {
     final db = await database;
+    // DON'T convert to UTC - device timestamps are in local time
     int dayStart = DateTime(day.year, day.month, day.day)
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     int dayEnd = dayStart + 86400;
     
-    return await db.rawQuery('''
+    print('DatabaseHelper.getHourlyTrends: trendType=$trendType, day=$day');
+    print('  Query range: $dayStart to $dayEnd');
+    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000)}');
+    
+    // First, let's see what data exists for this trend type
+    final allData = await db.query(
+      'health_trends',
+      where: 'trend_type = ?',
+      whereArgs: [trendType],
+      orderBy: 'timestamp DESC',
+      limit: 10,
+    );
+    print('  All data for $trendType (last 10 records):');
+    for (var row in allData) {
+      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000)}), '
+            'Max: ${row['value_max']}, Min: ${row['value_min']}, Avg: ${row['value_avg']}');
+    }
+    
+    final results = await db.rawQuery('''
       SELECT 
         (timestamp / 3600) * 3600 as hour_start,
         MAX(value_max) as max_value,
@@ -149,6 +219,14 @@ class DatabaseHelper {
       GROUP BY hour_start
       ORDER BY hour_start ASC
     ''', [trendType, dayStart, dayEnd]);
+    
+    print('  Found ${results.length} hourly groups');
+    for (var row in results) {
+      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000)}, '
+            'Max: ${row['max_value']}, Min: ${row['min_value']}, Avg: ${row['avg_value']}, Points: ${row['data_points']}');
+    }
+    
+    return results;
   }
 
   /// Get weekly aggregated trends
@@ -157,8 +235,8 @@ class DatabaseHelper {
     DateTime startDate,
   ) async {
     final db = await database;
+    // DON'T convert to UTC - device timestamps are in local time
     int weekStart = DateTime(startDate.year, startDate.month, startDate.day)
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     int weekEnd = weekStart + (7 * 86400);
     
@@ -183,11 +261,10 @@ class DatabaseHelper {
     int month,
   ) async {
     final db = await database;
+    // DON'T convert to UTC - device timestamps are in local time
     int monthStart = DateTime(year, month, 1)
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     int monthEnd = DateTime(year, month + 1, 1)
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     
     return await db.rawQuery('''

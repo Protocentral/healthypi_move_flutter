@@ -325,7 +325,13 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       if(_tabController.index == 0){
         // Daily view - Get hourly trends for today
         Spo2TrendsData = [];
+        print('SPO2: Loading daily data for today...');
         List<HourlyTrend> hourlyTrends = await spo2DataManager.getHourlyTrendForToday();
+        
+        print('SPO2: Received ${hourlyTrends.length} hourly trends');
+        for (var trend in hourlyTrends) {
+          print('  Hour: ${trend.hour}, Min: ${trend.min}, Max: ${trend.max}, Avg: ${trend.avg}');
+        }
         
         if (hourlyTrends.isEmpty) {
           print('No SpO2 data available for today');
@@ -619,47 +625,24 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
       
       Navigator.pop(context); // Close loading
       
-      if (action == 'share') {
-        // Save to temp and share
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/$filename');
-        await file.writeAsString(csv);
-        
-        final result = await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'SpO2 Data - HealthyPi Move',
-        );
-        
-        if (result.status == ShareResultStatus.success) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✓ Data shared successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else if (action == 'save') {
-        // Save to device
-        final result = await ExportHelpers.saveToDevice(csv, filename);
-        
+      // Share the data
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+      );
+      
+      if (result.status == ShareResultStatus.success) {
         if (!mounted) return;
-        if (result['success']) {
-          showSaveSuccessDialog(
-            context,
-            result['directory'],
-            result['filename'],
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Save failed: ${result['error']}'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Data shared successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
       }
     } catch (e) {
       Navigator.pop(context); // Close loading

@@ -599,45 +599,23 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
       
       Navigator.pop(context); // Close loading
       
-      if (action == 'share') {
-        // Share file
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/$filename');
-        await file.writeAsString(csv);
-        
-        final result = await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Heart Rate Data - HealthyPi Move',
+      // Share file
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+      );
+      
+      if (result.status == ShareResultStatus.success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ Data shared successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
         );
-        
-        if (result.status == ShareResultStatus.success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✓ Data shared successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else if (action == 'save') {
-        // Save to device
-        final result = await ExportHelpers.saveToDevice(csv, filename);
-        
-        if (result['success'] && mounted) {
-          showSaveSuccessDialog(
-            context,
-            filename,
-            result['directory'],
-          );
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Save failed: ${result['error']}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
       }
     } catch (e) {
       if (mounted) {

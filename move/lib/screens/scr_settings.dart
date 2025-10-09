@@ -16,7 +16,6 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:sqflite/sqflite.dart';
 import '../utils/trends_data_manager.dart';
-import '../utils/export_helpers.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../widgets/export_dialogs.dart';
@@ -286,47 +285,24 @@ class _ScrSettingsState extends State<ScrSettings> {
       
       Navigator.pop(context); // Close loading
       
-      if (action == 'share') {
-        // Save to temp and share
-        final directory = await getApplicationDocumentsDirectory();
-        final file = File('${directory.path}/$filename');
-        await file.writeAsString(csv);
-        
-        final result = await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Complete Health Data - HealthyPi Move',
-        );
-        
-        if (result.status == ShareResultStatus.success) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✓ Data exported successfully!'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else if (action == 'save') {
-        // Save to device
-        final result = await ExportHelpers.saveToDevice(csv, filename);
-        
+      // Share the data
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/$filename');
+      await file.writeAsString(csv);
+      
+      final result = await Share.shareXFiles(
+        [XFile(file.path)],
+      );
+      
+      if (result.status == ShareResultStatus.success) {
         if (!mounted) return;
-        if (result['success']) {
-          showSaveSuccessDialog(
-            context,
-            result['directory'],
-            result['filename'],
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Save failed: ${result['error']}'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Data exported successfully!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
       }
     } catch (e) {
       Navigator.pop(context); // Close loading

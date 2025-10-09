@@ -98,20 +98,18 @@ class _SyncingScreenState extends State<SyncingScreen> {
   }
 
   @override
-  void dispose() async {
-    // Cancel all subscriptions in the dispose method (https://github.com/flutter/flutter/issues/64935)
-    Future.delayed(Duration.zero, () async {
-      await _connectionStateSubscription.cancel();
+  void dispose() {
+    // Clean up subscriptions - DON'T disconnect here since it causes race conditions
+    // _performDisconnect() is called before navigation in the completion/cancel methods
+    _connectionStateSubscription.cancel();
 
-      // Clean up any active download subscriptions
-      for (var subscription in _activeDownloadSubscriptions) {
-        await subscription.cancel();
-      }
-      _activeDownloadSubscriptions.clear();
+    // Clean up any active download subscriptions
+    for (var subscription in _activeDownloadSubscriptions) {
+      subscription.cancel();
+    }
+    _activeDownloadSubscriptions.clear();
 
-      await onDisconnectPressed();
-    });
-
+    logConsole('dispose() completed - subscriptions cleaned up');
     super.dispose();
   }
 
@@ -480,18 +478,138 @@ class _SyncingScreenState extends State<SyncingScreen> {
       logConsole('Note: Could not retrieve database stats: $e');
     }
     
-    // Cancel data stream subscription if active
-    if (listeningDataStream) {
-      await _streamDataSubscription.cancel();
-      listeningDataStream = false;
-    }
-    // Disconnect from device
-    await widget.device.disconnect(queue: true);
-
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+    // Disconnect BEFORE showing UI to prevent navigation race conditions
+    await _performDisconnect();
+    
+    if (!mounted) return;
+    
+    // Now show completion dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Sync Complete'),
+          content: Text('All data has been synchronized successfully.'),
+          actions: <Widget>[
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => HomePage())
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+  
+  /// Robust disconnect implementation that properly cleans up BLE connection
+  Future<void> _performDisconnect() async {
+    try {
+      logConsole('====== DISCONNECT SEQUENCE START ======');
+      logConsole('Connection state: $_connectionState');
+      
+      // Already disconnected?
+      if (_connectionState == BluetoothConnectionState.disconnected) {
+        logConsole('Already disconnected');
+        return;
+      }
+      
+      // STEP 1: Cancel all active download subscriptions (SMP file transfers)
+      logConsole('Cancelling active SMP downloads...');
+      for (var subscription in _activeDownloadSubscriptions) {
+        try {
+          await subscription.cancel();
+        } catch (e) {
+          logConsole('Download subscription cancel error: $e');
+        }
+      }
+      _activeDownloadSubscriptions.clear();
+      logConsole('✓ All SMP downloads cancelled');
+      
+      // STEP 2: Cancel data stream subscription if active
+      if (listeningDataStream) {
+        try {
+          await _streamDataSubscription.cancel();
+          listeningDataStream = false;
+          logConsole('✓ Cancelled data stream subscription');
+        } catch (e) {
+          logConsole('Data stream cancel error (non-fatal): $e');
+        }
+      }
+      
+      // STEP 3: Unsubscribe from ALL characteristics (command + data)
+      if (commandCharacteristic != null) {
+        try {
+          if (commandCharacteristic!.isNotifying) {
+            logConsole('Unsubscribing from command characteristic...');
+            await commandCharacteristic!.setNotifyValue(false)
+                .timeout(Duration(seconds: 2));
+            logConsole('✓ Unsubscribed from command notifications');
+          }
+        } catch (e) {
+          logConsole('Command unsubscribe error (non-fatal): $e');
+        }
+      }
+      
+      if (dataCharacteristic != null) {
+        try {
+          if (dataCharacteristic!.isNotifying) {
+            logConsole('Unsubscribing from data characteristic...');
+            await dataCharacteristic!.setNotifyValue(false)
+                .timeout(Duration(seconds: 2));
+            logConsole('✓ Unsubscribed from data notifications');
+          }
+        } catch (e) {
+          logConsole('Data unsubscribe error (non-fatal): $e');
+        }
+      }
+      
+      // STEP 4: Critical delay - let firmware process all CCCD unsubscribes
+      logConsole('Waiting 1 second for firmware to process unsubscribes...');
+      await Future.delayed(Duration(milliseconds: 1000));
+      
+      // STEP 5: Call disconnect and WAIT for it with extended timeout
+      logConsole('Calling device.disconnect() and waiting...');
+      try {
+        await widget.device.disconnect().timeout(
+          Duration(seconds: 5),
+          onTimeout: () {
+            logConsole('⚠️ Disconnect timed out after 5 seconds (continuing anyway)');
+          },
+        );
+        logConsole('✓ disconnect() completed');
+      } catch (e) {
+        logConsole('Disconnect threw error: $e');
+      }
+      
+      // STEP 6: Wait for connection state to confirm disconnect
+      logConsole('Waiting for connection state change...');
+      try {
+        await widget.device.connectionState.firstWhere(
+          (state) => state == BluetoothConnectionState.disconnected,
+          orElse: () => BluetoothConnectionState.disconnected,
+        ).timeout(Duration(seconds: 3));
+        logConsole('✓ Connection state changed to disconnected');
+      } catch (e) {
+        logConsole('Connection state wait error: $e');
+      }
+      
+      // STEP 7: EXTENDED delay for BLE hardware disconnect to propagate to device
+      // This is critical - give the BLE stack and firmware time to process
+      logConsole('Giving BLE hardware 2 seconds to process disconnect...');
+      await Future.delayed(Duration(milliseconds: 2000));
+      
+      logConsole('Disconnect sequence completed');
+      logConsole('Final connection state: $_connectionState');
+      logConsole('====== DISCONNECT SEQUENCE END ======');
+      
+    } catch (e) {
+      logConsole('Unexpected error in _performDisconnect: $e');
     }
   }
 
@@ -596,118 +714,103 @@ class _SyncingScreenState extends State<SyncingScreen> {
 
   // Add this new method to handle cancellation
   Future<void> _cancelSyncAndClose() async {
-    try {
-      // Cancel data stream subscription if active
-      if (listeningDataStream) {
-        await _streamDataSubscription.cancel();
-        listeningDataStream = false;
-      }
+    // Disconnect using shared method
+    await _performDisconnect();
 
-      // Disconnect from device
-      await widget.device.disconnect(queue: true);
-
-      // Show dialog to user
-      if (mounted) {
-        showDialog(
-          context: context,
-          barrierDismissible: false, // Prevent dismissing by tapping outside
-          builder: (BuildContext context) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.orange, size: 28),
-                  SizedBox(width: 10),
-                  Text('No Data Found'),
-                ],
-              ),
-              content: Text(
-                'No data was found on the device. Please ensure the device has been used to record health data before attempting to sync.',
-                style: TextStyle(fontSize: 16),
-              ),
-              backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close dialog
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => HomePage()),
-                    );
-                  },
-                  child: Text(
-                    'OK',
-                    style: TextStyle(
-                      color: hPi4Global.hpi4Color,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+    // Show dialog to user
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange, size: 28),
+              SizedBox(width: 10),
+              Text('No Data Found'),
+            ],
+          ),
+          content: Text(
+            'No data was found on the device. Please ensure the device has been used to record health data before attempting to sync.',
+            style: TextStyle(fontSize: 16),
+          ),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => HomePage()),
+                );
+              },
+              child: Text(
+                'OK',
+                style: TextStyle(
+                  color: hPi4Global.hpi4Color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
-              ],
-            );
-          },
+              ),
+            ),
+          ],
         );
-      }
-    } catch (e) {
-      logConsole("Error during sync cancellation: $e");
-      if (mounted) {
-        Navigator.of(
-          context,
-        ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
-      }
-    }
+      },
+    );
   }
 
   Future<void> _cannotSyncAndClose() async {
-    // Disconnect from device
-    await widget.device.disconnect(queue: true);
+    // Disconnect using shared method
+    await _performDisconnect();
 
     // Show dialog to user
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false, // Prevent dismissing by tapping outside
-        builder: (BuildContext context) {
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.orange, size: 28),
-                SizedBox(width: 10),
-                Text('Cannot sync the data'),
-              ],
-            ),
-            content: Text(
-              'Please ensure the device has the latest fw version 1.7.0 or greater to sync.',
-              style: TextStyle(fontSize: 16),
-            ),
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(); // Close dialog
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => HomePage()),
-                  );
-                },
-                child: Text(
-                  'OK',
-                  style: TextStyle(
-                    color: hPi4Global.hpi4Color,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Prevent dismissing by tapping outside
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.orange, size: 28),
+              SizedBox(width: 10),
+              Text('Cannot sync the data'),
+            ],
+          ),
+          content: Text(
+            'Please ensure the device has the latest fw version 1.7.0 or greater to sync.',
+            style: TextStyle(fontSize: 16),
+          ),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pushReplacement(
+                  MaterialPageRoute(builder: (_) => HomePage()),
+                );
+              },
+              child: Text(
+                'OK',
+                style: TextStyle(
+                  color: hPi4Global.hpi4Color,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          );
-        },
-      );
-    }
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<String> _getLogFilePathByType(int logFileID, String prefix) async {
