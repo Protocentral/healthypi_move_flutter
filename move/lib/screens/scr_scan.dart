@@ -305,19 +305,8 @@ class _ScrScanState extends State<ScrScan> {
   }
 
   _resetStoredValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      prefs.setString('lastSynced', '0');
-      prefs.setString('latestHR', '0');
-      prefs.setString('latestTemp', '0');
-      prefs.setString('latestSpo2', '0');
-      prefs.setString('latestActivityCount', '0');
-      prefs.setString('lastUpdatedHR', '0');
-      prefs.setString('lastUpdatedTemp', '0');
-      prefs.setString('lastUpdatedSpo2', '0');
-      prefs.setString('lastUpdatedActivity', '0');
-      prefs.setString('fetchStatus', '0');
-    });
+    // No longer needed - values are now queried directly from database
+    // Database will be empty for new device, so values will naturally show '--'
   }
 
   redirectToScreens(BluetoothDevice device) {

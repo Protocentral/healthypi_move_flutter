@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:version/version.dart';
 import '../utils/snackbar.dart';
 import 'dart:io' show File;
@@ -252,12 +251,9 @@ class _SyncingScreenState extends State<SyncingScreen> {
     }
   }
 
-  // Save a value
+  // Save last sync timestamp to database
   _saveValue() async {
-    DateTime now = DateTime.now();
-    // String lastDateTime = DateFormat('EEE d MMM h:mm a').format(now);
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastSynced', now.toIso8601String());
+    await DatabaseHelper.instance.updateLastSyncTime();
   }
 
   Future<void> _sendCommand(
