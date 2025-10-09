@@ -52,7 +52,7 @@ android {
                 storePassword = keystoreProperties.getProperty("storePassword")
             } else if (System.getenv("KEYSTORE_BASE64") != null) {
                 // Decode base64 keystore provided via environment (CI secret)
-                val keystoreBytes = java.util.Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64"))
+                val keystoreBytes = Base64.getDecoder().decode(System.getenv("KEYSTORE_BASE64"))
                 val keystoreOut = rootProject.file("ci_keystore.jks")
                 keystoreOut.writeBytes(keystoreBytes)
                 storeFile = keystoreOut
