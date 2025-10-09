@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import '../globals.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -74,10 +75,53 @@ class DatabaseHelper {
         
         // Read little-endian values
         int timestamp = _readInt64LE(binaryData, pos);
-        int valueMax = _readInt16LE(binaryData, pos + 8);
-        int valueMin = _readInt16LE(binaryData, pos + 10);
+        
+        // SPO2 binary format has min/max fields swapped compared to HR/Temp
+        int valueMax, valueMin;
+        if (trendType == hPi4Global.PREFIX_SPO2) {
+          valueMin = _readInt16LE(binaryData, pos + 8);  // SPO2: min at offset 8
+          valueMax = _readInt16LE(binaryData, pos + 10); // SPO2: max at offset 10
+        } else {
+          valueMax = _readInt16LE(binaryData, pos + 8);  // HR/Temp: max at offset 8
+          valueMin = _readInt16LE(binaryData, pos + 10); // HR/Temp: min at offset 10
+        }
+        
         int valueAvg = _readInt16LE(binaryData, pos + 12);
         int valueLatest = _readInt16LE(binaryData, pos + 14);
+
+        // Special-case sanitization for SpO2 prefix values
+        // Some device binary formats pack flags or unused bytes into fields
+        // which can yield values like 8194 (0x2002). Prefer plausible human
+        // SpO2 range (30-100) and collapse values to a single sane number when
+        // only one field contains a valid reading.
+        if (trendType == hPi4Global.PREFIX_SPO2) {
+          bool maxValid = valueMax >= 30 && valueMax <= 100;
+          bool minValid = valueMin >= 30 && valueMin <= 100;
+          bool avgValid = valueAvg >= 30 && valueAvg <= 100;
+          bool latestValid = valueLatest >= 30 && valueLatest <= 100;
+
+          if (maxValid || minValid || avgValid || latestValid) {
+            final int chosen = maxValid
+                ? valueMax
+                : (minValid ? valueMin : (avgValid ? valueAvg : valueLatest));
+            valueMax = chosen;
+            valueMin = chosen;
+            valueAvg = chosen;
+            valueLatest = chosen;
+          } else {
+            // Try low-byte heuristic: some firmware packs value in low byte
+            final int lowByte = valueMax & 0xFF;
+            if (lowByte >= 30 && lowByte <= 100) {
+              valueMax = lowByte;
+              valueMin = lowByte;
+              valueAvg = lowByte;
+              valueLatest = lowByte;
+            } else {
+              // Unusual values; log for later inspection but still insert raw values
+              print('DatabaseHelper: Unusual SPO2 parsed values max=$valueMax min=$valueMin avg=$valueAvg latest=$valueLatest at ts $timestamp');
+            }
+          }
+        }
         
         if (i < 3 || i == recordCount - 1) {
           print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)}), '
