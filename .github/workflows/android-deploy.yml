@@ -2,7 +2,6 @@ name: Android Build & Deploy
 
 on:
   push:
-    branches: [ main, 'release/**' ]
     tags: ['*']
   workflow_dispatch:
 
@@ -23,7 +22,29 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          flutter-version: '3.35.4'
+
+      - name: Prepare CI keystore from GitHub Secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is not set. Please add your base64-encoded keystore as a GitHub secret."
+            exit 1
+          fi
+          echo "Decoding GitHub secret keystore to ci_keystore.jks"
+          echo "$KEYSTORE_BASE64" | base64 --decode > ci_keystore.jks
+          echo "Exporting signing env vars"
+          if [ -z "$KEY_ALIAS" ]; then echo "::error::KEY_ALIAS secret is not set."; exit 1; fi
+          if [ -z "$KEY_PASSWORD" ]; then echo "::error::KEY_PASSWORD secret is not set."; exit 1; fi
+          if [ -z "$STORE_PASSWORD" ]; then echo "::error::STORE_PASSWORD secret is not set."; exit 1; fi
+          echo "KEY_ALIAS=$KEY_ALIAS" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASSWORD" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=$STORE_PASSWORD" >> $GITHUB_ENV
+
 
       - name: Cache pub
         uses: actions/cache@v4

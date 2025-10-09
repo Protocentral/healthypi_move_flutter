@@ -2,7 +2,7 @@ name: iOS Build & Deploy
 
 on:
   push:
-    branches: [ main, 'release/**' ]
+    tags: ['*']
   workflow_dispatch:
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
       - name: Install Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 'stable'
+          flutter-version: '3.35.4'
 
       - name: Install dependencies
         run: |
