@@ -1,16 +1,17 @@
 import 'dart:async';
-import 'dart:io' show Directory, File, FileSystemEntity, Platform;
-import 'package:intl/intl.dart';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'utils/trends_data_manager.dart';
+import 'utils/background_sync_manager.dart';
+import 'utils/device_manager.dart';
+import 'utils/database_helper.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
 import 'package:move/screens/scr_trends.dart';
-import 'screens/scr_scan.dart';
+import 'screens/scr_device_scan.dart';
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
@@ -106,35 +107,30 @@ class _HomeScreenState extends State<HomeScreen> {
   bool connectedToDevice = false;
 
   String selectedOption = "sync";
-  String lastSyncedDateTime = '';
-
-  String lastestHR = '';
-  String lastestTemp = '';
-  String lastestSpo2 = '';
-  String lastestActivity = '';
-
-  String lastUpdatedHR = '';
-  String lastUpdatedTemp = '';
-  String lastUpdatedSpo2 = '';
-  String lastUpdatedActivity = '';
-
-  // Add DateTime fields for each value:
-  DateTime? lastSyncedDate;
-  DateTime? lastUpdatedHRDate;
-  DateTime? lastUpdatedTempDate;
-  DateTime? lastUpdatedSpo2Date;
-  DateTime? lastUpdatedActivityDate;
+  
+  // Vitals data loaded directly from database
+  Map<String, Map<String, dynamic>?>? _vitals;
+  DateTime? _lastSyncTime;
 
   bool _isIpad = false;
   bool _isLoadingData = false;
+  
+  // Background sync state
+  bool _isSyncing = false;
+  double _syncProgress = 0.0;
+  String _syncStatus = '';
+  StreamSubscription? _syncProgressSubscription;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize activity data manager (matches scr_activity.dart pattern)
+    activityDataManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
+    
     _detectIpad();
     _initPackageInfo();
-    _loadLastVitalInfo();
-    _loadStoredValue();
+    _loadDataFromDatabase();
   }
 
   Future<void> _initPackageInfo() async {
@@ -147,17 +143,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
   }
 
-  Future<void> _loadLastVitalInfo() async {
+  Future<void> _loadDataFromDatabase() async {
     if (_isLoadingData) return; // Prevent concurrent loads
     _isLoadingData = true;
     
     try {
-      await Future.wait<void>([
-        _loadStoredHRValue(),
-        _loadStoredSpo2Value(),
-        _loadStoredTempValue(),
-        _loadStoredActivityValue(),
-      ]);
+      // Load vitals and sync time from database
+      final vitals = await DatabaseHelper.instance.getLatestVitals();
+      final syncTime = await DatabaseHelper.instance.getLastSyncTime();
+      
+      // For activity, use the SAME logic as the trends screen:
+      // Get hourly trends and sum them (matches scr_activity.dart exactly)
+      if (vitals['activity'] != null) {
+        try {
+          List<HourlyTrend> hourlyTrends = await activityDataManager.getHourlyTrendForToday();
+          if (hourlyTrends.isNotEmpty) {
+            int totalDailySteps = 0;
+            for (var trend in hourlyTrends) {
+              totalDailySteps += trend.max.toInt();
+            }
+            // Update the activity value with the calculated total
+            vitals['activity']!['value'] = totalDailySteps;
+          }
+        } catch (e) {
+          print('Error calculating activity total: $e');
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _vitals = vitals;
+          _lastSyncTime = syncTime;
+        });
+      }
+    } catch (e) {
+      print('Error loading data from database: $e');
     } finally {
       _isLoadingData = false;
     }
@@ -174,191 +194,33 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Future<void> dispose() async {
+    _syncProgressSubscription?.cancel();
     super.dispose();
   }
 
-  double floorToOneDecimal(double value) {
-    return (value * 10).floor() / 10;
-  }
-
-  Future<void> _loadStoredHRValue() async {
-    hrDataManager = TrendsDataManager(hPi4Global.PREFIX_HR);
-    await _loadHRData();
-  }
-
-  Future<void> _loadHRData() async {
-    List<MonthlyTrend> monthlyTrends = await hrDataManager.getMonthlyTrends();
-
-    if (monthlyTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyTrends.last;
-      DateTime lastTime = lastTrend.date;
-      int lastAvg = lastTrend.avg.toInt();
-      if (mounted) {
-        setState(() {
-          saveValue(lastTime, lastAvg, "lastUpdatedHR", "latestHR");
-        });
-      }
+  // Helper to get formatted vital values and timestamps
+  String _getVitalValue(String type) {
+    if (_vitals == null || _vitals![type] == null) return '--';
+    final value = _vitals![type]!['value'] as int;
+    if (value == 0) return '--';
+    
+    // Temperature needs special formatting (divide by 100)
+    if (type == 'temp') {
+      return (value / 100).toStringAsFixed(1);
     }
+    return value.toString();
   }
 
-  Future<void> _loadStoredSpo2Value() async {
-    spo2DataManager = TrendsDataManager(hPi4Global.PREFIX_SPO2);
-    await _loadSpo2Data();
+  String _getVitalTimestamp(String type) {
+    if (_vitals == null || _vitals![type] == null) return '--';
+    final timestamp = _vitals![type]!['timestamp'] as int;
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    return getRelativeTime(date);
   }
 
-  Future<void> _loadSpo2Data() async {
-    List<MonthlyTrend> monthlyTrends = await spo2DataManager.getMonthlyTrends();
-
-    if (monthlyTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyTrends.last;
-      DateTime lastTime = lastTrend.date;
-      int lastAvg = lastTrend.avg.toInt();
-      if (mounted) {
-        setState(() {
-          saveValue(lastTime, lastAvg, "lastUpdatedSpo2", "latestSpo2");
-        });
-      }
-    }
-  }
-
-  Future<void> _loadStoredTempValue() async {
-    tempDataManager = TrendsDataManager(hPi4Global.PREFIX_TEMP);
-    await _loadTempData();
-  }
-
-  Future<void> _loadTempData() async {
-    List<MonthlyTrend> monthlyTrends = await tempDataManager.getMonthlyTrends();
-
-    if (monthlyTrends.isNotEmpty) {
-      MonthlyTrend lastTrend = monthlyTrends.last;
-      DateTime lastTime = lastTrend.date;
-      double lastAvg = floorToOneDecimal(lastTrend.avg / 100);
-      if (mounted) {
-        setState(() {
-          saveTempValue(lastTime, lastAvg, "lastUpdatedTemp", "latestTemp");
-        });
-      }
-    }
-  }
-
-  Future<void> _loadStoredActivityValue() async {
-    activityDataManager = TrendsDataManager(hPi4Global.PREFIX_ACTIVITY);
-    await _loadActivityData();
-  }
-
-  Future<void> _loadActivityData() async {
-    // Get today's hourly data to calculate today's total steps
-    List<HourlyTrend> todayTrends = await activityDataManager.getHourlyTrendForToday();
-
-    if (todayTrends.isNotEmpty) {
-      // Calculate today's total steps by summing all hourly steps
-      int todayStepCount = 0;
-      for (var trend in todayTrends) {
-        todayStepCount += trend.max.toInt(); // Sum each hour's step count
-      }
-      
-      if (mounted) {
-        setState(() {
-          // Store today's steps with "Today" as the timestamp
-          lastestActivity = todayStepCount.toString();
-          lastUpdatedActivity = "Today";
-          
-          // Also save to SharedPreferences
-          saveValue(
-            DateTime.now(),
-            todayStepCount,
-            "lastUpdatedActivity",
-            "latestActivityCount",
-          );
-        });
-      }
-    } else {
-      // No data for today
-      if (mounted) {
-        setState(() {
-          lastestActivity = '--';
-          lastUpdatedActivity = "Today";
-        });
-      }
-    }
-  }
-
-  saveValue(
-      DateTime lastUpdatedTime,
-      int averageHR,
-      String latestTimeString,
-      String latestValueString,
-      ) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString(latestValueString, averageHR.toString());
-    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String().replaceFirst('Z', ''));
-  }
-
-  // Save a value
-  saveTempValue(
-    DateTime lastUpdatedTime,
-    double averageHR,
-    String latestTimeString,
-    String latestValueString,
-  ) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString(latestValueString, averageHR.toString());
-    await prefs.setString(latestTimeString, lastUpdatedTime.toIso8601String().replaceFirst('Z', ''));
-  }
-
-  // Load the stored value
-  _loadStoredValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      // Parse lastSyncedDateTime as DateTime if possible
-      String? lastSyncedRaw = prefs.getString('lastSynced');
-      lastSyncedDate = _parseDate(lastSyncedRaw);
-      lastSyncedDateTime = getRelativeTime(lastSyncedDate);
-
-      // Repeat for each updated date
-      String? lastHRRaw = prefs.getString('lastUpdatedHR');
-      lastUpdatedHRDate = _parseDate(lastHRRaw);
-      lastUpdatedHR = getRelativeTime(lastUpdatedHRDate);
-
-
-      String? lastTempRaw = prefs.getString('lastUpdatedTemp');
-      lastUpdatedTempDate = _parseDate(lastTempRaw);
-      lastUpdatedTemp = getRelativeTime(lastUpdatedTempDate);
-
-      String? lastSpo2Raw = prefs.getString('lastUpdatedSpo2');
-      lastUpdatedSpo2Date = _parseDate(lastSpo2Raw);
-      lastUpdatedSpo2 = getRelativeTime(lastUpdatedSpo2Date);
-
-      // Activity always shows "Today" since we only show today's step count
-      lastUpdatedActivity = "Today";
-
-      // The rest remain unchanged
-      lastestHR = (prefs.getString('latestHR') ?? '--') == "0"
-          ? '--'
-          : prefs.getString('latestHR') ?? '--';
-      lastestTemp = (prefs.getString('latestTemp') ?? '--') == "0"
-          ? '--'
-          : prefs.getString('latestTemp') ?? '--';
-      lastestSpo2 = (prefs.getString('latestSpo2') ?? '--') == "0"
-          ? '--'
-          : prefs.getString('latestSpo2') ?? '--';
-      lastestActivity = (prefs.getString('latestActivityCount') ?? '--') == "0"
-          ? '--'
-          : prefs.getString('latestActivityCount') ?? '--';
-    });
-  }
-
-  // 3. Add a helper to parse your stored date strings:
-  DateTime? _parseDate(String? dateStr) {
-    if (dateStr == null || dateStr == '--') return null;
-    try {
-      // Try parsing as ISO8601 first
-      return DateTime.tryParse(dateStr) ??
-          // Try parsing as your formatted string
-          DateFormat('EEE d MMM').parse(dateStr);
-    } catch (_) {
-      return null;
-    }
+  String get lastSyncedDateTime {
+    if (_lastSyncTime == null) return 'Never';
+    return getRelativeTime(_lastSyncTime);
   }
 
   int getGridCount() {
@@ -531,9 +393,9 @@ class _HomeScreenState extends State<HomeScreen> {
       children: <Widget>[
         _buildMetricCard(
           title: 'Heart Rate',
-          value: lastestHR.toString(),
+          value: _getVitalValue('hr'),
           unit: 'bpm',
-          lastUpdated: lastUpdatedHR.toString(),
+          lastUpdated: _getVitalTimestamp('hr'),
           icon: Icons.favorite,
           accentColor: Colors.red[600]!,
           onTap: () {
@@ -546,9 +408,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         _buildMetricCard(
           title: 'SpO2',
-          value: lastestSpo2.toString(),
+          value: _getVitalValue('spo2'),
           unit: '%',
-          lastUpdated: lastUpdatedSpo2.toString(),
+          lastUpdated: _getVitalTimestamp('spo2'),
           icon: Symbols.spo2,
           accentColor: Colors.blue[600]!,
           onTap: () {
@@ -561,9 +423,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         _buildMetricCard(
           title: 'Temperature',
-          value: lastestTemp,
+          value: _getVitalValue('temp'),
           unit: '°F',
-          lastUpdated: lastUpdatedTemp.toString(),
+          lastUpdated: _getVitalTimestamp('temp'),
           icon: Icons.thermostat,
           accentColor: Colors.orange[600]!,
           onTap: () {
@@ -576,9 +438,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         _buildMetricCard(
           title: 'Activity',
-          value: lastestActivity.toString(),
+          value: _getVitalValue('activity'),
           unit: 'Steps',
-          lastUpdated: lastUpdatedActivity.toString(),
+          lastUpdated: 'Today',  // Activity always shows "Today"
           icon: Icons.directions_run,
           accentColor: Colors.green[600]!,
           onTap: () {
@@ -650,15 +512,124 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleRefresh() async {
-    // Navigate to sync screen to sync data
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-    );
-    
-    // Reload data after returning from sync
+    if (_isSyncing) {
+      // Already syncing, show message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Sync already in progress'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Get paired device
+    final deviceInfo = await DeviceManager.getPairedDevice();
+    if (deviceInfo == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No device paired. Please pair a device first.'),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: 'Pair',
+              textColor: Colors.white,
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ScrDeviceScan()),
+                );
+              },
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Start background sync (BackgroundSyncManager handles ALL BLE operations)
+    debugPrint('Home: Starting sync for device: ${deviceInfo.macAddress}');
+    debugPrint('Home: BackgroundSyncManager will handle all BLE connection/disconnection');
+
     if (mounted) {
-      await _loadLastVitalInfo();
-      await _loadStoredValue();
+      setState(() {
+        _isSyncing = true;
+        _syncProgress = 0.0;
+        _syncStatus = 'Starting sync...';
+      });
+    }
+
+    // Listen to progress updates
+    _syncProgressSubscription = BackgroundSyncManager.instance.progressStream.listen(
+      (progress) {
+        if (mounted && progress.metric == 'all') {
+          setState(() {
+            _syncProgress = progress.progress;
+            _syncStatus = progress.message ?? '';
+          });
+        }
+      },
+    );
+
+    // Start sync - pass only MAC address string
+    final result = await BackgroundSyncManager.instance.syncData(
+      deviceMacAddress: deviceInfo.macAddress,
+      onProgress: (metric, progress) {
+        // Progress updates handled via stream
+      },
+      onStatus: (status) {
+        if (mounted) {
+          setState(() {
+            _syncStatus = status;
+          });
+        }
+      },
+    );
+
+    // Cleanup subscription
+    await _syncProgressSubscription?.cancel();
+    _syncProgressSubscription = null;
+
+    // Update UI
+    if (mounted) {
+      setState(() {
+        _isSyncing = false;
+        _syncProgress = 0.0;
+        _syncStatus = '';
+      });
+
+      // Show result
+      if (result.success) {
+        final totalRecords = result.recordCounts.values.fold(0, (sum, count) => sum + count);
+        final message = totalRecords > 0
+            ? '✓ Synced $totalRecords records in ${result.duration.inSeconds}s'
+            : '✓ ${result.message}';
+        
+        // Update lastSynced timestamp in database
+        await DatabaseHelper.instance.updateLastSyncTime();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Reload data from database
+        await _loadDataFromDatabase();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✗ ${result.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -677,13 +648,30 @@ class _HomeScreenState extends State<HomeScreen> {
           fit: BoxFit.contain,
         ),
         centerTitle: false,
+        bottom: _isSyncing
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(4.0),
+                child: LinearProgressIndicator(
+                  value: _syncProgress,
+                  backgroundColor: Colors.grey[800],
+                  valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                ),
+              )
+            : null,
       ),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
         color: hPi4Global.hpi4Color,
         backgroundColor: const Color(0xFF2D2D2D),
+        displacement: 60, // Move the refresh indicator higher to avoid covering content
+        strokeWidth: 3.0,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: _isSyncing ? 60 : 20, // Extra top padding when syncing to avoid overlap
+            bottom: 20,
+          ),
           children: [
           Center(
             child: Column(
@@ -706,11 +694,20 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: hPi4Global.hpi4Color.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Icon(
-                            Icons.sync,
-                            color: hPi4Global.hpi4Color,
-                            size: 24,
-                          ),
+                          child: _isSyncing
+                              ? SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.sync,
+                                  color: hPi4Global.hpi4Color,
+                                  size: 24,
+                                ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -718,7 +715,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Last Synced',
+                                _isSyncing ? 'Syncing...' : 'Last Synced',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: Colors.grey[400],
@@ -727,7 +724,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                lastSyncedDateTime.isEmpty ? 'Never' : lastSyncedDateTime,
+                                _isSyncing
+                                    ? _syncStatus
+                                    : (lastSyncedDateTime.isEmpty ? 'Never' : lastSyncedDateTime),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   color: Colors.white,
@@ -763,7 +762,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          "Pull down to refresh or tap the Sync button",
+                          "Pull down to sync data with your device",
                           style: TextStyle(
                             color: Colors.orange[100],
                             fontSize: 13,
@@ -791,18 +790,23 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-          );
-        },
-        backgroundColor: hPi4Global.hpi4Color,
+        onPressed: _isSyncing ? null : _handleRefresh,
+        backgroundColor: _isSyncing ? Colors.grey : hPi4Global.hpi4Color,
         foregroundColor: Colors.white,
         elevation: 4,
-        icon: const Icon(Icons.sync, size: 24),
-        label: const Text(
-          'Sync',
-          style: TextStyle(
+        icon: _isSyncing 
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.sync, size: 24),
+        label: Text(
+          _isSyncing ? 'Syncing...' : 'Sync',
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),

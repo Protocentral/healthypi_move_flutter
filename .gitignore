@@ -3,3 +3,5 @@ move/android/app/local.properties
 keystore.base64
 move/healthypi_trends.db
 x
+/temp_docs
+.DS_Store 

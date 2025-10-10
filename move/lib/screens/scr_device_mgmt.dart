@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_scan.dart';
 import 'package:move/screens/scr_dfu.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
 import '../models/device_info.dart';
@@ -74,19 +73,8 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
 
   // reset the stored value
   _resetStoredValue() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    setState(() {
-      prefs.setString('lastSynced', '0');
-      prefs.setString('latestHR', '0');
-      prefs.setString('latestTemp', '0');
-      prefs.setString('latestSpo2', '0');
-      prefs.setString('latestActivityCount', '0');
-      prefs.setString('lastUpdatedHR', '0');
-      prefs.setString('lastUpdatedTemp', '0');
-      prefs.setString('lastUpdatedSpo2', '0');
-      prefs.setString('lastUpdatedActivity', '0');
-      prefs.setString('fetchStatus', '0');
-    });
+    // No longer needed - values are now queried directly from database
+    // Database will be empty after unpair, so values will naturally show '--'
   }
 
   showConfirmationDialog(BuildContext context, String action) {

@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../globals.dart';
 
 class DatabaseHelper {
@@ -20,8 +21,9 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 1,
+      version: 3, // Increment version for app_metadata table
       onCreate: _createDB,
+      onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
       singleInstance: true,
       // onConfigure is called before onCreate/onUpgrade/onDowngrade
@@ -52,7 +54,89 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_trend_type ON health_trends(trend_type)');
     await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp)');
     
+    // Table to track synced sessions (prevents re-downloading)
+    await db.execute('''
+      CREATE TABLE synced_sessions (
+        session_id INTEGER NOT NULL,
+        trend_type TEXT NOT NULL,
+        record_count INTEGER NOT NULL,
+        synced_at INTEGER DEFAULT (strftime('%s', 'now')),
+        PRIMARY KEY (session_id, trend_type)
+      )
+    ''');
+    
+    await db.execute('CREATE INDEX idx_synced_trend ON synced_sessions(trend_type)');
+    
+    // Table to store app metadata (replaces SharedPreferences for health-related metadata)
+    await db.execute('''
+      CREATE TABLE app_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        value_type TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        description TEXT
+      )
+    ''');
+    
+    await db.execute('CREATE INDEX idx_app_metadata_updated ON app_metadata(updated_at)');
+    
     print('DatabaseHelper: Tables created with indexes');
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add synced_sessions table for smart sync
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS synced_sessions (
+          session_id INTEGER NOT NULL,
+          trend_type TEXT NOT NULL,
+          record_count INTEGER NOT NULL,
+          synced_at INTEGER DEFAULT (strftime('%s', 'now')),
+          PRIMARY KEY (session_id, trend_type)
+        )
+      ''');
+      
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_synced_trend ON synced_sessions(trend_type)');
+      print('DatabaseHelper: Upgraded to version 2 - added synced_sessions table');
+    }
+    
+    if (oldVersion < 3) {
+      // Add app_metadata table for app state
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          value_type TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
+          description TEXT
+        )
+      ''');
+      
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_app_metadata_updated 
+        ON app_metadata(updated_at)
+      ''');
+      
+      print('DatabaseHelper: Upgraded to version 3 - added app_metadata table');
+      
+      // Migrate lastSynced from SharedPreferences to database if it exists
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final lastSynced = prefs.getString('lastSynced');
+        if (lastSynced != null && lastSynced != '0' && lastSynced.isNotEmpty) {
+          await db.insert('app_metadata', {
+            'key': 'last_sync_time',
+            'value': lastSynced,
+            'value_type': 'timestamp',
+            'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            'description': 'Last successful sync timestamp',
+          });
+          print('DatabaseHelper: Migrated lastSynced from SharedPreferences');
+        }
+      } catch (e) {
+        print('DatabaseHelper: Failed to migrate lastSynced: $e');
+      }
+    }
   }
 
   /// Insert trends from binary data
@@ -152,6 +236,20 @@ class DatabaseHelper {
         } catch (e) {
           print('DatabaseHelper: Error inserting record $i: $e');
         }
+      }
+      
+      // Mark session as synced after successful insertion
+      if (inserted > 0) {
+        await txn.insert(
+          'synced_sessions',
+          {
+            'session_id': sessionId,
+            'trend_type': trendType,
+            'record_count': inserted,
+            'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
     });
     
@@ -333,6 +431,253 @@ class DatabaseHelper {
     
     return stats;
   }
+
+  /// Check if a session has already been synced
+  Future<bool> isSessionSynced(int sessionId, String trendType) async {
+    final db = await database;
+    final result = await db.query(
+      'synced_sessions',
+      where: 'session_id = ? AND trend_type = ?',
+      whereArgs: [sessionId, trendType],
+    );
+    return result.isNotEmpty;
+  }
+
+  /// Mark a session as synced
+  Future<void> markSessionSynced(int sessionId, String trendType, int recordCount) async {
+    final db = await database;
+    await db.insert(
+      'synced_sessions',
+      {
+        'session_id': sessionId,
+        'trend_type': trendType,
+        'record_count': recordCount,
+        'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    print('DatabaseHelper: Marked session $sessionId ($trendType) as synced with $recordCount records');
+  }
+
+  /// Get list of synced session IDs for a trend type
+  Future<List<int>> getSyncedSessionIds(String trendType) async {
+    final db = await database;
+    final result = await db.query(
+      'synced_sessions',
+      columns: ['session_id'],
+      where: 'trend_type = ?',
+      whereArgs: [trendType],
+      orderBy: 'session_id DESC',
+    );
+    return result.map((row) => row['session_id'] as int).toList();
+  }
+
+  /// Get sync statistics
+  Future<Map<String, dynamic>> getSyncStats() async {
+    final db = await database;
+    
+    final result = await db.rawQuery('''
+      SELECT 
+        trend_type,
+        COUNT(*) as session_count,
+        SUM(record_count) as total_records,
+        MAX(synced_at) as last_sync
+      FROM synced_sessions
+      GROUP BY trend_type
+    ''');
+    
+    Map<String, dynamic> stats = {};
+    for (var row in result) {
+      String type = row['trend_type'] as String;
+      stats['${type}_sessions'] = row['session_count'];
+      stats['${type}_records'] = row['total_records'];
+      stats['${type}_last_sync'] = row['last_sync'];
+    }
+    
+    // Get total synced sessions
+    final total = await db.rawQuery('SELECT COUNT(*) as total FROM synced_sessions');
+    if (total.isNotEmpty) {
+      stats['total_sessions'] = total.first['total'];
+    }
+    
+    return stats;
+  }
+
+  /// Clear sync history (useful for forcing re-sync)
+  Future<int> clearSyncHistory({String? trendType}) async {
+    final db = await database;
+    if (trendType != null) {
+      return await db.delete(
+        'synced_sessions',
+        where: 'trend_type = ?',
+        whereArgs: [trendType],
+      );
+    } else {
+      return await db.delete('synced_sessions');
+    }
+  }
+
+  // ============================================================================
+  // App Metadata Methods (replaces SharedPreferences for health-related data)
+  // ============================================================================
+
+  /// Set metadata value (generic)
+  Future<void> setMetadata(String key, dynamic value, {String? description}) async {
+    final db = await database;
+    
+    String valueType;
+    String valueString;
+    
+    if (value is int) {
+      valueType = 'int';
+      valueString = value.toString();
+    } else if (value is bool) {
+      valueType = 'bool';
+      valueString = value.toString();
+    } else if (value is DateTime) {
+      valueType = 'timestamp';
+      valueString = value.toIso8601String();
+    } else {
+      valueType = 'string';
+      valueString = value.toString();
+    }
+    
+    await db.insert(
+      'app_metadata',
+      {
+        'key': key,
+        'value': valueString,
+        'value_type': valueType,
+        'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        'description': description,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get metadata value (generic)
+  Future<T?> getMetadata<T>(String key) async {
+    final db = await database;
+    final result = await db.query(
+      'app_metadata',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    
+    if (result.isEmpty) return null;
+    
+    final value = result.first['value'] as String;
+    final type = result.first['value_type'] as String;
+    
+    try {
+      switch (type) {
+        case 'int':
+          return int.parse(value) as T;
+        case 'bool':
+          return (value == 'true') as T;
+        case 'timestamp':
+          return DateTime.parse(value) as T;
+        default:
+          return value as T;
+      }
+    } catch (e) {
+      print('DatabaseHelper: Error parsing metadata $key: $e');
+      return null;
+    }
+  }
+
+  /// Update last sync timestamp
+  Future<void> updateLastSyncTime() async {
+    await setMetadata(
+      'last_sync_time',
+      DateTime.now(),
+      description: 'Last successful sync timestamp',
+    );
+  }
+
+  /// Get last sync timestamp
+  Future<DateTime?> getLastSyncTime() async {
+    return await getMetadata<DateTime>('last_sync_time');
+  }
+
+  /// Query latest vitals directly from health_trends table
+  /// Returns map with latest value and timestamp for each metric
+  /// Note: For activity/steps, returns TODAY's total (sum of value_max for all records today)
+  Future<Map<String, Map<String, dynamic>?>> getLatestVitals() async {
+    final db = await database;
+    
+    // Calculate today's date range (midnight to midnight)
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = todayStart.add(Duration(days: 1));
+    final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
+    final todayEndTimestamp = todayEnd.millisecondsSinceEpoch ~/ 1000;
+    
+    final results = await Future.wait([
+      db.rawQuery('''
+        SELECT value_avg as value, timestamp 
+        FROM health_trends 
+        WHERE trend_type = ? 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+      ''', ['hr']),
+      
+      db.rawQuery('''
+        SELECT value_avg as value, timestamp 
+        FROM health_trends 
+        WHERE trend_type = ? 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+      ''', ['temp']),
+      
+      db.rawQuery('''
+        SELECT value_avg as value, timestamp 
+        FROM health_trends 
+        WHERE trend_type = ? 
+        ORDER BY timestamp DESC 
+        LIMIT 1
+      ''', ['spo2']),
+      
+      // For activity: sum the MAX(value_max) per hour for today (matches trends screen logic)
+      // This uses the same aggregation as getHourlyTrends: MAX(value_max) per hour, then SUM
+      db.rawQuery('''
+        SELECT SUM(hourly_max) as value, MAX(hour_start) as timestamp
+        FROM (
+          SELECT 
+            (timestamp / 3600) * 3600 as hour_start,
+            MAX(value_max) as hourly_max
+          FROM health_trends
+          WHERE trend_type = ? 
+          AND timestamp >= ? 
+          AND timestamp < ?
+          GROUP BY hour_start
+        )
+      ''', ['activity', todayStartTimestamp, todayEndTimestamp]),
+    ]);
+    
+    return {
+      'hr': results[0].isNotEmpty ? {
+        'value': results[0][0]['value'] as int,
+        'timestamp': results[0][0]['timestamp'] as int,
+      } : null,
+      'temp': results[1].isNotEmpty ? {
+        'value': results[1][0]['value'] as int,
+        'timestamp': results[1][0]['timestamp'] as int,
+      } : null,
+      'spo2': results[2].isNotEmpty ? {
+        'value': results[2][0]['value'] as int,
+        'timestamp': results[2][0]['timestamp'] as int,
+      } : null,
+      'activity': results[3].isNotEmpty && results[3][0]['value'] != null ? {
+        'value': results[3][0]['value'] as int,
+        'timestamp': results[3][0]['timestamp'] as int,
+      } : null,
+    };
+  }
+
+  // ============================================================================
+  // Helper Methods
+  // ============================================================================
 
   /// Helper: Read 64-bit little-endian integer
   int _readInt64LE(List<int> bytes, int offset) {
