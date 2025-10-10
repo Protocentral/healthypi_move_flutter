@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'utils/trends_data_manager.dart';
 import 'utils/background_sync_manager.dart';
 import 'utils/device_manager.dart';
@@ -9,7 +8,7 @@ import 'utils/database_helper.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
 import 'package:move/screens/scr_settings.dart';
 import 'package:move/screens/scr_trends.dart';
-import 'screens/scr_scan.dart';
+import 'screens/scr_device_scan.dart';
 import 'globals.dart';
 import 'utils/sizeConfig.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -540,7 +539,7 @@ class _HomeScreenState extends State<HomeScreen> {
               textColor: Colors.white,
               onPressed: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "0")),
+                  MaterialPageRoute(builder: (_) => const ScrDeviceScan()),
                 );
               },
             ),
@@ -551,53 +550,10 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Find the device by MAC address
-    final devices = FlutterBluePlus.connectedDevices;
-    BluetoothDevice? targetDevice;
-    
-    for (var device in devices) {
-      if (device.remoteId.str == deviceInfo.macAddress) {
-        targetDevice = device;
-        break;
-      }
-    }
+    // Start background sync (BackgroundSyncManager handles ALL BLE operations)
+    debugPrint('Home: Starting sync for device: ${deviceInfo.macAddress}');
+    debugPrint('Home: BackgroundSyncManager will handle all BLE connection/disconnection');
 
-    // If not connected, try to connect
-    if (targetDevice == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Device not connected. Connecting...'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-
-      try {
-        final deviceId = deviceInfo.macAddress;
-        targetDevice = BluetoothDevice.fromId(deviceId);
-        await targetDevice.connect(license: License.values.first);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to connect: $e'),
-              backgroundColor: Colors.red,
-              action: SnackBarAction(
-                label: 'Retry',
-                textColor: Colors.white,
-                onPressed: () => _handleRefresh(),
-              ),
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-        return;
-      }
-    }
-
-    // Start background sync
     if (mounted) {
       setState(() {
         _isSyncing = true;
@@ -618,9 +574,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
     );
 
-    // Start sync
+    // Start sync - pass only MAC address string
     final result = await BackgroundSyncManager.instance.syncData(
-      device: targetDevice,
+      deviceMacAddress: deviceInfo.macAddress,
       onProgress: (metric, progress) {
         // Progress updates handled via stream
       },
@@ -707,8 +663,15 @@ class _HomeScreenState extends State<HomeScreen> {
         onRefresh: _handleRefresh,
         color: hPi4Global.hpi4Color,
         backgroundColor: const Color(0xFF2D2D2D),
+        displacement: 60, // Move the refresh indicator higher to avoid covering content
+        strokeWidth: 3.0,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: _isSyncing ? 60 : 20, // Extra top padding when syncing to avoid overlap
+            bottom: 20,
+          ),
           children: [
           Center(
             child: Column(
@@ -827,18 +790,23 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "1")),
-          );
-        },
-        backgroundColor: hPi4Global.hpi4Color,
+        onPressed: _isSyncing ? null : _handleRefresh,
+        backgroundColor: _isSyncing ? Colors.grey : hPi4Global.hpi4Color,
         foregroundColor: Colors.white,
         elevation: 4,
-        icon: const Icon(Icons.sync, size: 24),
-        label: const Text(
-          'Sync',
-          style: TextStyle(
+        icon: _isSyncing 
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.sync, size: 24),
+        label: Text(
+          _isSyncing ? 'Syncing...' : 'Sync',
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),

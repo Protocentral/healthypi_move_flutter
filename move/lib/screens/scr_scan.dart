@@ -4,7 +4,6 @@ import 'package:convert/convert.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_fetch_ecg.dart';
-import 'package:move/screens/scrSync.dart';
 import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/utils/snackbar.dart';
 import 'package:path_provider/path_provider.dart';
@@ -311,10 +310,11 @@ class _ScrScanState extends State<ScrScan> {
 
   redirectToScreens(BluetoothDevice device) {
     if (widget.tabIndex == "1") {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (context) => SyncingScreen(device: device)),
-      );
-
+      // TabIndex "1" (sync) is now handled by BackgroundSyncManager
+      // via pull-to-refresh or Sync button in home.dart
+      // This case should no longer be used
+      Navigator.of(context).pop();
+      
     } else if (widget.tabIndex == "2") {
       showLoadingIndicator("Connected. Erasing the data...", context);
       _eraseAllLogs(context, device);

@@ -77,10 +77,13 @@ class BackgroundSyncManager {
   BluetoothCharacteristic? _dataCharacteristic;
   
   // MCU Manager for file downloads
-  late mcumgr.FsManager _fsManager;
+  mcumgr.FsManager? _fsManager;
+  
+  // Current device being synced
+  BluetoothDevice? _currentDevice;
 
   Future<SyncResult> syncData({
-    required BluetoothDevice device,
+    required String deviceMacAddress,
     required Function(String metric, double progress) onProgress,
     required Function(String message) onStatus,
   }) async {
@@ -98,13 +101,22 @@ class BackgroundSyncManager {
     final recordCounts = <String, int>{};
 
     try {
-      // Step 1: Connect and discover services
+      // Step 1: Create device and connect - ALL BLE logic contained here
       _emitProgress('all', 0.0, SyncState.connecting, 'Connecting to device...');
       onStatus('Connecting to device...');
+      
+      debugPrint('═══════════════════════════════════════════════════════');
+      debugPrint('Background sync: Creating device from MAC: $deviceMacAddress');
+      final device = BluetoothDevice.fromId(deviceMacAddress);
+      _currentDevice = device;
 
       if (device.isDisconnected) {
+        debugPrint('Background sync: Connecting to device...');
         await device.connect(license: License.values.first);
         await Future.delayed(const Duration(milliseconds: 500));
+        debugPrint('Background sync: Connected successfully');
+      } else {
+        debugPrint('Background sync: Device already connected');
       }
 
       final services = await device.discoverServices();
@@ -127,13 +139,19 @@ class BackgroundSyncManager {
         throw Exception('Required BLE characteristics not found');
       }
 
-      // Initialize MCU Manager
-      _fsManager = mcumgr.FsManager(device.remoteId.toString());
+      // ============================================================================
+      // MCU Manager Strategy: Create ONCE at start, dispose before disconnect
+      // ============================================================================
+      // Initialize MCU Manager for this sync session
+      debugPrint('Background sync: Creating MCU Manager instance...');
+      _fsManager = mcumgr.FsManager(_currentDevice!.remoteId.toString());
+      debugPrint('Background sync: MCU Manager created successfully');
+      // ============================================================================
       
       // Step 2: Set device time
       _emitProgress('all', 0.05, SyncState.connecting, 'Syncing device time...');
       onStatus('Syncing device time...');
-      await _sendCurrentDateTime(device);
+      await _sendCurrentDateTime(_currentDevice!);
       
       // Step 3: Fetch session counts for each metric
       _emitProgress('all', 0.1, SyncState.downloading, 'Checking available data...');
@@ -151,7 +169,7 @@ class BackgroundSyncManager {
       for (var metric in metrics) {
         final trendType = metric['trend'] as List<int>;
         final metricType = metric['type'] as String;
-        final count = await _fetchLogCount(device, trendType);
+        final count = await _fetchLogCount(_currentDevice!, trendType);
         sessionCounts[metricType] = count;
         debugPrint('Background sync: $metricType session count = $count');
       }
@@ -184,7 +202,7 @@ class BackgroundSyncManager {
         onProgress(metricType, 0.0);
 
         // Fetch log indices
-        final logHeaders = await _fetchLogIndexAndWait(device, trendType, count);
+        final logHeaders = await _fetchLogIndexAndWait(_currentDevice!, trendType, count);
         debugPrint('Background sync: Found ${logHeaders.length} $metricType sessions');
 
         // Get list of already synced sessions for this metric
@@ -226,7 +244,7 @@ class BackgroundSyncManager {
           onProgress(metricType, progress);
 
           try {
-            final records = await _fetchLogFile(device, header.logFileID, header.sessionLength, trendType, metricType);
+            final records = await _fetchLogFile(_currentDevice!, header.logFileID, header.sessionLength, trendType, metricType);
             downloadedRecords += records;
           } catch (e) {
             debugPrint('Error downloading $metricType session ${header.logFileID}: $e');
@@ -247,7 +265,7 @@ class BackgroundSyncManager {
       onStatus('Sync completed');
 
       // Safe disconnect from device
-      await _safeDisconnect(device);
+      await _safeDisconnect(_currentDevice!);
 
       final totalRecords = recordCounts.values.fold(0, (sum, count) => sum + count);
       return SyncResult(
@@ -264,7 +282,7 @@ class BackgroundSyncManager {
       
       // Try to disconnect even on error
       try {
-        await _safeDisconnect(device);
+        await _safeDisconnect(_currentDevice!);
       } catch (disconnectError) {
         debugPrint('Error disconnecting after sync failure: $disconnectError');
       }
@@ -281,26 +299,83 @@ class BackgroundSyncManager {
     }
   }
 
-  /// Safely disconnect from the device
-  /// Waits for any pending operations and properly closes the connection
+  /// Safe disconnect - properly releases BLE connection
+  /// Must be called after fsManager.kill() to ensure clean disconnect
   Future<void> _safeDisconnect(BluetoothDevice device) async {
     try {
-      debugPrint('Background sync: Disconnecting from device ${device.remoteId}');
+      debugPrint('═══════════════════════════════════════════════════════');
+      debugPrint('Background sync: DISCONNECT SEQUENCE INITIATED');
+      debugPrint('Background sync: Device: ${device.remoteId}');
+      debugPrint('═══════════════════════════════════════════════════════');
       
-      // Give a small delay to ensure all operations are complete
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Check if device is still connected
-      final isConnected = await device.isConnected;
-      if (isConnected) {
-        // Disconnect gracefully
-        await device.disconnect();
-        debugPrint('Background sync: Device disconnected successfully');
-      } else {
-        debugPrint('Background sync: Device was already disconnected');
+      // ============================================================================
+      // STEP 0: CRITICAL - Kill MCU Manager FIRST (releases internal BLE connection)
+      // ============================================================================
+      debugPrint('STEP 0: ⚠️ KILLING MCU MANAGER (releases native BLE resources)');
+      try {
+        if (_fsManager != null) {
+          // FsManager.kill() explicitly releases native BLE resources
+          // This is documented as necessary to prevent memory leaks
+          debugPrint('  Calling _fsManager.kill()...');
+          await _fsManager!.kill();
+          _fsManager = null;
+          
+          // Give native layer time to clean up BLE connection
+          await Future.delayed(const Duration(milliseconds: 1500));
+          debugPrint('  ✓ FsManager killed - native BLE resources released');
+        } else {
+          debugPrint('  FsManager already null, skipping kill()');
+        }
+      } catch (e) {
+        debugPrint('  ⚠️ Error killing FsManager: $e');
+        // Continue with disconnect anyway
       }
-    } catch (e) {
-      debugPrint('Background sync: Error during disconnect: $e');
+      // ============================================================================
+      
+      // STEP 1: Immediate cleanup - clear ALL references
+      debugPrint('STEP 1: Clearing ${_activeSubscriptions.length} subscriptions and references');
+      _cleanupSubscriptions();
+      _commandCharacteristic = null;
+      _dataCharacteristic = null;
+      
+      // STEP 2: Check initial state
+      await Future.delayed(const Duration(milliseconds: 500));
+      bool isConnected = await device.isConnected;
+      debugPrint('STEP 2: Initial connection status: $isConnected');
+      
+      if (!isConnected) {
+        debugPrint('✓ Device already disconnected - exiting');
+        return;
+      }
+      
+      // STEP 3: Simple disconnect
+      debugPrint('STEP 3: Calling device.disconnect()...');
+      try {
+        await device.disconnect(timeout: 5);
+        debugPrint('  ✓ Disconnect called successfully');
+      } catch (e) {
+        debugPrint('  ⚠️ Disconnect call failed: $e');
+      }
+
+      // STEP 4: Wait and verify
+      await Future.delayed(const Duration(milliseconds: 1000));
+      isConnected = await device.isConnected;
+      debugPrint('STEP 4: Post-disconnect status: $isConnected');
+      
+      if (isConnected) {
+        debugPrint('⚠️ Device still connected after disconnect call');
+        debugPrint('⚠️ This may indicate fsManager.kill() was not called or failed');
+      } else {
+        debugPrint('✓✓✓ SUCCESS - Device confirmed disconnected');
+      }
+      
+      debugPrint('═══════════════════════════════════════════════════════');
+      debugPrint('Background sync: DISCONNECT SEQUENCE COMPLETED');
+      debugPrint('═══════════════════════════════════════════════════════');
+      
+    } catch (e, stackTrace) {
+      debugPrint('❌❌❌ CRITICAL ERROR in disconnect sequence: $e');
+      debugPrint('Stack trace: $stackTrace');
       // Don't throw - we want sync to complete even if disconnect fails
     }
   }
@@ -451,7 +526,7 @@ class BackgroundSyncManager {
     final completer = Completer<List<int>>();
     
     late StreamSubscription downloadSubscription;
-    downloadSubscription = _fsManager.downloadCallbacks.listen((event) {
+    downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
       if (event.path == deviceFilePath) {
         if (event is mcumgr.OnDownloadCompleted) {
           downloadSubscription.cancel();
@@ -470,7 +545,7 @@ class BackgroundSyncManager {
     });
 
     _activeSubscriptions.add(downloadSubscription);
-    await _fsManager.download(deviceFilePath);
+    await _fsManager!.download(deviceFilePath);
 
     final binaryData = await completer.future.timeout(
       const Duration(seconds: 30),
