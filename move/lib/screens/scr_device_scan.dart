@@ -9,9 +9,16 @@ import '../utils/device_manager.dart';
 
 /// Clean, focused screen for BLE device scanning and pairing
 /// Purpose: Scan for HealthyPi Move devices and pair them
-/// Does NOT handle sync, streaming, or other operations
+/// Can optionally connect to device and trigger callback for operations
 class ScrDeviceScan extends StatefulWidget {
-  const ScrDeviceScan({super.key});
+  final Function(BluetoothDevice)? onDeviceConnected;
+  final bool pairOnly;
+  
+  const ScrDeviceScan({
+    super.key,
+    this.onDeviceConnected,
+    this.pairOnly = false,
+  });
 
   @override
   State<ScrDeviceScan> createState() => _ScrDeviceScanState();
@@ -102,8 +109,8 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
     }
   }
 
-  /// Connect to device, pair it, and navigate to home
-  Future<void> _pairDevice(BluetoothDevice device, String deviceName) async {
+  /// Connect to device and either pair it or trigger callback
+  Future<void> _connectToDevice(BluetoothDevice device, String deviceName) async {
     try {
       // Show loading
       if (!mounted) return;
@@ -118,13 +125,25 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       // Stop scanning first
       await _stopScan();
 
-      // Connect to device (required to verify it's a valid device)
+      // Connect to device
       await device.connect(
         license: License.values.first,
         timeout: const Duration(seconds: 15),
         mtu: null,
       );
 
+      // If we have a callback (for live view, fetch recordings, etc.)
+      if (widget.onDeviceConnected != null) {
+        // Close loading dialog
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        
+        // Trigger callback with connected device
+        widget.onDeviceConnected!(device);
+        return;
+      }
+
+      // Otherwise, pair the device
       // Create device info
       final deviceInfo = DeviceInfo(
         macAddress: device.remoteId.str,
@@ -160,7 +179,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       
       Snackbar.show(
         ABC.c,
-        prettyException("Pairing Error:", e),
+        prettyException("Connection Error:", e),
         success: false,
       );
     }
@@ -269,7 +288,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                       final result = _scanResults[index];
                       return _DeviceListTile(
                         result: result,
-                        onTap: () => _pairDevice(
+                        onTap: () => _connectToDevice(
                           result.device,
                           result.advertisementData.advName.isNotEmpty
                               ? result.advertisementData.advName
