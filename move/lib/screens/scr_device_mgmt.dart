@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_device_scan.dart';
 import 'package:move/screens/scr_stream_selection.dart';
-import 'package:move/screens/scr_fetch_ecg.dart';
+import 'package:move/screens/scr_ecg_recordings.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
@@ -352,22 +352,29 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // Fetch Recordings
+                  // ECG Recordings
                   _buildActionButton(
-                    icon: Icons.download_for_offline,
-                    label: 'Fetch Recordings',
+                    icon: Icons.monitor_heart,
+                    label: 'ECG Recordings',
                     color: hPi4Global.hpi4Color,
-                    onPressed: () {
+                    onPressed: () async {
+                      // Get paired device info
+                      final deviceInfo = await DeviceManager.getPairedDevice();
+                      if (deviceInfo == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No device paired. Please pair a device first.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      // Navigate directly to ECG recordings with device MAC
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => ScrDeviceScan(
-                            onDeviceConnected: (device) {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (context) => ScrFetchECG(device: device),
-                                ),
-                              );
-                            },
+                          builder: (context) => ScrEcgRecordings(
+                            deviceMacAddress: deviceInfo.macAddress,
                           ),
                         ),
                       );
