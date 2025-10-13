@@ -455,40 +455,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /*Widget liveViewButton() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(0, 36), // Minimum width, reasonable height
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Minimal padding
-          backgroundColor: hPi4Global.hpi4Color,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        onPressed: () {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
-          );
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min, // Shrink to fit content
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Icon(Symbols.monitoring, color: Colors.white, size: 18),
-            const Text(
-              ' Live View',
-              style: TextStyle(fontSize: 14, color: Colors.white),
-            ),
-          ],
-        ),
-      ),
-    );
-  }*/
-
   void logConsole(String logString) async {
     print("AKW - $logString");
   }

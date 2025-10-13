@@ -17,7 +17,7 @@ import 'package:intl/intl.dart';
 import 'package:csv/csv.dart';
 
 import '../utils/snackbar.dart';
-import 'generatePDF.dart';
+import '../utils/generate_pdf.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 

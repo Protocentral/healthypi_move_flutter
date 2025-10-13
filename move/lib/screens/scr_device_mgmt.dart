@@ -2,13 +2,16 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
-import 'package:move/screens/scr_scan.dart';
+import 'package:move/screens/scr_device_scan.dart';
+import 'package:move/screens/scr_stream_selection.dart';
+import 'package:move/screens/scr_fetch_ecg.dart';
 import 'package:move/screens/scr_dfu.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
 import 'scr_device_settings.dart';
+import '../home.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
@@ -71,12 +74,6 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
     }
   }
 
-  // reset the stored value
-  _resetStoredValue() async {
-    // No longer needed - values are now queried directly from database
-    // Database will be empty after unpair, so values will naturally show '--'
-  }
-
   showConfirmationDialog(BuildContext context, String action) {
     return showDialog(
       context: context,
@@ -105,16 +102,12 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     color: hPi4Global.hpi4Color,
                   ),
                 ),
-                onPressed: () {
-                  if (action == "logs on the device.") {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "2")),
-                    );
-                  } else {
-                    Navigator.pop(context);
-                    // deleteAllFiles();
-                    _resetStoredValue();
-                  }
+                onPressed: () async {
+                  // Directly navigate to HomePage to trigger database deletion
+                  await DeviceManager.unpairDevice();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => HomePage()),
+                  );
                 },
               ),
               TextButton(
@@ -365,8 +358,18 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     label: 'Fetch Recordings',
                     color: hPi4Global.hpi4Color,
                     onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "4")),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ScrDeviceScan(
+                            onDeviceConnected: (device) {
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => ScrFetchECG(device: device),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -378,8 +381,18 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     label: 'Live View',
                     color: hPi4Global.hpi4Color,
                     onPressed: () {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => ScrScan(tabIndex: "3")),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ScrDeviceScan(
+                            onDeviceConnected: (device) {
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (context) => ScrStreamsSelection(device: device),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                       );
                     },
                   ),
