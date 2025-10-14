@@ -30,7 +30,12 @@ class EcgRecording {
   }) : filePath = '/lfs/ecg/$sessionId';
   
   String get displayName => 'ECG Recording #$sessionId';
-  String get dateTime => DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp);
+  
+  String get dateTime {
+    // Debug timestamp (device stores in local time)
+    print('ECG Recording: Session $sessionId timestamp: ${timestamp.toIso8601String()} (year: ${timestamp.year})');
+    return DateFormat('EEE d MMM yyyy h:mm a').format(timestamp);
+  }
   String get durationText {
     // sessionLength is already in number of samples/points, not bytes
     final sampleCount = sessionLength;
@@ -151,20 +156,26 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       
       for (final header in _logHeaderList) {
         // Estimate timestamp from session ID (most recent = highest ID)
-        final timestamp = DateTime.now().subtract(
-          Duration(minutes: (100 - header.logFileID) * 5),
-        );
-        
         // sessionLength is in number of samples/points, not bytes
         final sampleCount = header.sessionLength;
         final durationSeconds = (sampleCount / 400).toInt();
         
+        // Parse timestamp from session ID (Unix epoch in seconds)
+        // IMPORTANT: Device stores timestamps as Unix epoch IN LOCAL TIME
+        // We need to treat the value as if it's already in local timezone
+        // So we create a UTC DateTime, then convert to local without offset adjustment
+        final timestampMs = header.logFileID * 1000;
+        final utcDt = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
+        // Create local DateTime with same year/month/day/hour/minute/second
+        final dt = DateTime(utcDt.year, utcDt.month, utcDt.day, 
+                           utcDt.hour, utcDt.minute, utcDt.second);
         print('ECG Recordings:   - Session ${header.logFileID}: $sampleCount samples = ${durationSeconds}s');
+        print('ECG Recordings:     Timestamp: ${header.logFileID}s → ${dt.toIso8601String()} (year: ${dt.year})');
         
         recordings.add(EcgRecording(
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
-          timestamp: timestamp,
+          timestamp: dt,
         ));
       }
       
@@ -294,6 +305,137 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
     await _commandCharacteristic?.write(commandList, withoutResponse: true);
   }
   
+  /// Delete a single ECG recording
+  Future<void> _deleteRecording(EcgRecording recording) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D2D),
+        title: const Text('Delete Recording', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Are you sure you want to delete this ECG recording? This action cannot be undone.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Send delete command via BLE
+      final commandPacket = <int>[];
+      commandPacket.addAll(hPi4Global.ECGLogDelete);
+      commandPacket.addAll(hPi4Global.ECGRecord);
+      
+      // Add session ID as 2-byte little-endian
+      final sessionIdBytes = ByteData(2);
+      sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
+      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());
+      
+      await _sendCommand(commandPacket);
+      print('ECG Recordings: Sent delete command for session ${recording.sessionId}');
+      
+      // Wait a moment for device to process
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Refresh the list
+      await _loadRecordingsList();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recording deleted successfully'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error deleting recording: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete recording: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Wipe all ECG recordings from device
+  Future<void> _wipeAllRecordings() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D2D),
+        title: const Text('Wipe All Recordings?', style: TextStyle(color: Colors.white)),
+        content: Text(
+          'This will permanently delete all ${_recordings.length} ECG recording(s) from your device. This action cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Wipe All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      // Send wipe all command via BLE
+      final commandPacket = <int>[];
+      commandPacket.addAll(hPi4Global.ECGLogWipeAll);
+      commandPacket.addAll(hPi4Global.ECGRecord);
+      
+      await _sendCommand(commandPacket);
+      print('ECG Recordings: Sent wipe all command');
+      
+      // Wait for device to process
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // Refresh the list
+      await _loadRecordingsList();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All recordings deleted successfully'),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error wiping recordings: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to wipe recordings: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
   /// Download a single ECG recording using FsManager
   Future<void> _downloadRecording(EcgRecording recording) async {
     if (recording.isDownloading) return;
@@ -309,32 +451,58 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       late StreamSubscription downloadSubscription;
       downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
         if (event.path == recording.filePath) {
+          print('ECG Download Event: ${event.runtimeType} for ${event.path}');
+          
           if (event is mcumgr.OnDownloadCompleted) {
+            print('ECG Download: Completed - ${event.data.length} bytes');
             downloadSubscription.cancel();
             _activeSubscriptions.remove(downloadSubscription);
             completer.complete(event.data);
           } else if (event is mcumgr.OnDownloadFailed) {
+            print('ECG Download: Failed - ${event.cause}');
             downloadSubscription.cancel();
             _activeSubscriptions.remove(downloadSubscription);
             completer.completeError(Exception('Download failed: ${event.cause}'));
           } else if (event is mcumgr.OnDownloadCancelled) {
+            print('ECG Download: Cancelled');
             downloadSubscription.cancel();
             _activeSubscriptions.remove(downloadSubscription);
             completer.completeError(Exception('Download cancelled'));
-          }
-          // Update progress if available
-          try {
-            // Try to access progress field via dynamic dispatch
-            final dynamic dynamicEvent = event;
-            if (dynamicEvent.progress != null) {
-              if (mounted) {
+          } else if (event is mcumgr.OnDownloadProgressChanged) {
+            // Handle progress updates - try different possible field names
+            print('ECG Download: Progress event - inspecting fields...');
+            try {
+              final dynamic dynamicEvent = event;
+              // Try common field name variations
+              var progress = 0.0;
+              
+              // Try to get progress value (could be 0-100 or 0-1)
+              try {
+                final progressValue = dynamicEvent.progress;
+                progress = (progressValue is int && progressValue > 1) 
+                    ? progressValue / 100.0 
+                    : progressValue.toDouble();
+                print('ECG Download: Progress ${(progress * 100).toStringAsFixed(1)}%');
+              } catch (_) {
+                // Try bytesDownloaded/bytesTotal or similar
+                try {
+                  final bytes = dynamicEvent.bytesDownloaded ?? dynamicEvent.downloaded ?? 0;
+                  final total = dynamicEvent.bytesTotal ?? dynamicEvent.total ?? dynamicEvent.size ?? 1;
+                  progress = bytes / total;
+                  print('ECG Download: Progress ${(progress * 100).toStringAsFixed(1)}% ($bytes/$total bytes)');
+                } catch (_) {
+                  print('ECG Download: Could not extract progress from any known fields');
+                }
+              }
+              
+              if (progress > 0 && mounted) {
                 setState(() {
-                  recording.downloadProgress = dynamicEvent.progress / 100.0;
+                  recording.downloadProgress = progress;
                 });
               }
+            } catch (e) {
+              print('ECG Download: Error extracting progress: $e');
             }
-          } catch (_) {
-            // Ignore if progress not available
           }
         }
       });
@@ -526,16 +694,29 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
                   case 'download_all':
                     _downloadAllRecordings();
                     break;
+                  case 'wipe_all':
+                    _wipeAllRecordings();
+                    break;
                 }
               },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
                   value: 'download_all',
                   child: Row(
                     children: [
                       Icon(Icons.download, size: 20),
-                      SizedBox(width: 12),
+                      SizedBox(width: 8),
                       Text('Download All'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'wipe_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep, size: 20, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Wipe All Recordings', style: TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),
@@ -730,14 +911,27 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
               ),
             ] else ...[
               const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _downloadRecording(recording),
-                icon: const Icon(Icons.download, size: 18),
-                label: const Text('Download CSV'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: hPi4Global.hpi4Color,
-                  side: BorderSide(color: hPi4Global.hpi4Color),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _downloadRecording(recording),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Download CSV'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: hPi4Global.hpi4Color,
+                        side: BorderSide(color: hPi4Global.hpi4Color),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: () => _deleteRecording(recording),
+                    icon: const Icon(Icons.delete_outline),
+                    color: Colors.red[300],
+                    tooltip: 'Delete recording',
+                  ),
+                ],
               ),
             ],
           ],

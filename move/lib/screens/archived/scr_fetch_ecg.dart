@@ -382,6 +382,14 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
           // final trendType = bdata.getUint8(11);
           final header = (logFileID: logFileID, sessionLength: sessionLength);
           logConsole("Log: $header");
+          
+          // Debug timestamp decoding
+          print("=== DEBUG TIMESTAMP ===");
+          print("Raw logFileID value: $logFileID");
+          DateTime testDate = DateTime.fromMillisecondsSinceEpoch(logFileID * 1000);
+          print("Converted to DateTime: ${testDate.toIso8601String()}");
+          print("Formatted: ${DateFormat('EEE d MMM yyyy h:mm a').format(testDate)}");
+          print("======================");
 
           logHeaderList.add(header);
 
@@ -575,9 +583,12 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
   }
 
   String formattedTime(int timestamp) {
-    DateTime date =
-        DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toUtc();
-    String formattedDate = DateFormat('EEE d MMM h:mm a').format(date);
+    // Timestamp is Unix epoch in seconds - convert to milliseconds for DateTime
+    print("AKW - DEBUG: Raw timestamp value: $timestamp");
+    DateTime date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    print("AKW - DEBUG: Converted DateTime: ${date.toIso8601String()}");
+    String formattedDate = DateFormat('EEE d MMM yyyy h:mm a').format(date);
+    print("AKW - DEBUG: Formatted date: $formattedDate");
     return formattedDate;
   }
 
@@ -689,6 +700,77 @@ class _ScrFetchECGState extends State<ScrFetchECG> {
                                               },
                                               icon: Icon(Icons.download_rounded),
                                               color: hPi4Global.hpi4Color,
+                                            ),
+                                          if (!isTransfering)
+                                            IconButton(
+                                              onPressed: () async {
+                                                // Show confirmation dialog before deleting
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (BuildContext dialogContext) {
+                                                    return Theme(
+                                                      data: ThemeData.dark().copyWith(
+                                                        textTheme: TextTheme(),
+                                                        dialogTheme: DialogThemeData(
+                                                          backgroundColor: const Color(0xFF2D2D2D),
+                                                        ),
+                                                      ),
+                                                      child: AlertDialog(
+                                                        title: Text(
+                                                          'Delete Recording',
+                                                          style: TextStyle(fontSize: 18, color: Colors.white),
+                                                        ),
+                                                        content: Text(
+                                                          'Are you sure you want to delete this ECG recording? This action cannot be undone.',
+                                                          style: TextStyle(fontSize: 16, color: Colors.white),
+                                                        ),
+                                                        actions: <Widget>[
+                                                          TextButton(
+                                                            child: const Text(
+                                                              'Cancel',
+                                                              style: TextStyle(
+                                                                fontSize: 16,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: hPi4Global.hpi4Color,
+                                                              ),
+                                                            ),
+                                                            onPressed: () {
+                                                              Navigator.of(dialogContext).pop();
+                                                            },
+                                                          ),
+                                                          TextButton(
+                                                            child: const Text(
+                                                              'Delete',
+                                                              style: TextStyle(
+                                                                fontSize: 16,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: Colors.red,
+                                                              ),
+                                                            ),
+                                                            onPressed: () async {
+                                                              Navigator.of(dialogContext).pop();
+                                                              await _deleteLogIndex(
+                                                                widget.device.remoteId.toString(),
+                                                                logHeaderList[index].logFileID,
+                                                                context,
+                                                              );
+                                                              // Refresh the list after deletion
+                                                              await _fetchLogCount(context);
+                                                              await _fetchLogIndex(context);
+                                                              setState(() {
+                                                                logHeaderList.clear();
+                                                                logIndexReceived = false;
+                                                              });
+                                                            },
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                              icon: Icon(Icons.delete_outline),
+                                              color: Colors.red[300],
                                             ),
                                           /*if (!isTransfering)
                                             IconButton(
