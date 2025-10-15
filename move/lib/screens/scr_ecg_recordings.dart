@@ -11,6 +11,26 @@ import 'package:csv/csv.dart';
 import '../globals.dart';
 import '../utils/snackbar.dart';
 
+// ECG Recording Constants
+class EcgConstants {
+  // Sample rate for ECG recordings in Hz
+  static const int samplingRateHz = 128;
+  
+  // File format constants
+  static const int fileHeaderBytes = 10;
+  static const int bytesPerSample = 4;
+  
+  // ADC conversion constants
+  static const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
+  static const double vRef = 1.0; // volts
+  static const double gain = 20.0; // amplifier gain
+  
+  // Display formatting
+  static const int sampleCountThreshold = 1000;
+  static const int estimatedMinutesBetweenSessions = 5;
+  static const int estimatedMaxSessionId = 100;
+}
+
 typedef LogHeader = ({int logFileID, int sessionLength});
 
 /// Represents a single ECG recording session
@@ -36,16 +56,18 @@ class EcgRecording {
     print('ECG Recording: Session $sessionId timestamp: ${timestamp.toIso8601String()} (year: ${timestamp.year})');
     return DateFormat('EEE d MMM yyyy h:mm a').format(timestamp);
   }
+  
   String get durationText {
-    // sessionLength is already in number of samples/points, not bytes
-    final sampleCount = sessionLength;
-    final durationSeconds = (sampleCount / 400).toInt(); // 400 Hz sample rate
+    // sessionLength is the number of data bytes (points start from beginning of file)
+    // Calculate sample count: dataBytes / bytesPerSample
+    final sampleCount = sessionLength ~/ EcgConstants.bytesPerSample;
+    final durationSeconds = (sampleCount / EcgConstants.samplingRateHz).toInt();
     return '$durationSeconds seconds • ${_formatSampleCount(sampleCount)} samples';
   }
   
   static String _formatSampleCount(int count) {
-    if (count >= 1000) {
-      return '${(count / 1000).toStringAsFixed(1)}k';
+    if (count >= EcgConstants.sampleCountThreshold) {
+      return '${(count / EcgConstants.sampleCountThreshold).toStringAsFixed(1)}k';
     }
     return count.toString();
   }
@@ -155,21 +177,22 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       print('ECG Recordings: Converting ${_logHeaderList.length} headers to recording objects...');
       
       for (final header in _logHeaderList) {
-        // Estimate timestamp from session ID (most recent = highest ID)
-        // sessionLength is in number of samples/points, not bytes
-        final sampleCount = header.sessionLength;
-        final durationSeconds = (sampleCount / 400).toInt();
+        // sessionLength is the number of data bytes (no header bytes to subtract)
+        // Calculate sample count: dataBytes / bytesPerSample
+        final sampleCount = header.sessionLength ~/ EcgConstants.bytesPerSample;
+        final durationSeconds = (sampleCount / EcgConstants.samplingRateHz).toInt();
         
         // Parse timestamp from session ID (Unix epoch in seconds)
         // IMPORTANT: Device stores timestamps as Unix epoch IN LOCAL TIME
         // We need to treat the value as if it's already in local timezone
         // So we create a UTC DateTime, then convert to local without offset adjustment
-        final timestampMs = header.logFileID * 1000;
+        const millisecondsPerSecond = 1000;
+        final timestampMs = header.logFileID * millisecondsPerSecond;
         final utcDt = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
         // Create local DateTime with same year/month/day/hour/minute/second
         final dt = DateTime(utcDt.year, utcDt.month, utcDt.day, 
                            utcDt.hour, utcDt.minute, utcDt.second);
-        print('ECG Recordings:   - Session ${header.logFileID}: $sampleCount samples = ${durationSeconds}s');
+        print('ECG Recordings:   - Session ${header.logFileID}: ${header.sessionLength} bytes = $sampleCount samples = ${durationSeconds}s');
         print('ECG Recordings:     Timestamp: ${header.logFileID}s → ${dt.toIso8601String()} (year: ${dt.year})');
         
         recordings.add(EcgRecording(
@@ -262,7 +285,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       
       if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
         final logFileID = bdata.getInt64(1, Endian.little);
-        final sessionLength = bdata.getInt32(9, Endian.little);
+        final sessionLength = bdata.getUint16(9, Endian.little); // uint16 as per device protocol
         
         print('ECG Recordings: Received index - Session ID: $logFileID, Length: $sessionLength samples');
         
@@ -469,39 +492,19 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
             _activeSubscriptions.remove(downloadSubscription);
             completer.completeError(Exception('Download cancelled'));
           } else if (event is mcumgr.OnDownloadProgressChanged) {
-            // Handle progress updates - try different possible field names
-            print('ECG Download: Progress event - inspecting fields...');
-            try {
-              final dynamic dynamicEvent = event;
-              // Try common field name variations
-              var progress = 0.0;
-              
-              // Try to get progress value (could be 0-100 or 0-1)
-              try {
-                final progressValue = dynamicEvent.progress;
-                progress = (progressValue is int && progressValue > 1) 
-                    ? progressValue / 100.0 
-                    : progressValue.toDouble();
-                print('ECG Download: Progress ${(progress * 100).toStringAsFixed(1)}%');
-              } catch (_) {
-                // Try bytesDownloaded/bytesTotal or similar
-                try {
-                  final bytes = dynamicEvent.bytesDownloaded ?? dynamicEvent.downloaded ?? 0;
-                  final total = dynamicEvent.bytesTotal ?? dynamicEvent.total ?? dynamicEvent.size ?? 1;
-                  progress = bytes / total;
-                  print('ECG Download: Progress ${(progress * 100).toStringAsFixed(1)}% ($bytes/$total bytes)');
-                } catch (_) {
-                  print('ECG Download: Could not extract progress from any known fields');
-                }
-              }
-              
-              if (progress > 0 && mounted) {
-                setState(() {
-                  recording.downloadProgress = progress;
-                });
-              }
-            } catch (e) {
-              print('ECG Download: Error extracting progress: $e');
+            // The mcumgr package's OnDownloadProgressChanged may not expose progress fields
+            // So we'll estimate progress based on time or use a simple incremental approach
+            // This is a limitation of the current mcumgr_flutter package
+            print('ECG Download: Progress event received (no accessible progress data)');
+            
+            // Simulate progress - increment by small amount each callback
+            // This at least shows activity even if not accurate
+            if (mounted) {
+              setState(() {
+                // Increment by 5% each callback, capped at 90% until completion
+                recording.downloadProgress = (recording.downloadProgress + 0.05).clamp(0.0, 0.9);
+                print('ECG Download: Estimated progress ${(recording.downloadProgress * 100).toStringAsFixed(0)}%');
+              });
             }
           }
         }
@@ -550,38 +553,36 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
   
   /// Convert ECG binary data to CSV and share
   Future<void> _exportToCsv(EcgRecording recording, List<int> binaryData) async {
-    // Remove packet type byte if present
-    int offset = (binaryData.isNotEmpty && binaryData[0] == hPi4Global.CES_CMDIF_TYPE_DATA) ? 1 : 0;
+    print('ECG Export: Binary data length: ${binaryData.length} bytes');
+    print('ECG Export: Expected session length: ${recording.sessionLength} bytes');
     
-    // Check for header (typically 10 bytes)
-    if (binaryData.length > 10 && offset == 0) {
-      offset = 10; // Skip standard header
-    } else if (offset == 1 && binaryData.length > 11) {
-      offset = 11; // Skip packet type + header
-    }
-    
-    List<int> cleanData = binaryData.sublist(offset);
+    // FsManager downloads raw files from device filesystem - no packet type byte or header
+    // Data starts immediately with ECG samples (Int32 little-endian)
+    List<int> cleanData = binaryData;
     
     final byteData = ByteData.sublistView(Uint8List.fromList(cleanData));
-    final numSamples = cleanData.length ~/ 4;
+    final numSamples = cleanData.length ~/ EcgConstants.bytesPerSample;
     
-    // Create CSV content
+    print('ECG Export: Calculated $numSamples samples');
+    
+    // Create CSV content - match archived format (ECG values only, no time column)
     final csvRows = <List<String>>[];
-    csvRows.add(['Time (ms)', 'ECG (mV)']);
-    
-    const sampleRateHz = 400; // HealthyPi Move ECG sample rate
+    csvRows.add(['ECG(mV)']); // Match archived format exactly
     
     for (int i = 0; i < numSamples; i++) {
       try {
-        final rawValue = byteData.getInt32(i * 4, Endian.little);
+        // ECG samples are Int32 in little-endian format
+        final rawValue = byteData.getInt32(i * EcgConstants.bytesPerSample, Endian.little);
         final millivolts = _convertToMillivolts(rawValue);
-        final timeMs = (i / sampleRateHz * 1000).toStringAsFixed(1);
-        csvRows.add([timeMs, millivolts.toStringAsFixed(3)]);
+        // Match archived format: 2 decimal places, no time column
+        csvRows.add([millivolts.toStringAsFixed(2)]);
       } catch (e) {
         print('Error parsing sample $i: $e');
         break;
       }
     }
+    
+    print('ECG Export: Generated ${csvRows.length - 1} CSV rows');
     
     // Convert to CSV string
     String csvContent = const ListToCsvConverter().convert(csvRows);
