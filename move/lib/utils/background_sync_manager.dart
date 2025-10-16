@@ -112,7 +112,10 @@ class BackgroundSyncManager {
 
       if (device.isDisconnected) {
         debugPrint('Background sync: Connecting to device...');
-        await device.connect(license: License.values.first);
+        await device.connect(
+          license: License.values.first,
+          timeout: const Duration(seconds: 15),
+        );
         await Future.delayed(const Duration(milliseconds: 500));
         debugPrint('Background sync: Connected successfully');
       } else {
@@ -563,6 +566,7 @@ class BackgroundSyncManager {
       cleanData,
       metricType,
       sessionID,
+      deviceMac: _currentDevice?.remoteId.str,
     );
 
     return recordCount;

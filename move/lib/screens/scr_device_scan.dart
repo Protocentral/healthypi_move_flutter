@@ -6,6 +6,7 @@ import 'package:move/utils/snackbar.dart';
 import '../globals.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
+import '../utils/database_helper.dart';
 
 /// Clean, focused screen for BLE device scanning and pairing
 /// Purpose: Scan for HealthyPi Move devices and pair them
@@ -110,6 +111,103 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
     }
   }
 
+  /// Show warning dialog when switching devices with existing data
+  Future<bool> _showDataLossWarningDialog(String existingDeviceName) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D2D),
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange, size: 28),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Replace Paired Device?',
+                style: TextStyle(color: Colors.white, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'You are about to pair a new device.',
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
+            SizedBox(height: 16),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.red, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Data Loss Warning',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'All health data from "$existingDeviceName" will be permanently deleted.',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'To keep this data, cancel and export it first from Settings > Export Data.',
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: Colors.grey[400], fontSize: 16),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(
+              'Delete & Pair New Device',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    
+    return result ?? false;
+  }
+
   /// Connect to device and either pair it or trigger callback
   Future<void> _connectToDevice(BluetoothDevice device, String deviceName) async {
     try {
@@ -166,6 +264,34 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       }
 
       // Otherwise, pair the device
+      // Check if there's already a paired device with data
+      final existingDevice = await DeviceManager.getPairedDevice();
+      bool shouldProceed = true;
+      
+      if (existingDevice != null && existingDevice.macAddress != device.remoteId.str) {
+        // Check if existing device has any synced data
+        final hasData = await DatabaseHelper.instance.hasDataForDevice(existingDevice.macAddress);
+        
+        if (hasData) {
+          // Show confirmation dialog
+          if (!mounted) return;
+          shouldProceed = await _showDataLossWarningDialog(existingDevice.displayName);
+          
+          if (shouldProceed) {
+            // Delete old device data
+            await DatabaseHelper.instance.deleteDataForDevice(existingDevice.macAddress);
+          }
+        }
+      }
+      
+      if (!shouldProceed) {
+        // User cancelled, disconnect and exit
+        await device.disconnect();
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+      
       // Create device info
       final deviceInfo = DeviceInfo(
         macAddress: device.remoteId.str,

@@ -126,7 +126,10 @@ class ScrDFUState extends State<ScrDFU> {
       _currentDevice = device;
 
       if (device.isDisconnected) {
-        await device.connect(license: License.values.first);
+        await device.connect(
+          license: License.values.first,
+          timeout: const Duration(seconds: 15),
+        );
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
