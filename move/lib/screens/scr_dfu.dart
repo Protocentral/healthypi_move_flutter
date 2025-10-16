@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -27,7 +26,9 @@ import '../utils/manifest.dart';
 import '../widgets/scan_result_tile.dart';
 
 class ScrDFU extends StatefulWidget {
-  const ScrDFU({super.key});
+  final String? deviceMacAddress;
+  
+  const ScrDFU({super.key, this.deviceMacAddress});
 
   @override
   State createState() => ScrDFUState();
@@ -77,6 +78,7 @@ class ScrDFUState extends State<ScrDFU> {
 
   @override
   void initState() {
+    super.initState();
     _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
       (results) {
         if (mounted) {
@@ -104,8 +106,99 @@ class ScrDFUState extends State<ScrDFU> {
     });
 
     requestPermissions();
-    super.initState();
+    
+    // Auto-connect to paired device if MAC address provided
+    if (widget.deviceMacAddress != null) {
+      _autoConnectToDevice();
+    }
   }
+  
+  /// Auto-connect to paired device - similar pattern to ECG recordings and background sync
+  Future<void> _autoConnectToDevice() async {
+    setState(() {
+      _isLoading = true;
+      _dispConnStatus = 'Connecting to device...';
+    });
+
+    try {
+      debugPrint('[DFU] Auto-connecting to device: ${widget.deviceMacAddress}');
+      final device = BluetoothDevice.fromId(widget.deviceMacAddress!);
+      _currentDevice = device;
+
+      if (device.isDisconnected) {
+        await device.connect(license: License.values.first);
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      final services = await device.discoverServices();
+      _services = services;
+
+      // Find firmware version characteristic (in Device Information Service 180a)
+      bool foundFirmwareChar = false;
+      for (var service in services) {
+        debugPrint('[DFU] Checking service: ${service.uuid}');
+        if (service.uuid == Guid("180a")) {
+          debugPrint('[DFU] Found Device Information Service');
+          for (var characteristic in service.characteristics) {
+            debugPrint('[DFU] Checking characteristic: ${characteristic.uuid}');
+            if (characteristic.uuid == Guid("2a26")) {
+              foundFirmwareChar = true;
+              deviceFWCharacteristic = characteristic;
+              try {
+                final fwVersion = await characteristic.read();
+                _currentFWVersion = String.fromCharCodes(fwVersion).trim();
+                debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
+              } catch (e) {
+                debugPrint('[DFU] Failed to read firmware version: $e');
+                _currentFWVersion = "Unknown";
+              }
+              break;
+            }
+          }
+        }
+      }
+      
+      if (!foundFirmwareChar) {
+        debugPrint('[DFU] Warning: Firmware version characteristic not found');
+        _currentFWVersion = "Unknown";
+      }
+
+      // Check for latest firmware version
+      _latestFWVersion = await _getLatestVersion();
+      debugPrint('[DFU] Latest firmware version: $_latestFWVersion');
+      
+      // Only compare versions if we have a valid current version
+      if (_currentFWVersion.isNotEmpty && _currentFWVersion != "Unknown") {
+        try {
+          _updateAvailable = _CompareFWVersion(_currentFWVersion, _latestFWVersion);
+        } catch (e) {
+          debugPrint('[DFU] Version comparison failed: $e');
+          _updateAvailable = "Available"; // Default to showing update available
+        }
+      } else {
+        _updateAvailable = "Available"; // Default to showing update available
+      }
+
+      if (mounted) {
+        setState(() {
+          _showUpdateCard = true;
+          _dispConnStatus = 'Connected to ${device.platformName}';
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[DFU] Auto-connect error: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to connect: $e';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   Future<void> dispose() async {
@@ -243,9 +336,46 @@ class ScrDFUState extends State<ScrDFU> {
     }
   }
 
-  void _onLoadFirmware() async {
-    Uint8List? zipFile;
-    List<mcumgr.Image>? firmwareImages;
+  void _onCheckLatestFirmware() async {
+    setState(() {
+      _checkingUpdates = true;
+    });
+    
+    try {
+      String checkfw = await downloadFile();
+      String resultfw = _CompareFWVersion(_currentFWVersion, checkfw);
+      
+      if (resultfw == "Available") {
+        setState(() {
+          _updateAvailable = "Available";
+          _isManifestLoaded = true;
+        });
+      } else {
+        setState(() {
+          _updateAvailable = "Not Available";
+        });
+      }
+    } catch (e) {
+      Snackbar.show(ABC.c, "Failed to check for updates: $e", success: false);
+    } finally {
+      setState(() {
+        _checkingUpdates = false;
+      });
+    }
+  }
+
+  void _onLoadFirmwareManual() async {
+    await _loadFirmwareFromFile();
+  }
+
+  void _onStartUpdate() async {
+    setState(() {
+      dfuInProgress = true;
+    });
+    await _startFirmwareUpdate();
+  }
+
+  Future<void> _loadFirmwareFromFile() async {
     late final destinationDir;
     late final firmwareGHFile;
 
@@ -321,14 +451,42 @@ class ScrDFUState extends State<ScrDFU> {
     if (mounted) {
       setState(() {
         _isManifestLoaded = true;
+        _updateAvailable = "Available";
       });
+    }
+  }
+
+  Future<void> _startFirmwareUpdate() async {
+    if (!_isManifestLoaded) {
+      Snackbar.show(ABC.c, "No firmware loaded", success: false);
+      return;
+    }
+
+    // Read firmware images from extracted directory
+    final systemTempDir = await path_provider.getTemporaryDirectory();
+    final tempDirs = Directory(systemTempDir.path).listSync();
+    Directory? destinationDir;
+    
+    for (var dir in tempDirs) {
+      if (dir.path.contains('firmware_') && dir is Directory) {
+        final fwDir = Directory('${dir.path}/firmware');
+        if (await fwDir.exists()) {
+          destinationDir = fwDir;
+          break;
+        }
+      }
+    }
+
+    if (destinationDir == null) {
+      Snackbar.show(ABC.c, "Firmware files not found", success: false);
+      return;
     }
 
     final updateManager = await _managerFactory.getUpdateManager(
       _currentDevice.remoteId.toString(),
     );
 
-    final updateStream = updateManager.setup();
+    updateManager.setup();
 
     _updateStateSubscription = updateManager.updateStateStream!.listen((event) {
       if (mounted) {
@@ -356,19 +514,37 @@ class ScrDFUState extends State<ScrDFU> {
     _updateManagerSubscription = updateManager.progressStream.listen((event) {
       if (mounted) {
         setState(() {
-          if (event.imageSize == _fw_manifest.files[0].size) {
-            progressPercentage1 = (event.bytesSent / event.imageSize) * 100;
-            dfuProgress = (event.bytesSent / event.imageSize);
-            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
-          } else if (event.imageSize == _fw_manifest.files[1].size) {
-            progressPercentage2 = (event.bytesSent / event.imageSize) * 100;
-            dfuProgress = (event.bytesSent / event.imageSize);
-            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
-          } else if (event.imageSize == _fw_manifest.files[2].size) {
-            progressPercentage3 = (event.bytesSent / event.imageSize) * 100;
-            dfuProgress = (event.bytesSent / event.imageSize);
-            print("DFU progress: ${event.bytesSent} / ${event.imageSize}");
-          } else {}
+          // Dynamically match progress to the correct image file based on size
+          bool matched = false;
+          
+          for (int i = 0; i < _fw_manifest.files.length; i++) {
+            if (event.imageSize == _fw_manifest.files[i].size) {
+              final progress = (event.bytesSent / event.imageSize) * 100;
+              dfuProgress = (event.bytesSent / event.imageSize);
+              
+              // Update specific progress percentage based on index
+              switch (i) {
+                case 0:
+                  progressPercentage1 = progress;
+                  break;
+                case 1:
+                  progressPercentage2 = progress;
+                  break;
+                case 2:
+                  progressPercentage3 = progress;
+                  break;
+              }
+              
+              print("DFU progress (image ${i + 1}/${_fw_manifest.files.length}): ${event.bytesSent} / ${event.imageSize} (${progress.toStringAsFixed(1)}%)");
+              matched = true;
+              break;
+            }
+          }
+          
+          if (!matched) {
+            // Update generic progress even if we don't match a specific file
+            print("DFU progress (unknown image size ${event.imageSize}): ${event.bytesSent} bytes");
+          }
         });
       }
     });
@@ -500,175 +676,6 @@ class ScrDFUState extends State<ScrDFU> {
           ),
         )
         .toList();
-  }
-
-  Widget _getFirmwareInfo() {
-    if (_isManifestLoaded == true) {
-      return Column(
-        children: [
-          Card(
-            elevation: 4,
-            shadowColor: Colors.black54,
-            color: const Color(0xFF2D2D2D),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    "Image: ${_fw_manifest.files[0].file}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Size: ${_fw_manifest.files[0].size}",
-                        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                      ),
-                      Text(
-                        "v${_fw_manifest.files[0].versionMcuboot}",
-                        style: TextStyle(
-                          color: hPi4Global.hpi4Color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: (progressPercentage1 / 100),
-                      minHeight: 8,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        hPi4Global.hpi4Color,
-                      ),
-                      backgroundColor: Colors.grey[800],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 4,
-            shadowColor: Colors.black54,
-            color: const Color(0xFF2D2D2D),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    "Image: ${_fw_manifest.files[2].file}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Size: ${_fw_manifest.files[2].size}",
-                        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                      ),
-                      Text(
-                        "v${_fw_manifest.files[2].version}",
-                        style: TextStyle(
-                          color: hPi4Global.hpi4Color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: (progressPercentage3 / 100),
-                      minHeight: 8,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        hPi4Global.hpi4Color,
-                      ),
-                      backgroundColor: Colors.grey[800],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 4,
-            shadowColor: Colors.black54,
-            color: const Color(0xFF2D2D2D),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    "Image: ${_fw_manifest.files[1].file}",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "Size: ${_fw_manifest.files[1].size}",
-                        style: TextStyle(color: Colors.grey[400], fontSize: 13),
-                      ),
-                      Text(
-                        "v${_fw_manifest.files[1].versionMcuboot}",
-                        style: TextStyle(
-                          color: hPi4Global.hpi4Color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: (progressPercentage2 / 100),
-                      minHeight: 8,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        hPi4Global.hpi4Color,
-                      ),
-                      backgroundColor: Colors.grey[800],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-    } else {
-      return Container();
-    }
   }
 
   Future<List<String>> fetchTags() async {
@@ -816,244 +823,378 @@ class ScrDFUState extends State<ScrDFU> {
     );
   }
 
-  Widget loadLatestFWAvailable() {
-    if (_updateAvailable == "Available" && _showUpdateCard == true) {
-      return Card(
-        elevation: 4,
-        shadowColor: Colors.black54,
-        color: const Color(0xFF2D2D2D),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: <Widget>[
-              Text(
-                "Firmware Package Loaded",
-                style: TextStyle(
-                  fontSize: 18,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+  Widget _buildUpdateModeSection() {
+    return Card(
+      elevation: 2,
+      color: const Color(0xFF2D2D2D),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Update Mode',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[400],
+                fontWeight: FontWeight.w500,
               ),
-              const SizedBox(height: 16),
-              _getFirmwareInfo(),
-              if (dfuProgress > 0) ...[
-                const SizedBox(height: 20),
-                Text(
-                  "Updating: ${(dfuProgress * 100).toStringAsFixed(0)}%",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: dfuProgress,
-                    minHeight: 8,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      hPi4Global.hpi4Color,
-                    ),
-                    backgroundColor: Colors.grey[800],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ] else
-                const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: hPi4Global.hpi4Color,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      elevation: 2,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    onPressed: () async {
-                      _onLoadFirmware();
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const <Widget>[
-                        Icon(Icons.upgrade, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text(
-                          'Start Update',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                    onPressed: _checkingUpdates ? null : _onCheckLatestFirmware,
+                    icon: _checkingUpdates 
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
-                        ),
-                      ],
+                        )
+                      : const Icon(Icons.cloud_download, size: 20),
+                    label: Text(
+                      _checkingUpdates ? 'Checking...' : 'Automatic',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
-              ),
-              disconnectButton(),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: hPi4Global.hpi4Color,
+                      side: BorderSide(color: hPi4Global.hpi4Color, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: _onLoadFirmwareManual,
+                    icon: const Icon(Icons.folder_open, size: 20),
+                    label: const Text(
+                      'Manual',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUpdateProgressSection() {
+    if (!_isManifestLoaded) return Container();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Text(
+          'Firmware Images',
+          style: TextStyle(
+            fontSize: 18,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
           ),
         ),
-      );
-    } else if (_updateAvailable == "Not Available" && _showUpdateCard == true) {
-      return Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Card(
-          elevation: 4,
-          shadowColor: Colors.black54,
+        const SizedBox(height: 12),
+        ..._buildImageProgressCards(),
+        const SizedBox(height: 16),
+        if (!dfuInProgress)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: hPi4Global.hpi4Color,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: 2,
+              ),
+              onPressed: _onStartUpdate,
+              icon: const Icon(Icons.upgrade, size: 24),
+              label: const Text(
+                'Start Update',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _buildImageProgressCards() {
+    final cards = <Widget>[];
+    
+    for (int i = 0; i < _fw_manifest.files.length; i++) {
+      double progress = 0.0;
+      switch (i) {
+        case 0:
+          progress = progressPercentage1;
+          break;
+        case 1:
+          progress = progressPercentage2;
+          break;
+        case 2:
+          progress = progressPercentage3;
+          break;
+      }
+      
+      final isUploading = progress > 0 && progress < 100;
+      final isComplete = progress >= 100;
+      
+      cards.add(
+        Card(
+          elevation: 2,
           color: const Color(0xFF2D2D2D),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(12.0),
             child: Column(
-              children: <Widget>[
-                Icon(
-                  Icons.check_circle_outline,
-                  size: 64,
-                  color: Colors.green[400],
-                ),
-                const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    "Your device already runs the latest firmware",
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: isComplete 
+                          ? Colors.green[700] 
+                          : isUploading 
+                            ? hPi4Global.hpi4Color.withOpacity(0.3)
+                            : Colors.grey[800],
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Center(
+                        child: isComplete
+                          ? const Icon(Icons.check, color: Colors.white, size: 18)
+                          : Text(
+                              '${i + 1}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                      ),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _fw_manifest.files[i].file,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${((_fw_manifest.files[i].size ?? 0) / 1024).toStringAsFixed(1)} KB',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isUploading)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            hPi4Global.hpi4Color,
+                          ),
+                        ),
+                      )
+                    else if (isComplete)
+                      Icon(Icons.check_circle, color: Colors.green[400], size: 20),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  "Version $_currentFWVersion",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[400],
+                if (progress > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (progress / 100).clamp(0.0, 1.0),
+                            minHeight: 6,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              hPi4Global.hpi4Color,
+                            ),
+                            backgroundColor: Colors.grey[800],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${progress.toStringAsFixed(0)}%',
+                        style: TextStyle(
+                          color: hPi4Global.hpi4Color,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                disconnectButton(),
+                ],
               ],
             ),
           ),
         ),
       );
-    } else {
-      return Container();
+      
+      if (i < _fw_manifest.files.length - 1) {
+        cards.add(const SizedBox(height: 8));
+      }
     }
+    
+    return cards;
+  }
+
+  Widget _buildUpToDateSection() {
+    return Card(
+      elevation: 2,
+      color: const Color(0xFF2D2D2D),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            Icon(
+              Icons.check_circle_outline,
+              size: 48,
+              color: Colors.green[400],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              "Firmware Up to Date",
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Version $_currentFWVersion",
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[400],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDeviceCard() {
     if (_showUpdateCard == true) {
-      return Card(
-        elevation: 4,
-        shadowColor: Colors.black54,
-        color: const Color(0xFF2D2D2D),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                _dispConnStatus,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                "Firmware version: $_currentFWVersion",
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey[400],
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                "Latest version: $_latestFWVersion",
-                style: TextStyle(
-                  fontSize: 15,
-                  color: Colors.grey[400],
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: hPi4Global.hpi4Color,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 2,
-                  ),
-                  onPressed: () async {
-                    String checkfw = await downloadFile();
-                    String resultfw = _CompareFWVersion(
-                      _currentFWVersion,
-                      checkfw,
-                    );
-                    print("...........availble" + resultfw);
-                    if (resultfw == "Available") {
-                      setState(() {
-                        _updateAvailable = "Available";
-                      });
-                    } else {
-                      setState(() {
-                        _updateAvailable = "Not Available";
-                      });
-                    }
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Icon(Icons.check, color: Colors.white),
-                        const Text(
-                          ' Check Latest Firmware ',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Device Info Card
+          Card(
+            elevation: 2,
+            color: const Color(0xFF2D2D2D),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.devices,
+                        color: hPi4Global.hpi4Color,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _dispConnStatus,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Current: v$_currentFWVersion",
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ],
                         ),
-                        Spacer(),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-              ),
-              loadLatestFWAvailable(),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 16),
+          
+          // Update Mode Section
+          _buildUpdateModeSection(),
+          
+          // Show "Up to Date" message if firmware is current
+          if (_updateAvailable == "Not Available")
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: _buildUpToDateSection(),
+            ),
+          
+          // Show update progress section if firmware is loaded
+          if (_isManifestLoaded && _updateAvailable == "Available")
+            _buildUpdateProgressSection(),
+            
+          // Disconnect Button
+          const SizedBox(height: 16),
+          disconnectButton(),
+        ],
       );
-    } else
+    } else {
       return Container();
+    }
   }
 
   @override
@@ -1066,12 +1207,10 @@ class ScrDFUState extends State<ScrDFU> {
           elevation: 0,
           backgroundColor: hPi4Global.hpi4AppBarColor,
           leading: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              onDisconnectPressed();
-              Navigator.of(
-                context,
-              ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () async {
+              await onDisconnectPressed();
+              Navigator.of(context).pop();
             },
           ),
           title: Row(
@@ -1095,39 +1234,118 @@ class ScrDFUState extends State<ScrDFU> {
           ),
           centerTitle: true,
         ),
-        body: RefreshIndicator(
-          onRefresh: onRefresh,
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: <Widget>[
-              if (!_showUpdateCard) ...[
-                const Text(
-                  'Select Your Device',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
+        body: _buildBody(),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    // Show loading state
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _dispConnStatus,
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[400],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show error state
+    if (_errorMessage != null && !_showUpdateCard) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red[400],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Choose a device to update its firmware',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  textAlign: TextAlign.center,
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
                 ),
-                const SizedBox(height: 24),
-                buildScanButton(context),
-                const SizedBox(height: 20),
-              ],
-              ..._buildScanResultTiles(context),
-              _buildDeviceCard(),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Go Back'),
+              ),
             ],
           ),
         ),
+      );
+    }
+
+    // Show device connected state
+    if (_showUpdateCard) {
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            _buildDeviceCard(),
+          ],
+        ),
+      );
+    }
+
+    // Show scan screen (fallback if no paired device)
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: <Widget>[
+          // Header
+          Text(
+            'Connect to Device',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Scan for your HealthyPi Move device to update firmware',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          buildScanButton(context),
+          const SizedBox(height: 20),
+          ..._buildScanResultTiles(context),
+        ],
       ),
     );
   }
