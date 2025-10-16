@@ -326,10 +326,26 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     icon: Icons.system_update,
                     label: 'Update Firmware',
                     color: hPi4Global.hpi4Color,
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => ScrDFU()),
+                    onPressed: () async {
+                      // Get paired device info
+                      final deviceInfo = await DeviceManager.getPairedDevice();
+                      if (deviceInfo == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('No device paired. Please pair a device first.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      // Navigate to DFU screen with device MAC (auto-connect)
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ScrDFU(
+                            deviceMacAddress: deviceInfo.macAddress,
+                          ),
+                        ),
                       );
                     },
                   ),
