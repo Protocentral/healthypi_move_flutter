@@ -91,10 +91,11 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
         return;
       }
 
-      // Start scanning
+      // Start scanning with name filter for HealthyPi Move devices
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 15),
         androidUsesFineLocation: true,
+        withNames: ['healthypi move'],
       );
     } catch (e) {
       Snackbar.show(ABC.c, prettyException("Start Scan Error:", e), success: false);
@@ -118,7 +119,28 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
         context: context,
         barrierDismissible: false,
         builder: (context) => const Center(
-          child: CircularProgressIndicator(),
+          child: Card(
+            color: Color(0xFF2D2D2D),
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    'Connecting...',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
 
@@ -188,20 +210,37 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: hPi4Global.appBackgroundColor,
       appBar: AppBar(
-        title: const Text('Scan & Pair Device'),
         backgroundColor: hPi4Global.hpi4AppBarColor,
-        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Row(
+          children: [
+            Image.asset(
+              'assets/healthypi_move.png',
+              height: 30,
+              fit: BoxFit.fitWidth,
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Scan & Pair',
+              style: TextStyle(color: Colors.white, fontSize: 20),
+            ),
+          ],
+        ),
         actions: [
           if (_isScanning)
             IconButton(
-              icon: const Icon(Icons.stop),
+              icon: const Icon(Icons.stop, color: Colors.white),
               onPressed: _stopScan,
               tooltip: 'Stop Scan',
             )
           else
             IconButton(
-              icon: const Icon(Icons.refresh),
+              icon: const Icon(Icons.refresh, color: Colors.white),
               onPressed: _startScan,
               tooltip: 'Start Scan',
             ),
@@ -212,22 +251,28 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
           // Status banner
           if (_adapterState != BluetoothAdapterState.on)
             Container(
-              color: Colors.red,
+              color: Colors.red[700],
               width: double.infinity,
               padding: const EdgeInsets.all(16),
-              child: const Text(
-                'Bluetooth is not enabled. Please enable Bluetooth.',
-                style: TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  Icon(Icons.bluetooth_disabled, color: Colors.white, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Bluetooth is not enabled. Please enable Bluetooth.',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ],
               ),
             ),
           
           // Scanning indicator
           if (_isScanning)
             Container(
-              color: hPi4Global.hpi4Color.withAlpha(26), // 10% opacity
+              color: const Color(0xFF2D2D2D),
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -236,11 +281,14 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                     height: 16,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text('Scanning for devices...'),
+                  const Text(
+                    'Scanning for devices...',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
                 ],
               ),
             ),
@@ -249,40 +297,71 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
           Expanded(
             child: _scanResults.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.bluetooth_searching,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _isScanning
-                              ? 'Searching for devices...'
-                              : 'No devices found',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey[600],
+                    child: Padding(
+                      padding: const EdgeInsets.all(32.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.bluetooth_searching,
+                            size: 80,
+                            color: Colors.grey[700],
                           ),
-                        ),
-                        if (!_isScanning) ...[
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            onPressed: _startScan,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Start Scan'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: hPi4Global.hpi4Color,
-                              foregroundColor: Colors.white,
+                          const SizedBox(height: 24),
+                          Text(
+                            _isScanning
+                                ? 'Searching for HealthyPi Move devices...'
+                                : 'No devices found',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
                             ),
+                            textAlign: TextAlign.center,
                           ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Make sure your device is powered on and nearby',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          if (!_isScanning) ...[
+                            const SizedBox(height: 32),
+                            ElevatedButton(
+                              onPressed: _startScan,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: hPi4Global.hpi4Color,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 16,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.refresh, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Start Scan',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   )
                 : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: _scanResults.length,
                     itemBuilder: (context, index) {
                       final result = _scanResults[index];
@@ -328,67 +407,115 @@ class _DeviceListTile extends StatelessWidget {
     }
 
     // Signal strength indicator
-    Widget signalStrength;
+    IconData signalIcon;
     Color signalColor;
     if (rssi >= -60) {
-      signalStrength = const Icon(Icons.signal_cellular_alt, color: Colors.green);
+      signalIcon = Icons.signal_cellular_alt;
       signalColor = Colors.green;
     } else if (rssi >= -80) {
-      signalStrength = const Icon(Icons.signal_cellular_alt_2_bar, color: Colors.orange);
+      signalIcon = Icons.signal_cellular_alt_2_bar;
       signalColor = Colors.orange;
     } else {
-      signalStrength = const Icon(Icons.signal_cellular_alt_1_bar, color: Colors.red);
+      signalIcon = Icons.signal_cellular_alt_1_bar;
       signalColor = Colors.red;
     }
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      elevation: 2,
-      child: ListTile(
-        leading: Icon(
-          Icons.bluetooth,
-          color: hPi4Global.hpi4Color,
-          size: 36,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: Card(
+        elevation: 4,
+        shadowColor: Colors.black54,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
-        title: Text(
-          displayName,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              'MAC: ${device.remoteId.str}',
-              style: const TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 2),
-            Row(
-              children: [
-                signalStrength,
-                const SizedBox(width: 4),
-                Text(
-                  '$rssi dBm',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: signalColor,
+        color: const Color(0xFF2D2D2D),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Device icon
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: hPi4Global.hpi4Color.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.bluetooth,
+                  color: hPi4Global.hpi4Color,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Device info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      device.remoteId.str,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          signalIcon,
+                          size: 16,
+                          color: signalColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$rssi dBm',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: signalColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Pair button
+              ElevatedButton(
+                onPressed: onTap,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hPi4Global.hpi4Color,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
-        trailing: ElevatedButton(
-          onPressed: onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: hPi4Global.hpi4Color,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text(
+                  'Pair',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: const Text('Pair'),
         ),
       ),
     );
