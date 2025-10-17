@@ -224,7 +224,7 @@ class DatabaseHelper {
         }
         
         if (i < 3 || i == recordCount - 1) {
-          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)}), '
+          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false)}), '
                 'max=$valueMax, min=$valueMin, avg=$valueAvg, latest=$valueLatest');
         }
         
@@ -303,14 +303,16 @@ class DatabaseHelper {
     // If no device specified, get current paired device
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // DON'T convert to UTC - device timestamps are in local time
+    // Timestamps in DB are in LOCAL time (device records local time).
+    // Create range for the requested local day.
+    // DateTime(day.year, day.month, day.day) creates local midnight
     int dayStart = DateTime(day.year, day.month, day.day)
         .millisecondsSinceEpoch ~/ 1000;
     int dayEnd = dayStart + 86400;
     
     print('DatabaseHelper.getHourlyTrends: trendType=$trendType, day=$day, device=$effectiveMac');
     print('  Query range: $dayStart to $dayEnd');
-    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000)}');
+    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000, isUtc: false)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000, isUtc: false)}');
     
     // First, let's see what data exists for this trend type
     final allData = await db.query(
@@ -322,7 +324,7 @@ class DatabaseHelper {
     );
     print('  All data for $trendType (last 10 records):');
     for (var row in allData) {
-      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000)}), '
+      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000, isUtc: false)}), '
             'Max: ${row['value_max']}, Min: ${row['value_min']}, Avg: ${row['value_avg']}');
     }
     
@@ -341,7 +343,7 @@ class DatabaseHelper {
     
     print('  Found ${results.length} hourly groups');
     for (var row in results) {
-      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000)}, '
+      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000, isUtc: false)}, '
             'Max: ${row['max_value']}, Min: ${row['min_value']}, Avg: ${row['avg_value']}, Points: ${row['data_points']}');
     }
     
@@ -357,7 +359,7 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // DON'T convert to UTC - device timestamps are in local time
+    // Timestamps in DB are in LOCAL time (device records local time).
     int weekStart = DateTime(startDate.year, startDate.month, startDate.day)
         .millisecondsSinceEpoch ~/ 1000;
     int weekEnd = weekStart + (7 * 86400);
@@ -386,7 +388,7 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // DON'T convert to UTC - device timestamps are in local time
+    // Timestamps in DB are in LOCAL time (device records local time).
     int monthStart = DateTime(year, month, 1)
         .millisecondsSinceEpoch ~/ 1000;
     int monthEnd = DateTime(year, month + 1, 1)
@@ -409,9 +411,9 @@ class DatabaseHelper {
   /// Clean up old data (older than specified retention days)
   Future<int> cleanupOldData({int retentionDays = 30}) async {
     final db = await database;
+    // Timestamps in DB are local time, so use local time for cutoff
     int cutoffTime = DateTime.now()
         .subtract(Duration(days: retentionDays))
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     
     int deleted = await db.delete(
@@ -636,8 +638,7 @@ class DatabaseHelper {
     final effectiveMac = await _getCurrentDeviceMac();
 
     // Calculate today's date range (midnight to midnight in local timezone)
-    // Timestamps in DB are Unix timestamps in UTC, but we compare against
-    // local midnight converted to UTC for "today's data"
+    // Timestamps in DB are in LOCAL time (device records local time)
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(Duration(days: 1));

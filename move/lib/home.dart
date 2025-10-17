@@ -202,9 +202,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getVitalTimestamp(String type) {
     if (_vitals == null || _vitals![type] == null) return '--';
     final timestamp = _vitals![type]!['timestamp'] as int;
-    // Timestamps from device are Unix timestamps in UTC (since we sync UTC time to device)
-    // fromMillisecondsSinceEpoch interprets as UTC by default, then converts to local for display
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    // Timestamps from device are in local time - treat them as local timestamps
+    // Use isUtc: false to interpret the timestamp as local time
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false);
     return getRelativeTime(date);
   }
 

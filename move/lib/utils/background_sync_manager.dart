@@ -416,12 +416,12 @@ class BackgroundSyncManager {
   }
 
   Future<void> _sendCurrentDateTime(BluetoothDevice device) async {
-    // IMPORTANT: Device interprets datetime components as UTC, so we send UTC time
-    // This ensures Unix timestamps recorded by device match actual UTC time
-    final dt = DateTime.now().toUtc();
+    // Send LOCAL time to device - device stores timestamps as-is in local time
+    // This ensures timestamps remain consistent with the timezone they were recorded in
+    final dt = DateTime.now();
     final cdate = DateFormat("yy").format(dt);
     
-    debugPrint('Syncing device time: ${dt.toString()} UTC (local: ${DateTime.now()})');
+    debugPrint('Syncing device time: ${dt.toString()} (local time)');
     
     List<int> commandDateTimePacket = [];
     ByteData sessionParametersLength = ByteData(8);
@@ -446,10 +446,11 @@ class BackgroundSyncManager {
   }
 
   /// Check if a session is from today
-  /// Session ID (logFileID) is a UNIX timestamp in seconds
+  /// Session ID (logFileID) is a UNIX timestamp in seconds (in local time)
   bool _isToday(LogHeader header) {
     final now = DateTime.now();
-    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID * 1000);
+    // Interpret session timestamp as local time
+    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID * 1000, isUtc: false);
     
     return now.year == headerDate.year &&
            now.month == headerDate.month &&

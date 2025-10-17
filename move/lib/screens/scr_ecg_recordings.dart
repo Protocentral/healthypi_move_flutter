@@ -183,15 +183,10 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         final durationSeconds = (sampleCount / EcgConstants.samplingRateHz).toInt();
         
         // Parse timestamp from session ID (Unix epoch in seconds)
-        // IMPORTANT: Device stores timestamps as Unix epoch IN LOCAL TIME
-        // We need to treat the value as if it's already in local timezone
-        // So we create a UTC DateTime, then convert to local without offset adjustment
+        // Device stores timestamps in LOCAL time, so interpret as local
         const millisecondsPerSecond = 1000;
         final timestampMs = header.logFileID * millisecondsPerSecond;
-        final utcDt = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
-        // Create local DateTime with same year/month/day/hour/minute/second
-        final dt = DateTime(utcDt.year, utcDt.month, utcDt.day, 
-                           utcDt.hour, utcDt.minute, utcDt.second);
+        final dt = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: false);
         print('ECG Recordings:   - Session ${header.logFileID}: ${header.sessionLength} bytes = $sampleCount samples = ${durationSeconds}s');
         print('ECG Recordings:     Timestamp: ${header.logFileID}s → ${dt.toIso8601String()} (year: ${dt.year})');
         
