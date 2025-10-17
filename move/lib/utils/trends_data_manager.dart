@@ -18,7 +18,7 @@ class TrendsDataManager {
     
     return results.map((row) {
       return HourlyTrend(
-        hour: DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000),
+        hour: DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000, isUtc: false),
         min: (row['min_value'] as num).toDouble(),
         max: (row['max_value'] as num).toDouble(),
         avg: (row['avg_value'] as num).toDouble(),
@@ -37,7 +37,7 @@ class TrendsDataManager {
     
     return results.map((row) {
       return WeeklyTrend(
-        date: DateTime.fromMillisecondsSinceEpoch((row['day_start'] as int) * 1000),
+        date: DateTime.fromMillisecondsSinceEpoch((row['day_start'] as int) * 1000, isUtc: false),
         min: (row['min_value'] as num).toDouble(),
         max: (row['max_value'] as num).toDouble(),
         avg: (row['avg_value'] as num).toDouble(),
@@ -53,7 +53,7 @@ class TrendsDataManager {
     
     return results.map((row) {
       return MonthlyTrend(
-        date: DateTime.fromMillisecondsSinceEpoch((row['day_start'] as int) * 1000),
+        date: DateTime.fromMillisecondsSinceEpoch((row['day_start'] as int) * 1000, isUtc: false),
         min: (row['min_value'] as num).toDouble(),
         max: (row['max_value'] as num).toDouble(),
         avg: (row['avg_value'] as num).toDouble(),

@@ -5,6 +5,7 @@ import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:intl/intl.dart';
 import '../globals.dart';
 import 'database_helper.dart';
+import 'update_checker.dart';
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
@@ -112,7 +113,10 @@ class BackgroundSyncManager {
 
       if (device.isDisconnected) {
         debugPrint('Background sync: Connecting to device...');
-        await device.connect(license: License.values.first);
+        await device.connect(
+          license: License.values.first,
+          timeout: const Duration(seconds: 15),
+        );
         await Future.delayed(const Duration(milliseconds: 500));
         debugPrint('Background sync: Connected successfully');
       } else {
@@ -139,6 +143,21 @@ class BackgroundSyncManager {
         throw Exception('Required BLE characteristics not found');
       }
 
+      // Step 1.5: Check firmware version before syncing
+      _emitProgress('all', 0.02, SyncState.connecting, 'Checking firmware version...');
+      onStatus('Checking firmware version...');
+
+      final firmwareVersion = await _readFirmwareVersion(services);
+      debugPrint('Background sync: Firmware version: $firmwareVersion');
+
+      if (!_isFirmwareVersionSupported(firmwareVersion)) {
+        throw Exception(
+          'Firmware version $firmwareVersion is not supported. '
+          'Please update to version 1.9.0 or higher. '
+          'Go to Device > Update Firmware to update.'
+        );
+      }
+
       // ============================================================================
       // MCU Manager Strategy: Create ONCE at start, dispose before disconnect
       // ============================================================================
@@ -147,7 +166,16 @@ class BackgroundSyncManager {
       _fsManager = mcumgr.FsManager(_currentDevice!.remoteId.toString());
       debugPrint('Background sync: MCU Manager created successfully');
       // ============================================================================
-      
+
+      // Check for firmware updates in background (non-blocking)
+      UpdateChecker.checkForUpdatesInBackground(device).then((updateAvailable) {
+        if (updateAvailable) {
+          debugPrint('Background sync: Firmware update available');
+        }
+      }).catchError((e) {
+        debugPrint('Background sync: Update check failed: $e');
+      });
+
       // Step 2: Set device time
       _emitProgress('all', 0.05, SyncState.connecting, 'Syncing device time...');
       onStatus('Syncing device time...');
@@ -260,7 +288,14 @@ class BackgroundSyncManager {
         _emitProgress(metricType, 1.0, SyncState.completed, 'Completed $metricName');
       }
 
-      // Step 5: Complete
+      // Step 5: Ensure activity shows 0 if no data for today
+      // If activity had 0 sessions, no file exists on device, so manually ensure today shows 0
+      if (sessionCounts[hPi4Global.PREFIX_ACTIVITY] == 0) {
+        debugPrint('Background sync: No activity sessions on device, ensuring today shows 0 steps');
+        await _ensureTodayActivityExists(deviceMacAddress);
+      }
+
+      // Step 6: Complete
       _emitProgress('all', 1.0, SyncState.completed, 'Sync completed');
       onStatus('Sync completed');
 
@@ -381,8 +416,12 @@ class BackgroundSyncManager {
   }
 
   Future<void> _sendCurrentDateTime(BluetoothDevice device) async {
+    // Send LOCAL time to device - device stores timestamps as-is in local time
+    // This ensures timestamps remain consistent with the timezone they were recorded in
     final dt = DateTime.now();
-    final cdate = DateFormat("yy").format(DateTime.now());
+    final cdate = DateFormat("yy").format(dt);
+    
+    debugPrint('Syncing device time: ${dt.toString()} (local time)');
     
     List<int> commandDateTimePacket = [];
     ByteData sessionParametersLength = ByteData(8);
@@ -407,14 +446,61 @@ class BackgroundSyncManager {
   }
 
   /// Check if a session is from today
-  /// Session ID (logFileID) is a UNIX timestamp in seconds
+  /// Session ID (logFileID) is a UNIX timestamp in seconds (in local time)
   bool _isToday(LogHeader header) {
     final now = DateTime.now();
-    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID * 1000);
+    // Interpret session timestamp as local time
+    final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID * 1000, isUtc: false);
     
     return now.year == headerDate.year &&
            now.month == headerDate.month &&
            now.day == headerDate.day;
+  }
+
+  /// Ensures that today's activity data exists in the database
+  /// If no activity data exists for today, inserts a record with 0 steps
+  Future<void> _ensureTodayActivityExists(String deviceMacAddress) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // Calculate today's timestamp (start of day)
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
+
+      // Check if any activity data exists for today
+      final result = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM health_trends
+        WHERE trend_type = ?
+        AND timestamp >= ?
+        AND timestamp < ?
+        AND device_mac = ?
+      ''', [
+        'activity',
+        todayStartTimestamp,
+        todayStartTimestamp + 86400, // +24 hours
+        deviceMacAddress,
+      ]);
+
+      final count = result.first['count'] as int;
+
+      if (count == 0) {
+        // No activity data for today, insert a record with 0 steps
+        debugPrint('Background sync: Inserting 0 steps record for today');
+        await db.insert('health_trends', {
+          'trend_type': 'activity',
+          'timestamp': todayStartTimestamp,
+          'value_avg': 0,
+          'value_min': 0,
+          'value_max': 0,
+          'device_mac': deviceMacAddress,
+          'session_id': 0, // Placeholder session ID
+        });
+      }
+    } catch (e) {
+      debugPrint('Error ensuring today activity exists: $e');
+    }
   }
 
   Future<int> _fetchLogCount(BluetoothDevice device, List<int> trendType) async {
@@ -563,6 +649,7 @@ class BackgroundSyncManager {
       cleanData,
       metricType,
       sessionID,
+      deviceMac: _currentDevice?.remoteId.str,
     );
 
     return recordCount;
@@ -584,6 +671,67 @@ class BackgroundSyncManager {
       sub.cancel();
     }
     _activeSubscriptions.clear();
+  }
+
+  /// Read firmware version from Device Information Service
+  Future<String> _readFirmwareVersion(List<BluetoothService> services) async {
+    try {
+      // Look for Device Information Service (0x180A)
+      for (var service in services) {
+        if (service.uuid == Guid("180a")) {
+          // Look for Firmware Revision String characteristic (0x2A26)
+          for (var characteristic in service.characteristics) {
+            if (characteristic.uuid == Guid("2a26")) {
+              final value = await characteristic.read();
+              final version = String.fromCharCodes(value).trim();
+              return version;
+            }
+          }
+        }
+      }
+
+      debugPrint('Background sync: Firmware version characteristic not found');
+      return 'unknown';
+    } catch (e) {
+      debugPrint('Background sync: Error reading firmware version: $e');
+      return 'unknown';
+    }
+  }
+
+  /// Check if firmware version is supported (>= 1.9.0)
+  bool _isFirmwareVersionSupported(String version) {
+    if (version == 'unknown') {
+      // If we can't read the version, allow sync but log warning
+      debugPrint('Background sync: WARNING - Could not verify firmware version, proceeding anyway');
+      return true;
+    }
+
+    try {
+      // Remove 'v' prefix if present
+      final cleanVersion = version.toLowerCase().startsWith('v')
+          ? version.substring(1)
+          : version;
+
+      // Parse version parts
+      final parts = cleanVersion.split('.');
+      if (parts.length < 2) {
+        debugPrint('Background sync: Invalid version format: $version');
+        return false;
+      }
+
+      final major = int.tryParse(parts[0]) ?? 0;
+      final minor = int.tryParse(parts[1]) ?? 0;
+
+      // Check if version >= 1.9.0
+      if (major > 1) return true;
+      if (major == 1 && minor >= 9) return true;
+
+      debugPrint('Background sync: Firmware version $version is below minimum 1.9.0');
+      return false;
+    } catch (e) {
+      debugPrint('Background sync: Error parsing version $version: $e');
+      return false;
+    }
   }
 
   void dispose() {

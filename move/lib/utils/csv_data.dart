@@ -26,7 +26,8 @@ class CsvDataManager<T> {
       int? ts = int.tryParse(timestampStr);
       if (ts != null) {
         // Unix timestamp detected - convert to DateTime
-        // Device stores timestamps in UTC, but we need them in local time for display
+        // NOTE: CSV export may contain UTC timestamps, so we interpret as UTC and convert to local
+        // This is different from binary data which stores local timestamps
         return DateTime.fromMillisecondsSinceEpoch(ts * 1000, isUtc: true).toLocal();
       }
       

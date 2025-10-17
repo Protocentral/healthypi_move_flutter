@@ -146,30 +146,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadDataFromDatabase() async {
     if (_isLoadingData) return; // Prevent concurrent loads
     _isLoadingData = true;
-    
+
     try {
       // Load vitals and sync time from database
+      // getLatestVitals() returns:
+      // - HR/Temp/SpO2: Latest/most recent value (last reading)
+      // - Activity: Today's cumulative total (sum of hourly maximums)
       final vitals = await DatabaseHelper.instance.getLatestVitals();
       final syncTime = await DatabaseHelper.instance.getLastSyncTime();
-      
-      // For activity, use the SAME logic as the trends screen:
-      // Get hourly trends and sum them (matches scr_activity.dart exactly)
-      if (vitals['activity'] != null) {
-        try {
-          List<HourlyTrend> hourlyTrends = await activityDataManager.getHourlyTrendForToday();
-          if (hourlyTrends.isNotEmpty) {
-            int totalDailySteps = 0;
-            for (var trend in hourlyTrends) {
-              totalDailySteps += trend.max.toInt();
-            }
-            // Update the activity value with the calculated total
-            vitals['activity']!['value'] = totalDailySteps;
-          }
-        } catch (e) {
-          print('Error calculating activity total: $e');
-        }
-      }
-      
+
       if (mounted) {
         setState(() {
           _vitals = vitals;
@@ -202,8 +187,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getVitalValue(String type) {
     if (_vitals == null || _vitals![type] == null) return '--';
     final value = _vitals![type]!['value'] as int;
-    if (value == 0) return '--';
-    
+
+    // For activity, 0 is a valid value (no steps today)
+    // For other vitals, 0 means no data
+    if (value == 0 && type != 'activity') return '--';
+
     // Temperature needs special formatting (divide by 100)
     if (type == 'temp') {
       return (value / 100).toStringAsFixed(1);
@@ -214,7 +202,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getVitalTimestamp(String type) {
     if (_vitals == null || _vitals![type] == null) return '--';
     final timestamp = _vitals![type]!['timestamp'] as int;
-    final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    // Timestamps from device are in local time - treat them as local timestamps
+    // Use isUtc: false to interpret the timestamp as local time
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false);
     return getRelativeTime(date);
   }
 
@@ -462,8 +452,20 @@ class _HomeScreenState extends State<HomeScreen> {
   String getRelativeTime(DateTime? date) {
     if (date == null) return '--';
     final now = DateTime.now();
-    final difference = now.difference(date);
+    var difference = now.difference(date);
 
+    // Small grace period for timestamps slightly in future (due to clock sync timing)
+    // Treat up to 60 seconds in future as "just now"
+    if (difference.isNegative && difference.abs().inSeconds <= 60) {
+      return 'just now';
+    }
+    
+    // If still negative after grace period, clamp to 0 (shouldn't happen with UTC sync)
+    if (difference.isNegative) {
+      debugPrint('Warning: Timestamp significantly in future: $date (now: $now)');
+      return 'just now';
+    }
+    
     if (difference.inSeconds < 60) {
       return 'just now';
     } else if (difference.inMinutes < 60) {

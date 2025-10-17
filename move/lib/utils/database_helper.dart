@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../globals.dart';
+import 'device_manager.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -21,7 +22,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 3, // Increment version for app_metadata table
+      version: 4, // Increment version for device_mac column
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -41,18 +42,20 @@ class DatabaseHelper {
         timestamp INTEGER NOT NULL,
         trend_type TEXT NOT NULL,
         session_id INTEGER NOT NULL,
+        device_mac TEXT NOT NULL,
         value_max INTEGER,
         value_min INTEGER,
         value_avg INTEGER,
         value_latest INTEGER,
         synced_at INTEGER DEFAULT (strftime('%s', 'now')),
-        UNIQUE(timestamp, trend_type)
+        UNIQUE(timestamp, trend_type, device_mac)
       )
     ''');
     
     await db.execute('CREATE INDEX idx_timestamp ON health_trends(timestamp)');
     await db.execute('CREATE INDEX idx_trend_type ON health_trends(trend_type)');
-    await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp)');
+    await db.execute('CREATE INDEX idx_device_mac ON health_trends(device_mac)');
+    await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp, device_mac)');
     
     // Table to track synced sessions (prevents re-downloading)
     await db.execute('''
@@ -118,8 +121,20 @@ class DatabaseHelper {
       ''');
       
       print('DatabaseHelper: Upgraded to version 3 - added app_metadata table');
-      
-      // Migrate lastSynced from SharedPreferences to database if it exists
+    }
+    
+    if (oldVersion < 4) {
+      // Add device_mac column for device-specific data tracking
+      await db.execute('ALTER TABLE health_trends ADD COLUMN device_mac TEXT DEFAULT "unknown"');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_device_mac ON health_trends(device_mac)');
+      // Drop and recreate composite index to include device_mac
+      await db.execute('DROP INDEX IF EXISTS idx_composite');
+      await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp, device_mac)');
+      print('DatabaseHelper: Upgraded to version 4 - added device_mac column');
+    }
+    
+    // Migrate lastSynced from SharedPreferences to database (moved outside version check)
+    if (oldVersion < 3) {
       try {
         final prefs = await SharedPreferences.getInstance();
         final lastSynced = prefs.getString('lastSynced');
@@ -143,8 +158,9 @@ class DatabaseHelper {
   Future<int> insertTrendsFromBinary(
     List<int> binaryData,
     String trendType,
-    int sessionId,
-  ) async {
+    int sessionId, {
+    String? deviceMac,
+  }) async {
     final db = await database;
     int offset = (binaryData.isNotEmpty && binaryData[0] == 0x0A) ? 1 : 0;
     int recordCount = ((binaryData.length - offset) ~/ 16);
@@ -208,7 +224,7 @@ class DatabaseHelper {
         }
         
         if (i < 3 || i == recordCount - 1) {
-          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)}), '
+          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false)}), '
                 'max=$valueMax, min=$valueMin, avg=$valueAvg, latest=$valueLatest');
         }
         
@@ -225,6 +241,7 @@ class DatabaseHelper {
               'timestamp': timestamp,
               'trend_type': trendType,
               'session_id': sessionId,
+              'device_mac': deviceMac ?? 'unknown',
               'value_max': valueMax,
               'value_min': valueMin,
               'value_avg': valueAvg,
@@ -279,29 +296,35 @@ class DatabaseHelper {
   /// Get hourly aggregated trends
   Future<List<Map<String, dynamic>>> getHourlyTrends(
     String trendType,
-    DateTime day,
-  ) async {
+    DateTime day, {
+    String? deviceMac,
+  }) async {
     final db = await database;
-    // DON'T convert to UTC - device timestamps are in local time
+    // If no device specified, get current paired device
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    
+    // Timestamps in DB are in LOCAL time (device records local time).
+    // Create range for the requested local day.
+    // DateTime(day.year, day.month, day.day) creates local midnight
     int dayStart = DateTime(day.year, day.month, day.day)
         .millisecondsSinceEpoch ~/ 1000;
     int dayEnd = dayStart + 86400;
     
-    print('DatabaseHelper.getHourlyTrends: trendType=$trendType, day=$day');
+    print('DatabaseHelper.getHourlyTrends: trendType=$trendType, day=$day, device=$effectiveMac');
     print('  Query range: $dayStart to $dayEnd');
-    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000)}');
+    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000, isUtc: false)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000, isUtc: false)}');
     
     // First, let's see what data exists for this trend type
     final allData = await db.query(
       'health_trends',
-      where: 'trend_type = ?',
-      whereArgs: [trendType],
+      where: 'trend_type = ? AND device_mac = ?',
+      whereArgs: [trendType, effectiveMac],
       orderBy: 'timestamp DESC',
       limit: 10,
     );
     print('  All data for $trendType (last 10 records):');
     for (var row in allData) {
-      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000)}), '
+      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000, isUtc: false)}), '
             'Max: ${row['value_max']}, Min: ${row['value_min']}, Avg: ${row['value_avg']}');
     }
     
@@ -313,14 +336,14 @@ class DatabaseHelper {
         AVG(value_avg) as avg_value,
         COUNT(*) as data_points
       FROM health_trends
-      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ?
+      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
       GROUP BY hour_start
       ORDER BY hour_start ASC
-    ''', [trendType, dayStart, dayEnd]);
+    ''', [trendType, dayStart, dayEnd, effectiveMac]);
     
     print('  Found ${results.length} hourly groups');
     for (var row in results) {
-      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000)}, '
+      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000, isUtc: false)}, '
             'Max: ${row['max_value']}, Min: ${row['min_value']}, Avg: ${row['avg_value']}, Points: ${row['data_points']}');
     }
     
@@ -330,10 +353,13 @@ class DatabaseHelper {
   /// Get weekly aggregated trends
   Future<List<Map<String, dynamic>>> getWeeklyTrends(
     String trendType,
-    DateTime startDate,
-  ) async {
+    DateTime startDate, {
+    String? deviceMac,
+  }) async {
     final db = await database;
-    // DON'T convert to UTC - device timestamps are in local time
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    
+    // Timestamps in DB are in LOCAL time (device records local time).
     int weekStart = DateTime(startDate.year, startDate.month, startDate.day)
         .millisecondsSinceEpoch ~/ 1000;
     int weekEnd = weekStart + (7 * 86400);
@@ -346,20 +372,23 @@ class DatabaseHelper {
         AVG(value_avg) as avg_value,
         COUNT(*) as data_points
       FROM health_trends
-      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ?
+      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
       GROUP BY day_start
       ORDER BY day_start ASC
-    ''', [trendType, weekStart, weekEnd]);
+    ''', [trendType, weekStart, weekEnd, effectiveMac]);
   }
 
   /// Get monthly aggregated trends
   Future<List<Map<String, dynamic>>> getMonthlyTrends(
     String trendType,
     int year,
-    int month,
-  ) async {
+    int month, {
+    String? deviceMac,
+  }) async {
     final db = await database;
-    // DON'T convert to UTC - device timestamps are in local time
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    
+    // Timestamps in DB are in LOCAL time (device records local time).
     int monthStart = DateTime(year, month, 1)
         .millisecondsSinceEpoch ~/ 1000;
     int monthEnd = DateTime(year, month + 1, 1)
@@ -373,18 +402,18 @@ class DatabaseHelper {
         AVG(value_avg) as avg_value,
         COUNT(*) as data_points
       FROM health_trends
-      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ?
+      WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
       GROUP BY day_start
       ORDER BY day_start ASC
-    ''', [trendType, monthStart, monthEnd]);
+    ''', [trendType, monthStart, monthEnd, effectiveMac]);
   }
 
   /// Clean up old data (older than specified retention days)
   Future<int> cleanupOldData({int retentionDays = 30}) async {
     final db = await database;
+    // Timestamps in DB are local time, so use local time for cutoff
     int cutoffTime = DateTime.now()
         .subtract(Duration(days: retentionDays))
-        .toUtc()
         .millisecondsSinceEpoch ~/ 1000;
     
     int deleted = await db.delete(
@@ -601,83 +630,152 @@ class DatabaseHelper {
   }
 
   /// Query latest vitals directly from health_trends table
-  /// Returns map with latest value and timestamp for each metric
-  /// Note: For activity/steps, returns TODAY's total (sum of value_max for all records today)
+  /// Returns map with values for each metric:
+  /// - HR, Temp, SpO2: Latest/most recent value (last reading)
+  /// - Activity: Today's cumulative total (sum of hourly maximums)
   Future<Map<String, Map<String, dynamic>?>> getLatestVitals() async {
     final db = await database;
-    
-    // Calculate today's date range (midnight to midnight)
+    final effectiveMac = await _getCurrentDeviceMac();
+
+    // Calculate today's date range (midnight to midnight in local timezone)
+    // Timestamps in DB are in LOCAL time (device records local time)
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(Duration(days: 1));
     final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
     final todayEndTimestamp = todayEnd.millisecondsSinceEpoch ~/ 1000;
-    
+
     final results = await Future.wait([
+      // HR: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
-        WHERE trend_type = ? 
-        ORDER BY timestamp DESC 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
+        WHERE trend_type = ? AND device_mac = ?
+        ORDER BY timestamp DESC
         LIMIT 1
-      ''', ['hr']),
-      
+      ''', ['hr', effectiveMac]),
+
+      // Temp: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
-        WHERE trend_type = ? 
-        ORDER BY timestamp DESC 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
+        WHERE trend_type = ? AND device_mac = ?
+        ORDER BY timestamp DESC
         LIMIT 1
-      ''', ['temp']),
-      
+      ''', ['temp', effectiveMac]),
+
+      // SpO2: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
-        WHERE trend_type = ? 
-        ORDER BY timestamp DESC 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
+        WHERE trend_type = ? AND device_mac = ?
+        ORDER BY timestamp DESC
         LIMIT 1
-      ''', ['spo2']),
+      ''', ['spo2', effectiveMac]),
       
       // For activity: sum the MAX(value_max) per hour for today (matches trends screen logic)
       // This uses the same aggregation as getHourlyTrends: MAX(value_max) per hour, then SUM
+      // With proper UTC time sync, timestamps accurately reflect recording time
       db.rawQuery('''
         SELECT SUM(hourly_max) as value, MAX(hour_start) as timestamp
         FROM (
-          SELECT 
+          SELECT
             (timestamp / 3600) * 3600 as hour_start,
             MAX(value_max) as hourly_max
           FROM health_trends
-          WHERE trend_type = ? 
-          AND timestamp >= ? 
+          WHERE trend_type = ?
+          AND timestamp >= ?
           AND timestamp < ?
+          AND device_mac = ?
           GROUP BY hour_start
         )
-      ''', ['activity', todayStartTimestamp, todayEndTimestamp]),
+      ''', ['activity', todayStartTimestamp, todayEndTimestamp, effectiveMac]),
     ]);
-    
+
     return {
-      'hr': results[0].isNotEmpty ? {
+      'hr': results[0].isNotEmpty && results[0][0]['value'] != null ? {
         'value': results[0][0]['value'] as int,
         'timestamp': results[0][0]['timestamp'] as int,
       } : null,
-      'temp': results[1].isNotEmpty ? {
+      'temp': results[1].isNotEmpty && results[1][0]['value'] != null ? {
         'value': results[1][0]['value'] as int,
         'timestamp': results[1][0]['timestamp'] as int,
       } : null,
-      'spo2': results[2].isNotEmpty ? {
+      'spo2': results[2].isNotEmpty && results[2][0]['value'] != null ? {
         'value': results[2][0]['value'] as int,
         'timestamp': results[2][0]['timestamp'] as int,
       } : null,
-      'activity': results[3].isNotEmpty && results[3][0]['value'] != null ? {
-        'value': results[3][0]['value'] as int,
-        'timestamp': results[3][0]['timestamp'] as int,
-      } : null,
+      // Activity: Always return a value (0 if no data for today)
+      // This matches health app behavior where 0 steps = valid state
+      'activity': {
+        'value': results[3].isNotEmpty && results[3][0]['value'] != null
+            ? results[3][0]['value'] as int
+            : 0,  // Default to 0 steps if no data for today
+        'timestamp': results[3].isNotEmpty && results[3][0]['timestamp'] != null
+            ? results[3][0]['timestamp'] as int
+            : todayStartTimestamp,  // Use today's start as timestamp
+      },
     };
   }
 
   // ============================================================================
   // Helper Methods
   // ============================================================================
+
+  /// Get current paired device MAC address (for filtering queries)
+  Future<String> _getCurrentDeviceMac() async {
+    final deviceInfo = await DeviceManager.getPairedDevice();
+    return deviceInfo?.macAddress ?? 'unknown';
+  }
+
+  /// Check if a device has any synced data
+  Future<bool> hasDataForDevice(String deviceMac) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM health_trends WHERE device_mac = ?',
+      [deviceMac],
+    );
+    final count = result.first['count'] as int;
+    return count > 0;
+  }
+
+  /// Get record count for a specific device
+  Future<int> getRecordCountForDevice(String deviceMac) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM health_trends WHERE device_mac = ?',
+      [deviceMac],
+    );
+    return result.first['count'] as int;
+  }
+
+  /// Get all unique device MACs in the database
+  Future<List<String>> getAllDeviceMacs() async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT DISTINCT device_mac FROM health_trends WHERE device_mac != "unknown" ORDER BY device_mac',
+    );
+    return result.map((row) => row['device_mac'] as String).toList();
+  }
+
+  /// Delete all data for a specific device
+  Future<int> deleteDataForDevice(String deviceMac) async {
+    final db = await database;
+    
+    // Delete from health_trends
+    final trendsDeleted = await db.delete(
+      'health_trends',
+      where: 'device_mac = ?',
+      whereArgs: [deviceMac],
+    );
+    
+    // Delete from synced_sessions (session_id is not device-specific but we should clear to allow re-sync)
+    // Note: This is conservative - we delete all synced session history when switching devices
+    await db.delete('synced_sessions');
+    
+    print('DatabaseHelper: Deleted $trendsDeleted records for device $deviceMac');
+    return trendsDeleted;
+  }
 
   /// Helper: Read 64-bit little-endian integer
   int _readInt64LE(List<int> bytes, int offset) {

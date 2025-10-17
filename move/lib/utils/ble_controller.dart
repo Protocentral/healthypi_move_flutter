@@ -16,14 +16,13 @@ class BLEController {
       String selectedOption,) async {
     List<int> commandDateTimePacket = [];
 
+    // Send LOCAL time to device - device stores timestamps as-is in local time
+    // This ensures timestamps remain consistent with the timezone they were recorded in
     var dt = DateTime.now();
-    String cdate = DateFormat("yy").format(DateTime.now());
-    print(cdate);
-    print(dt.month);
-    print(dt.day);
-    print(dt.hour);
-    print(dt.minute);
-    print(dt.second);
+    String cdate = DateFormat("yy").format(dt);
+    print('Syncing device time: ${dt.toString()} (local time)');
+    print('Year: $cdate, Month: ${dt.month}, Day: ${dt.day}');
+    print('Hour: ${dt.hour}, Minute: ${dt.minute}, Second: ${dt.second}');
 
     ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);

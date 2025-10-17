@@ -18,6 +18,7 @@ import 'package:sqflite/sqflite.dart';
 import '../utils/trends_data_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/update_checker.dart';
 import '../widgets/export_dialogs.dart';
 
 class ScrSettings extends StatefulWidget {
@@ -28,9 +29,30 @@ class ScrSettings extends StatefulWidget {
 }
 
 class _ScrSettingsState extends State<ScrSettings> {
+  bool _autoCheckUpdates = true;
+
   @override
   void initState() {
     super.initState();
+    _loadAutoCheckSetting();
+  }
+
+  Future<void> _loadAutoCheckSetting() async {
+    final enabled = await UpdateChecker.isAutoCheckEnabled();
+    if (mounted) {
+      setState(() {
+        _autoCheckUpdates = enabled;
+      });
+    }
+  }
+
+  Future<void> _toggleAutoCheck(bool value) async {
+    await UpdateChecker.setAutoCheckEnabled(value);
+    if (mounted) {
+      setState(() {
+        _autoCheckUpdates = value;
+      });
+    }
   }
 
   void logConsole(String logString) async {
@@ -646,6 +668,114 @@ class _ScrSettingsState extends State<ScrSettings> {
                           ),
                         ],
                       ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Firmware Update Settings Section
+          Card(
+            elevation: 4,
+            shadowColor: Colors.black54,
+            color: const Color(0xFF2D2D2D),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Firmware Updates',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Auto-check toggle
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[850],
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.grey[800]!, width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.autorenew,
+                          color: hPi4Global.hpi4Color,
+                          size: 24,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Auto-Check for Updates',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Automatically check for firmware updates when syncing',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Switch(
+                          value: _autoCheckUpdates,
+                          onChanged: _toggleAutoCheck,
+                          activeColor: hPi4Global.hpi4Color,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Info text
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[900]!.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Colors.blue[700]!.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.blue[300],
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'When enabled, the app checks GitHub for new firmware once per day during device sync.',
+                            style: TextStyle(
+                              color: Colors.blue[100],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
