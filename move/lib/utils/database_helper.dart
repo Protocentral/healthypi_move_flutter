@@ -628,41 +628,45 @@ class DatabaseHelper {
   }
 
   /// Query latest vitals directly from health_trends table
-  /// Returns map with latest value and timestamp for each metric
-  /// Note: For activity/steps, returns TODAY's total (sum of value_max for all records today)
+  /// Returns map with values for each metric:
+  /// - HR, Temp, SpO2: Latest/most recent value (last reading)
+  /// - Activity: Today's cumulative total (sum of hourly maximums)
   Future<Map<String, Map<String, dynamic>?>> getLatestVitals() async {
     final db = await database;
     final effectiveMac = await _getCurrentDeviceMac();
-    
+
     // Calculate today's date range (midnight to midnight)
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(Duration(days: 1));
     final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
     final todayEndTimestamp = todayEnd.millisecondsSinceEpoch ~/ 1000;
-    
+
     final results = await Future.wait([
+      // HR: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
         WHERE trend_type = ? AND device_mac = ?
-        ORDER BY timestamp DESC 
+        ORDER BY timestamp DESC
         LIMIT 1
       ''', ['hr', effectiveMac]),
-      
+
+      // Temp: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
         WHERE trend_type = ? AND device_mac = ?
-        ORDER BY timestamp DESC 
+        ORDER BY timestamp DESC
         LIMIT 1
       ''', ['temp', effectiveMac]),
-      
+
+      // SpO2: Latest/most recent value
       db.rawQuery('''
-        SELECT value_avg as value, timestamp 
-        FROM health_trends 
+        SELECT value_avg as value, timestamp
+        FROM health_trends
         WHERE trend_type = ? AND device_mac = ?
-        ORDER BY timestamp DESC 
+        ORDER BY timestamp DESC
         LIMIT 1
       ''', ['spo2', effectiveMac]),
       
@@ -685,15 +689,15 @@ class DatabaseHelper {
     ]);
     
     return {
-      'hr': results[0].isNotEmpty ? {
+      'hr': results[0].isNotEmpty && results[0][0]['value'] != null ? {
         'value': results[0][0]['value'] as int,
         'timestamp': results[0][0]['timestamp'] as int,
       } : null,
-      'temp': results[1].isNotEmpty ? {
+      'temp': results[1].isNotEmpty && results[1][0]['value'] != null ? {
         'value': results[1][0]['value'] as int,
         'timestamp': results[1][0]['timestamp'] as int,
       } : null,
-      'spo2': results[2].isNotEmpty ? {
+      'spo2': results[2].isNotEmpty && results[2][0]['value'] != null ? {
         'value': results[2][0]['value'] as int,
         'timestamp': results[2][0]['timestamp'] as int,
       } : null,

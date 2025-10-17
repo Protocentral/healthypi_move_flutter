@@ -5,11 +5,12 @@ import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_device_scan.dart';
 import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/screens/scr_ecg_recordings.dart';
-import 'package:move/screens/scr_dfu.dart';
+import 'package:move/screens/scr_dfu_new.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
+import '../utils/update_checker.dart';
 import 'scr_device_settings.dart';
 import '../home.dart';
 
@@ -202,7 +203,6 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                       
                       if (deviceInfo == null) {
                         return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Container(
                               padding: const EdgeInsets.all(16),
@@ -235,26 +235,43 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ScrDeviceScan(pairOnly: true),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: hPi4Global.hpi4Color,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: hPi4Global.hpi4Color,
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  elevation: 3,
                                 ),
-                              ),
-                              icon: Icon(Icons.bluetooth_searching, size: 22),
-                              label: Text(
-                                'Pair Device',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                onPressed: () async {
+                                  // Navigate to scan screen for pairing
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const ScrDeviceScan(
+                                        pairOnly: true,
+                                        // Don't pass onDeviceConnected - we want pairing, not connection
+                                      ),
+                                    ),
+                                  );
+
+                                  // When user returns, trigger rebuild to show new paired device
+                                  if (mounted) {
+                                    setState(() {});
+                                  }
+                                },
+                                icon: const Icon(Icons.bluetooth_searching, size: 22),
+                                label: const Text(
+                                  'Pair Device',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -349,31 +366,81 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   ),
                   const SizedBox(height: 16),
                   
-                  // Update Firmware
-                  _buildActionButton(
-                    icon: Icons.system_update,
-                    label: 'Update Firmware',
-                    color: hPi4Global.hpi4Color,
-                    onPressed: () async {
-                      // Get paired device info
-                      final deviceInfo = await DeviceManager.getPairedDevice();
-                      if (deviceInfo == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('No device paired. Please pair a device first.'),
-                            backgroundColor: Colors.red,
+                  // Update Firmware (with badge if update available)
+                  FutureBuilder<bool>(
+                    future: UpdateChecker.getCachedUpdateStatus(),
+                    builder: (context, snapshot) {
+                      final updateAvailable = snapshot.data ?? false;
+
+                      return Stack(
+                        children: [
+                          _buildActionButton(
+                            icon: Icons.system_update,
+                            label: 'Update Firmware',
+                            color: hPi4Global.hpi4Color,
+                            onPressed: () async {
+                              // Get paired device info
+                              final deviceInfo = await DeviceManager.getPairedDevice();
+                              if (deviceInfo == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('No device paired. Please pair a device first.'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              // Navigate to new DFU screen with device MAC (auto-connect)
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => ScrDFUNew(
+                                    deviceMacAddress: deviceInfo.macAddress,
+                                  ),
+                                ),
+                              );
+                            },
                           ),
-                        );
-                        return;
-                      }
-                      
-                      // Navigate to DFU screen with device MAC (auto-connect)
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => ScrDFU(
-                            deviceMacAddress: deviceInfo.macAddress,
-                          ),
-                        ),
+                          // Update available badge
+                          if (updateAvailable)
+                            Positioned(
+                              right: 12,
+                              top: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.green[600],
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.green.withOpacity(0.4),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.circle,
+                                      color: Colors.white,
+                                      size: 8,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'New',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
                       );
                     },
                   ),

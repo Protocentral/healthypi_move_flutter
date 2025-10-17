@@ -146,30 +146,15 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadDataFromDatabase() async {
     if (_isLoadingData) return; // Prevent concurrent loads
     _isLoadingData = true;
-    
+
     try {
       // Load vitals and sync time from database
+      // getLatestVitals() returns:
+      // - HR/Temp/SpO2: Latest/most recent value (last reading)
+      // - Activity: Today's cumulative total (sum of hourly maximums)
       final vitals = await DatabaseHelper.instance.getLatestVitals();
       final syncTime = await DatabaseHelper.instance.getLastSyncTime();
-      
-      // For activity, use the SAME logic as the trends screen:
-      // Get hourly trends and sum them (matches scr_activity.dart exactly)
-      if (vitals['activity'] != null) {
-        try {
-          List<HourlyTrend> hourlyTrends = await activityDataManager.getHourlyTrendForToday();
-          if (hourlyTrends.isNotEmpty) {
-            int totalDailySteps = 0;
-            for (var trend in hourlyTrends) {
-              totalDailySteps += trend.max.toInt();
-            }
-            // Update the activity value with the calculated total
-            vitals['activity']!['value'] = totalDailySteps;
-          }
-        } catch (e) {
-          print('Error calculating activity total: $e');
-        }
-      }
-      
+
       if (mounted) {
         setState(() {
           _vitals = vitals;
