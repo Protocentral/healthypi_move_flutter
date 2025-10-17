@@ -416,8 +416,12 @@ class BackgroundSyncManager {
   }
 
   Future<void> _sendCurrentDateTime(BluetoothDevice device) async {
-    final dt = DateTime.now();
-    final cdate = DateFormat("yy").format(DateTime.now());
+    // IMPORTANT: Device interprets datetime components as UTC, so we send UTC time
+    // This ensures Unix timestamps recorded by device match actual UTC time
+    final dt = DateTime.now().toUtc();
+    final cdate = DateFormat("yy").format(dt);
+    
+    debugPrint('Syncing device time: ${dt.toString()} UTC (local: ${DateTime.now()})');
     
     List<int> commandDateTimePacket = [];
     ByteData sessionParametersLength = ByteData(8);

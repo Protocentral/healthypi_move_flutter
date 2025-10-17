@@ -155,15 +155,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final vitals = await DatabaseHelper.instance.getLatestVitals();
       final syncTime = await DatabaseHelper.instance.getLastSyncTime();
 
-      // Debug logging for activity
-      print('[HOME] Activity data: ${vitals['activity']}');
-      if (vitals['activity'] != null) {
-        final activityTimestamp = vitals['activity']!['timestamp'] as int;
-        final activityDate = DateTime.fromMillisecondsSinceEpoch(activityTimestamp * 1000);
-        print('[HOME] Activity timestamp: $activityTimestamp, date: $activityDate');
-        print('[HOME] Today: ${DateTime.now()}');
-      }
-
       if (mounted) {
         setState(() {
           _vitals = vitals;
@@ -211,6 +202,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getVitalTimestamp(String type) {
     if (_vitals == null || _vitals![type] == null) return '--';
     final timestamp = _vitals![type]!['timestamp'] as int;
+    // Timestamps from device are Unix timestamps in UTC (since we sync UTC time to device)
+    // fromMillisecondsSinceEpoch interprets as UTC by default, then converts to local for display
     final date = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
     return getRelativeTime(date);
   }
@@ -459,8 +452,20 @@ class _HomeScreenState extends State<HomeScreen> {
   String getRelativeTime(DateTime? date) {
     if (date == null) return '--';
     final now = DateTime.now();
-    final difference = now.difference(date);
+    var difference = now.difference(date);
 
+    // Small grace period for timestamps slightly in future (due to clock sync timing)
+    // Treat up to 60 seconds in future as "just now"
+    if (difference.isNegative && difference.abs().inSeconds <= 60) {
+      return 'just now';
+    }
+    
+    // If still negative after grace period, clamp to 0 (shouldn't happen with UTC sync)
+    if (difference.isNegative) {
+      debugPrint('Warning: Timestamp significantly in future: $date (now: $now)');
+      return 'just now';
+    }
+    
     if (difference.inSeconds < 60) {
       return 'just now';
     } else if (difference.inMinutes < 60) {

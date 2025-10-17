@@ -16,14 +16,13 @@ class BLEController {
       String selectedOption,) async {
     List<int> commandDateTimePacket = [];
 
-    var dt = DateTime.now();
-    String cdate = DateFormat("yy").format(DateTime.now());
-    print(cdate);
-    print(dt.month);
-    print(dt.day);
-    print(dt.hour);
-    print(dt.minute);
-    print(dt.second);
+    // IMPORTANT: Device interprets datetime components as UTC, so we send UTC time
+    // This ensures Unix timestamps recorded by device match actual UTC time
+    var dt = DateTime.now().toUtc();
+    String cdate = DateFormat("yy").format(dt);
+    print('Syncing device time: ${dt.toString()} UTC (local: ${DateTime.now()})');
+    print('Year: $cdate, Month: ${dt.month}, Day: ${dt.day}');
+    print('Hour: ${dt.hour}, Minute: ${dt.minute}, Second: ${dt.second}');
 
     ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
