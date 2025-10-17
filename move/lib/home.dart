@@ -155,6 +155,15 @@ class _HomeScreenState extends State<HomeScreen> {
       final vitals = await DatabaseHelper.instance.getLatestVitals();
       final syncTime = await DatabaseHelper.instance.getLastSyncTime();
 
+      // Debug logging for activity
+      print('[HOME] Activity data: ${vitals['activity']}');
+      if (vitals['activity'] != null) {
+        final activityTimestamp = vitals['activity']!['timestamp'] as int;
+        final activityDate = DateTime.fromMillisecondsSinceEpoch(activityTimestamp * 1000);
+        print('[HOME] Activity timestamp: $activityTimestamp, date: $activityDate');
+        print('[HOME] Today: ${DateTime.now()}');
+      }
+
       if (mounted) {
         setState(() {
           _vitals = vitals;
@@ -187,8 +196,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getVitalValue(String type) {
     if (_vitals == null || _vitals![type] == null) return '--';
     final value = _vitals![type]!['value'] as int;
-    if (value == 0) return '--';
-    
+
+    // For activity, 0 is a valid value (no steps today)
+    // For other vitals, 0 means no data
+    if (value == 0 && type != 'activity') return '--';
+
     // Temperature needs special formatting (divide by 100)
     if (type == 'temp') {
       return (value / 100).toStringAsFixed(1);

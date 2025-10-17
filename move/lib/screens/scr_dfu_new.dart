@@ -55,6 +55,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   double _downloadProgress = 0.0;
   double _dfuProgress = 0.0;
   final Map<int, double> _imageProgress = {};
+  int _currentImageIndex = 0;  // Track which image is currently being uploaded
 
   // MCU Manager
   final mcumgr.FirmwareUpdateManagerFactory _managerFactory = mcumgr.FirmwareUpdateManagerFactory();
@@ -255,6 +256,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _dfuState = DFUScreenState.installing;
       _dfuProgress = 0.0;
       _imageProgress.clear();
+      _currentImageIndex = 0;
     });
 
     try {
@@ -306,6 +308,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                 final progress = (event.bytesSent / event.imageSize);
                 _dfuProgress = progress;
                 _imageProgress[i] = progress * 100;
+                _currentImageIndex = i;  // Track which image is currently being uploaded
 
                 debugPrint('[DFU] Image ${i + 1}/${_manifest!.files.length}: ${(progress * 100).toStringAsFixed(1)}%');
                 break;
@@ -864,6 +867,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   /// Installing card (DFU in progress)
   Widget _buildInstallingCard() {
+    final totalImages = _manifest?.files.length ?? 1;
+    final currentImage = _currentImageIndex + 1;
+
     return Card(
       elevation: 2,
       color: const Color(0xFF2D2D2D),
@@ -880,7 +886,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             const SizedBox(height: 20),
             const Text('Installing Firmware...', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Text('${(_dfuProgress * 100).toStringAsFixed(0)}% complete', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+            Text(
+              'Image $currentImage of $totalImages - ${(_dfuProgress * 100).toStringAsFixed(0)}% complete',
+              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+            ),
             const SizedBox(height: 16),
             Text('Do not disconnect the device', style: TextStyle(fontSize: 13, color: Colors.red[300])),
           ],

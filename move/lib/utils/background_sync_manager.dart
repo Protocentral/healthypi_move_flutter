@@ -288,7 +288,14 @@ class BackgroundSyncManager {
         _emitProgress(metricType, 1.0, SyncState.completed, 'Completed $metricName');
       }
 
-      // Step 5: Complete
+      // Step 5: Ensure activity shows 0 if no data for today
+      // If activity had 0 sessions, no file exists on device, so manually ensure today shows 0
+      if (sessionCounts[hPi4Global.PREFIX_ACTIVITY] == 0) {
+        debugPrint('Background sync: No activity sessions on device, ensuring today shows 0 steps');
+        await _ensureTodayActivityExists(deviceMacAddress);
+      }
+
+      // Step 6: Complete
       _emitProgress('all', 1.0, SyncState.completed, 'Sync completed');
       onStatus('Sync completed');
 
@@ -443,6 +450,52 @@ class BackgroundSyncManager {
     return now.year == headerDate.year &&
            now.month == headerDate.month &&
            now.day == headerDate.day;
+  }
+
+  /// Ensures that today's activity data exists in the database
+  /// If no activity data exists for today, inserts a record with 0 steps
+  Future<void> _ensureTodayActivityExists(String deviceMacAddress) async {
+    try {
+      final db = await DatabaseHelper.instance.database;
+
+      // Calculate today's timestamp (start of day)
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
+
+      // Check if any activity data exists for today
+      final result = await db.rawQuery('''
+        SELECT COUNT(*) as count
+        FROM health_trends
+        WHERE trend_type = ?
+        AND timestamp >= ?
+        AND timestamp < ?
+        AND device_mac = ?
+      ''', [
+        'activity',
+        todayStartTimestamp,
+        todayStartTimestamp + 86400, // +24 hours
+        deviceMacAddress,
+      ]);
+
+      final count = result.first['count'] as int;
+
+      if (count == 0) {
+        // No activity data for today, insert a record with 0 steps
+        debugPrint('Background sync: Inserting 0 steps record for today');
+        await db.insert('health_trends', {
+          'trend_type': 'activity',
+          'timestamp': todayStartTimestamp,
+          'value_avg': 0,
+          'value_min': 0,
+          'value_max': 0,
+          'device_mac': deviceMacAddress,
+          'session_id': 0, // Placeholder session ID
+        });
+      }
+    } catch (e) {
+      debugPrint('Error ensuring today activity exists: $e');
+    }
   }
 
   Future<int> _fetchLogCount(BluetoothDevice device, List<int> trendType) async {

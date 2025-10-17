@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import '../globals.dart';
 import 'device_manager.dart';
 
@@ -675,19 +676,51 @@ class DatabaseHelper {
       db.rawQuery('''
         SELECT SUM(hourly_max) as value, MAX(hour_start) as timestamp
         FROM (
-          SELECT 
+          SELECT
             (timestamp / 3600) * 3600 as hour_start,
             MAX(value_max) as hourly_max
           FROM health_trends
-          WHERE trend_type = ? 
-          AND timestamp >= ? 
+          WHERE trend_type = ?
+          AND timestamp >= ?
           AND timestamp < ?
           AND device_mac = ?
           GROUP BY hour_start
         )
-      ''', ['activity', todayStartTimestamp, todayEndTimestamp, effectiveMac]),
+      ''', ['activity', todayStartTimestamp, todayEndTimestamp, effectiveMac]).then((result) async {
+        debugPrint('[DB] Activity query result: $result');
+        debugPrint('[DB] Today range: $todayStartTimestamp to $todayEndTimestamp (${DateTime.fromMillisecondsSinceEpoch(todayStartTimestamp * 1000)} to ${DateTime.fromMillisecondsSinceEpoch(todayEndTimestamp * 1000)})');
+
+        // Debug: Show all activity records for today
+        final allActivityToday = await db.rawQuery('''
+          SELECT timestamp, value_max, value_avg, value_min
+          FROM health_trends
+          WHERE trend_type = ?
+          AND timestamp >= ?
+          AND timestamp < ?
+          AND device_mac = ?
+          ORDER BY timestamp DESC
+          LIMIT 10
+        ''', ['activity', todayStartTimestamp, todayEndTimestamp, effectiveMac]);
+        debugPrint('[DB] All activity records for today (limit 10): $allActivityToday');
+
+        return result;
+      }),
     ]);
-    
+
+    debugPrint('[DB] All results: $results');
+
+    // Debug: Parse and log timestamps
+    if (results[0].isNotEmpty && results[0][0]['value'] != null) {
+      final hrTimestamp = results[0][0]['timestamp'] as int;
+      final hrDate = DateTime.fromMillisecondsSinceEpoch(hrTimestamp * 1000);
+      debugPrint('[DB] HR timestamp: $hrTimestamp ($hrDate)');
+    }
+    if (results[1].isNotEmpty && results[1][0]['value'] != null) {
+      final tempTimestamp = results[1][0]['timestamp'] as int;
+      final tempDate = DateTime.fromMillisecondsSinceEpoch(tempTimestamp * 1000);
+      debugPrint('[DB] Temp timestamp: $tempTimestamp ($tempDate)');
+    }
+
     return {
       'hr': results[0].isNotEmpty && results[0][0]['value'] != null ? {
         'value': results[0][0]['value'] as int,
@@ -701,10 +734,16 @@ class DatabaseHelper {
         'value': results[2][0]['value'] as int,
         'timestamp': results[2][0]['timestamp'] as int,
       } : null,
-      'activity': results[3].isNotEmpty && results[3][0]['value'] != null ? {
-        'value': results[3][0]['value'] as int,
-        'timestamp': results[3][0]['timestamp'] as int,
-      } : null,
+      // Activity: Always return a value (0 if no data for today)
+      // This matches health app behavior where 0 steps = valid state
+      'activity': {
+        'value': results[3].isNotEmpty && results[3][0]['value'] != null
+            ? results[3][0]['value'] as int
+            : 0,  // Default to 0 steps if no data for today
+        'timestamp': results[3].isNotEmpty && results[3][0]['timestamp'] != null
+            ? results[3][0]['timestamp'] as int
+            : todayStartTimestamp,  // Use today's start as timestamp
+      },
     };
   }
 
