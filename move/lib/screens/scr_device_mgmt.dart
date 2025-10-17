@@ -1,6 +1,6 @@
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_device_scan.dart';
 import 'package:move/screens/scr_stream_selection.dart';
@@ -493,25 +493,35 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // Live View
+                  // Live View (auto-connect pattern)
                   _buildActionButton(
                     icon: Symbols.monitoring,
                     label: 'Live View',
                     color: hPi4Global.hpi4Color,
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ScrDeviceScan(
-                            onDeviceConnected: (device) {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (context) => ScrStreamsSelection(device: device),
-                                ),
-                              );
-                            },
+                    onPressed: () async {
+                      // Check for paired device first
+                      final deviceInfo = await DeviceManager.getPairedDevice();
+                      if (deviceInfo == null) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('No device paired. Please pair a device first.'),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      
+                      // Auto-connect to paired device and navigate to stream selection
+                      if (mounted) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => _LiveStreamConnector(
+                              deviceMacAddress: deviceInfo.macAddress,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      }
                     },
                   ),
                   
@@ -567,6 +577,208 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Auto-connector widget for Live Stream
+/// Connects to paired device and navigates to stream selection
+class _LiveStreamConnector extends StatefulWidget {
+  final String deviceMacAddress;
+  
+  const _LiveStreamConnector({required this.deviceMacAddress});
+  
+  @override
+  State<_LiveStreamConnector> createState() => _LiveStreamConnectorState();
+}
+
+class _LiveStreamConnectorState extends State<_LiveStreamConnector> {
+  bool _isConnecting = true;
+  bool _hasError = false;
+  String _statusMessage = 'Connecting to device...';
+  String? _deviceName;
+  
+  @override
+  void initState() {
+    super.initState();
+    _connectAndNavigate();
+  }
+  
+  Future<void> _connectAndNavigate() async {
+    try {
+      debugPrint('[LiveStream] Auto-connecting to device: ${widget.deviceMacAddress}');
+      
+      // Get BluetoothDevice from MAC address
+      final device = BluetoothDevice.fromId(widget.deviceMacAddress);
+      _deviceName = device.platformName.isNotEmpty ? device.platformName : 'HealthyPi Move';
+      
+      // Connect if not already connected
+      if (device.isDisconnected) {
+        if (mounted) {
+          setState(() {
+            _statusMessage = 'Connecting to $_deviceName...';
+          });
+        }
+        
+        await device.connect(license: License.values.first, timeout: const Duration(seconds: 15));
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+      
+      if (mounted) {
+        setState(() {
+          _statusMessage = 'Discovering services...';
+        });
+      }
+      
+      // Discover services
+      await device.discoverServices();
+      
+      debugPrint('[LiveStream] Connected successfully, navigating to stream selection');
+      
+      // Navigate to stream selection screen
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => ScrStreamsSelection(device: device),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[LiveStream] Connection failed: $e');
+      
+      if (mounted) {
+        setState(() {
+          _isConnecting = false;
+          _hasError = true;
+          _statusMessage = 'Failed to connect to device';
+        });
+        
+        // Auto-return after showing error
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+    }
+  }
+  
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text('Live View', style: TextStyle(color: Colors.white)),
+        automaticallyImplyLeading: !_isConnecting,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Connection status card
+              Card(
+                elevation: 2,
+                color: const Color(0xFF2D2D2D),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Icon and status indicator
+                      if (_isConnecting)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: hPi4Global.hpi4Color.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                            strokeWidth: 3,
+                          ),
+                        )
+                      else if (_hasError)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.error_outline,
+                            size: 64,
+                            color: Colors.red,
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.check_circle_outline,
+                            size: 64,
+                            color: Colors.green,
+                          ),
+                        ),
+                      
+                      const SizedBox(height: 20),
+                      
+                      // Status message
+                      Text(
+                        _statusMessage,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      
+                      // Device name if available
+                      if (_deviceName != null && _isConnecting) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _deviceName!,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[400],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      
+                      // Error action button
+                      if (_hasError) ...[
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: hPi4Global.hpi4Color,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
+                          ),
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Go Back'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
