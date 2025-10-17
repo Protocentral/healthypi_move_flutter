@@ -77,11 +77,11 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: Colors.black,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             onDisconnectPressed();
             Navigator.of(
@@ -89,253 +89,228 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
             ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
           },
         ),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          mainAxisSize: MainAxisSize.max,
-          children: <Widget>[
-            Image.asset(
-              'assets/healthypi_move.png',
-              fit: BoxFit.fitWidth,
-              height: 30,
+        title: const Row(
+          children: [
+            Icon(Icons.show_chart, color: Colors.white, size: 24),
+            SizedBox(width: 12),
+            Text(
+              'Live View',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        centerTitle: false,
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            // Device Connection Status Card
+            Card(
+              elevation: 2,
+              color: const Color(0xFF2D2D2D),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green[700]!.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.bluetooth_connected, color: Colors.green[400], size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.device.platformName.isNotEmpty 
+                              ? widget.device.platformName 
+                              : 'HealthyPi Move',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Ready for streaming',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green[700]!.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.green[700]!, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(color: Colors.green[400], shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 6),
+                          Text('Connected', style: TextStyle(color: Colors.green[400], fontSize: 12, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 20),
+            
+            // Stream Selection Card
+            Card(
+              elevation: 2,
+              color: const Color(0xFF2D2D2D),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    const Text(
+                      'Select Signal Type',
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Choose a signal to view in real-time',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+                    ),
+                    const SizedBox(height: 20),
+                    // ECG Button
+                    _buildStreamButton(
+                      context: context,
+                      icon: Symbols.cardiology,
+                      label: 'ECG',
+                      subtitle: 'Electrocardiogram signal',
+                      streamType: 'ECG',
+                    ),
+                    const SizedBox(height: 12),
+                    // Wrist PPG Button
+                    _buildStreamButton(
+                      context: context,
+                      icon: Symbols.wrist,
+                      label: 'Wrist PPG',
+                      subtitle: 'Photoplethysmogram from wrist',
+                      streamType: 'PPG',
+                    ),
+                    const SizedBox(height: 12),
+                    // GSR Button
+                    _buildStreamButton(
+                      context: context,
+                      icon: Symbols.eda,
+                      label: 'GSR',
+                      subtitle: 'Galvanic skin response',
+                      streamType: 'GSR',
+                    ),
+                    const SizedBox(height: 12),
+                    // Finger PPG Button
+                    _buildStreamButton(
+                      context: context,
+                      icon: Symbols.show_chart,
+                      label: 'Finger PPG',
+                      subtitle: 'Photoplethysmogram from finger',
+                      streamType: 'Finger PPG',
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
-      body: SafeArea(
-        child: ListView(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.max,
-                children: <Widget>[
-                  SizedBox(width: 10.0),
-                  Text(
-                    "Connected to: " + widget.device.remoteId.toString(),
-                    style: TextStyle(fontSize: 16, color: Colors.green),
-                  ),
-                  SizedBox(width: 10.0),
-                ],
+    );
+  }
+  
+  /// Build a modern stream selection button
+  Widget _buildStreamButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required String streamType,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.grey[850],
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.all(16),
+          elevation: 0,
+        ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ScrLiveStream(
+                selectedType: streamType,
+                device: widget.device,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                mainAxisSize: MainAxisSize.min,
+          );
+        },
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: hPi4Global.hpi4Color.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: hPi4Global.hpi4Color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    //height: SizeConfig.blockSizeVertical * 20,
-                    width: SizeConfig.blockSizeHorizontal * 88,
-                    child: Card(
-                      color: const Color(0xFF2D2D2D),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: <Widget>[
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                Text(
-                                  ' Select signal ',
-                                  style: hPi4Global.movecardTextStyle,
-                                ),
-                                //Icon(Icons.favorite_border, color: Colors.black),
-                              ],
-                            ),
-                            SizedBox(height: 10.0),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                backgroundColor: hPi4Global.hpi4Color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => ScrLiveStream(
-                                          selectedType: "ECG",
-                                          device: widget.device,
-                                        ),
-                                  ),
-                                );
-                              },
-
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  //mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(
-                                      Symbols.cardiology,
-                                      color: Colors.white,
-                                    ),
-                                    const Text(
-                                      ' ECG ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10.0),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                backgroundColor: hPi4Global.hpi4Color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => ScrLiveStream(
-                                          selectedType: "PPG",
-                                          device: widget.device,
-                                        ),
-                                  ),
-                                );
-                              },
-
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  //mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(Symbols.wrist, color: Colors.white),
-                                    const Text(
-                                      'Wrist PPG ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10.0),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                backgroundColor: hPi4Global.hpi4Color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => ScrLiveStream(
-                                          selectedType: "GSR",
-                                          device: widget.device,
-                                        ),
-                                  ),
-                                );
-                              },
-
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  //mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(Symbols.eda, color: Colors.white),
-                                    const Text(
-                                      ' GSR ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10.0),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                minimumSize: const Size(0, 36),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                backgroundColor: hPi4Global.hpi4Color,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder:
-                                        (context) => ScrLiveStream(
-                                          selectedType: "Finger PPG",
-                                          device: widget.device,
-                                        ),
-                                  ),
-                                );
-                              },
-
-                              child: Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: Row(
-                                  //mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: <Widget>[
-                                    Icon(
-                                      Symbols.show_chart,
-                                      color: Colors.white,
-                                    ),
-                                    const Text(
-                                      ' Finger PPG ',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    Spacer(),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            SizedBox(height: 10.0),
-                          ],
-                        ),
-                      ),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[400],
                     ),
                   ),
                 ],
               ),
             ),
+            Icon(Icons.chevron_right, color: Colors.grey[600]),
           ],
         ),
       ),

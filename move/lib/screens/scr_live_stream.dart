@@ -317,29 +317,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     }
   }
 
-  Widget displayDeviceName() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Column(
-            children: [
-              Text(
-                "Connected: " +
-                    widget.device.remoteId.toString() +
-                    " ( " +
-                    widget.selectedType +
-                    " )",
-                style: TextStyle(fontSize: 12, color: Colors.white),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   LineChartBarData currentLine(List<FlSpot> points, Color plotcolor) {
     return LineChartBarData(
       spots: points,
@@ -407,104 +384,88 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
 
   String debugText = "Console Inited...";
 
-  Widget displayDisconnectButton() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: MaterialButton(
-        minWidth: 100.0,
-        color: Colors.red,
-        child: Row(
-          children: <Widget>[
-            Text(
-              'Close',
-              style: new TextStyle(fontSize: 18.0, color: Colors.white),
-            ),
-          ],
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        onPressed: () async {
-          closeAllStreams();
-
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ScrStreamsSelection(device: widget.device),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget StartAndStopButton() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
-      child: MaterialButton(
-        minWidth: 50.0,
-        color: startStreaming ? Colors.red : Colors.green,
-        child: Row(
-          children: <Widget>[
-            startStreaming
-                ? Text(
-                  'Stop',
-                  style: new TextStyle(fontSize: 16.0, color: Colors.white),
-                )
-                : Text(
-                  'Start',
-                  style: new TextStyle(fontSize: 16.0, color: Colors.white),
-                ),
-          ],
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-        onPressed: () async {
-          if (startStreaming == false) {
-            setState(() {
-              startStreaming = true;
-            });
-          } else {
-            closeAllStreams();
-            ecgLineData.removeAt(0);
-            ppgLineData.removeAt(0);
-            gsrLineData.removeAt(0);
-            fingerPPGLineData.removeAt(0);
-            setState(() {
-              startStreaming = false;
-            });
-          }
-        },
-      ),
-    );
-  }
-
-  Widget displayAppBarButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.start,
-      mainAxisSize: MainAxisSize.max,
-      children: <Widget>[
-        Column(
-          children: <Widget>[
-            Image.asset(
-              'assets/healthypi_move.png',
-              fit: BoxFit.fitWidth,
-              height: 30,
-            ),
-            displayDeviceName(),
-          ],
-        ),
-        // StartAndStopButton(),
-        displayDisconnectButton(),
-      ],
-    );
-  }
-
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: Colors.black,
       key: _scaffoldKey,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: Colors.black,
         automaticallyImplyLeading: false,
-        title: displayAppBarButtons(),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            closeAllStreams();
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => ScrStreamsSelection(device: widget.device),
+              ),
+            );
+          },
+        ),
+        title: Row(
+          children: [
+            Icon(
+              widget.selectedType == "ECG" ? Icons.favorite :
+              widget.selectedType == "PPG" ? Icons.monitor_heart :
+              widget.selectedType == "GSR" ? Icons.water_drop :
+              Icons.show_chart,
+              color: hPi4Global.hpi4Color,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              widget.selectedType,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Start/Stop button
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: startStreaming ? Colors.red[700] : Colors.green[700],
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                elevation: 2,
+              ),
+              onPressed: () async {
+                if (startStreaming == false) {
+                  setState(() {
+                    startStreaming = true;
+                  });
+                } else {
+                  closeAllStreams();
+                  ecgLineData.removeAt(0);
+                  ppgLineData.removeAt(0);
+                  gsrLineData.removeAt(0);
+                  fingerPPGLineData.removeAt(0);
+                  setState(() {
+                    startStreaming = false;
+                  });
+                }
+              },
+              icon: Icon(
+                startStreaming ? Icons.stop : Icons.play_arrow,
+                size: 20,
+              ),
+              label: Text(
+                startStreaming ? 'Stop' : 'Start',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
+        centerTitle: false,
       ),
       body: Center(
         child: Padding(
@@ -513,8 +474,40 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
+              // Device status indicator
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2D2D2D),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.green[400],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.device.platformName.isNotEmpty 
+                        ? widget.device.platformName 
+                        : 'HealthyPi Move',
+                      style: TextStyle(
+                        color: Colors.grey[300],
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               buildCharts(),
-              //showPages(),
             ],
           ),
         ),
