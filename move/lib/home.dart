@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:move/screens/scr_recordings.dart';
 import 'utils/trends_data_manager.dart';
 import 'utils/background_sync_manager.dart';
 import 'utils/device_manager.dart';
@@ -29,6 +30,7 @@ class _HomePageState extends State<HomePage> {
     HomeScreen(),
     ScrTrends(),
     ScrDeviceMgmt(),
+    ScrRecordingsSelection(),
     ScrSettings(),
   ];
 
@@ -82,6 +84,11 @@ class _HomePageState extends State<HomePage> {
                 icon: Icon(Icons.watch_rounded, size: 24),
                 activeIcon: Icon(Icons.watch_rounded, size: 26),
                 label: 'Device',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.show_chart, size: 24),
+                activeIcon: Icon(Icons.show_chart, size: 26),
+                label: 'Recordings',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.settings_rounded, size: 24),

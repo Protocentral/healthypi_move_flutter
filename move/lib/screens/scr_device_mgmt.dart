@@ -465,7 +465,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   const SizedBox(height: 12),
                   
                   // ECG Recordings
-                  _buildActionButton(
+                  /*_buildActionButton(
                     icon: Icons.monitor_heart,
                     label: 'ECG Recordings',
                     color: hPi4Global.hpi4Color,
@@ -521,8 +521,8 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                         ),
                       );
                     },
-                  ),
-                  const SizedBox(height: 12),
+                  ),*/
+                  //const SizedBox(height: 12),
 
                   // Live View (auto-connect pattern)
                   _buildActionButton(

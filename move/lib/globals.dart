@@ -158,11 +158,11 @@ class hPi4Global {
   static const List<int> getSessionCount = [0x54];
   static const List<int> getFWVersion = [0x55];
 
-  static const List<int> ECGLogCount = [0x30];
-  static const List<int> ECGLogIndex = [0x31];
-  static const List<int> FetchECGLogFile = [0x32];
-  static const List<int> ECGLogDelete = [0x33];
-  static const List<int> ECGLogWipeAll = [0x34];
+  static const List<int> LogCount = [0x30];
+  static const List<int> LogIndex = [0x31];
+  static const List<int> FetchLogFile = [0x32];
+  static const List<int> LogDelete = [0x33];
+  static const List<int> LogWipeAll = [0x34];
 
   static const List<int> HrTrend = [0x01];
   static const List<int> Spo2Trend = [0x02];
@@ -170,8 +170,11 @@ class hPi4Global {
   static const List<int> ActivityTrend = [0x04];
 
   static const List<int> ECGRecord = [0x10];
-  static const List<int> PPGRecord = [0x11];
-  static const List<int> GSRRecord = [0x12];
+  static const List<int> BIOZRecord = [0x11];
+  static const List<int> PPGRecord = [0x12];
+  static const List<int> PPGFingerRecord = [0x13];
+  static const List<int> GSRRecord = [0x14];
+  static const List<int> HRVRecord = [0x15];
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;

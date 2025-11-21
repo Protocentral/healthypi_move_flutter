@@ -11,9 +11,9 @@ import 'package:csv/csv.dart';
 import '../globals.dart';
 import '../utils/snackbar.dart';
 
-// ECG Recording Constants
+// GSR Recording Constants
 class GSRConstants {
-  // Sample rate for ECG recordings in Hz
+  // Sample rate for GSR recordings in Hz
   static const int samplingRateHz = 128;
 
   // File format constants
@@ -33,7 +33,7 @@ class GSRConstants {
 
 typedef LogHeader = ({int logFileID, int sessionLength});
 
-/// Represents a single ECG recording session
+/// Represents a single GSR recording session
 class GSRRecording {
   final int sessionId;
   final int sessionLength;
@@ -73,7 +73,7 @@ class GSRRecording {
   }
 }
 
-/// Modern ECG recordings management screen using FsManager for downloads
+/// Modern GSR recordings management screen using FsManager for downloads
 class ScrGSRRecordings extends StatefulWidget {
   final String deviceMacAddress;
 
@@ -246,10 +246,10 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
 
     // Send command
     final commandPacket = <int>[];
-    commandPacket.addAll(hPi4Global.ECGLogCount);
+    commandPacket.addAll(hPi4Global.LogCount);
     commandPacket.addAll(hPi4Global.GSRRecord);
     await _sendCommand(commandPacket);
-    print('GSR Recordings: Sent ECGLogCount command');
+    print('GSR Recordings: Sent GSRLogCount command');
 
     await completer.future.timeout(
       const Duration(seconds: 10),
@@ -301,7 +301,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
 
     // Send command
     final commandPacket = <int>[];
-    commandPacket.addAll(hPi4Global.ECGLogIndex);
+    commandPacket.addAll(hPi4Global.LogIndex);
     commandPacket.addAll(hPi4Global.GSRRecord);
     await _sendCommand(commandPacket);
     print('GSR Recordings: Sent GSR LogIndex command');
@@ -323,7 +323,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     await _commandCharacteristic?.write(commandList, withoutResponse: true);
   }
 
-  /// Delete a single ECG recording
+  /// Delete a single GSR recording
   Future<void> _deleteRecording(GSRRecording recording) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -353,7 +353,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     try {
       // Send delete command via BLE
       final commandPacket = <int>[];
-      commandPacket.addAll(hPi4Global.ECGLogDelete);
+      commandPacket.addAll(hPi4Global.LogDelete);
       commandPacket.addAll(hPi4Global.GSRRecord);
 
       // Add session ID as 2-byte little-endian
@@ -391,7 +391,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     }
   }
 
-  /// Wipe all ECG recordings from device
+  /// Wipe all GSR recordings from device
   Future<void> _wipeAllRecordings() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -421,7 +421,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     try {
       // Send wipe all command via BLE
       final commandPacket = <int>[];
-      commandPacket.addAll(hPi4Global.ECGLogWipeAll);
+      commandPacket.addAll(hPi4Global.LogWipeAll);
       commandPacket.addAll(hPi4Global.GSRRecord);
 
       await _sendCommand(commandPacket);
@@ -454,7 +454,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     }
   }
 
-  /// Download a single ECG recording using FsManager
+  /// Download a single GSR recording using FsManager
   Future<void> _downloadRecording(GSRRecording recording) async {
     if (recording.isDownloading) return;
 
@@ -546,13 +546,13 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     }
   }
 
-  /// Convert ECG binary data to CSV and share
+  /// Convert GSR binary data to CSV and share
   Future<void> _exportToCsv(GSRRecording recording, List<int> binaryData) async {
     print('GSR Export: Binary data length: ${binaryData.length} bytes');
     print('GSR Export: Expected session length: ${recording.sessionLength} bytes');
 
     // FsManager downloads raw files from device filesystem - no packet type byte or header
-    // Data starts immediately with ECG samples (Int32 little-endian)
+    // Data starts immediately with GSR samples (Int32 little-endian)
     List<int> cleanData = binaryData;
 
     final byteData = ByteData.sublistView(Uint8List.fromList(cleanData));
@@ -560,13 +560,13 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
 
     print('GSR Export: Calculated $numSamples samples');
 
-    // Create CSV content - match archived format (ECG values only, no time column)
+    // Create CSV content - match archived format (GSR values only, no time column)
     final csvRows = <List<String>>[];
-    csvRows.add(['ECG(mV)']); // Match archived format exactly
+    csvRows.add(['GSR']); // Match archived format exactly
 
     for (int i = 0; i < numSamples; i++) {
       try {
-        // ECG samples are Int32 in little-endian format
+        // GSR samples are Int32 in little-endian format
         final rawValue = byteData.getInt32(i * GSRConstants.bytesPerSample, Endian.little);
         final millivolts = _convertToMillivolts(rawValue);
         // Match archived format: 2 decimal places, no time column
@@ -585,7 +585,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     // Save and share
     await _saveAndShareCsv(
       csvContent,
-      'ecg_recording_${recording.sessionId}_${DateFormat('yyyyMMdd_HHmmss').format(recording.timestamp)}.csv',
+      'GSR_recording_${recording.sessionId}_${DateFormat('yyyyMMdd_HHmmss').format(recording.timestamp)}.csv',
     );
   }
 
@@ -602,7 +602,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
       final xFile = XFile(file.path);
       await Share.shareXFiles(
         [xFile],
-        text: 'ECG Recording',
+        text: 'GSR Recording',
       );
     } catch (e) {
       print('Error sharing file: $e');
@@ -678,7 +678,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('ECG Recordings'),
+        title: const Text('GSR Recordings'),
         backgroundColor: hPi4Global.hpi4AppBarColor,
         foregroundColor: Colors.white,
         actions: [
@@ -792,7 +792,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
               Icon(Icons.folder_open, size: 64, color: Colors.grey[600]),
               const SizedBox(height: 16),
               const Text(
-                'No ECG recordings found',
+                'No GSR recordings found',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 18,
@@ -801,7 +801,7 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Record ECG data on your device to see it here',
+                'Record GSR data on your device to see it here',
                 style: TextStyle(color: Colors.grey[500], fontSize: 14),
                 textAlign: TextAlign.center,
               ),

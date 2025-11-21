@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:move/screens/scr_recordings.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'home.dart';
@@ -40,6 +41,7 @@ class HealthyPiApp extends StatelessWidget {
         '/trends/temp': (context) => const ScrTrends(initialMetric: 'temp'),
         '/trends/activity': (context) => const ScrTrends(initialMetric: 'activity'),
         '/device': (context) => const ScrDeviceMgmt(),
+        '/recordings': (context) => const ScrRecordingsSelection(),
         '/device/settings': (context) => const ScrDeviceSettings(),
         '/device/dfu': (context) => const ScrDFU(),
         '/device/bpt-calibration': (context) => const ScrBPTCalibration(),
