@@ -18,7 +18,7 @@ class HRVConstants {
 
   // File format constants
   static const int fileHeaderBytes = 10;
-  static const int bytesPerSample = 4;
+  static const int bytesPerSample = 2;
 
   // ADC conversion constants
   static const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
@@ -47,7 +47,7 @@ class HRVRecording {
     required this.sessionId,
     required this.sessionLength,
     required this.timestamp,
-  }) : filePath = '/lfs/HRV/$sessionId';
+  }) : filePath = '/lfs/hrv/$sessionId';
 
   String get displayName => 'HRV Recording #$sessionId';
 
@@ -567,10 +567,10 @@ class _ScrHRVRecordingsState extends State<ScrHRVRecordings> {
     for (int i = 0; i < numSamples; i++) {
       try {
         // HRV samples are Int32 in little-endian format
-        final rawValue = byteData.getInt32(i * HRVConstants.bytesPerSample, Endian.little);
-        final millivolts = _convertToMillivolts(rawValue);
+        final rawValue = byteData.getUint16(i * HRVConstants.bytesPerSample, Endian.little);
+        //final millivolts = _convertToMillivolts(rawValue);
         // Match archived format: 2 decimal places, no time column
-        csvRows.add([millivolts.toStringAsFixed(2)]);
+        csvRows.add([rawValue.toString()]);
       } catch (e) {
         print('Error parsing sample $i: $e');
         break;
@@ -610,12 +610,6 @@ class _ScrHRVRecordingsState extends State<ScrHRVRecordings> {
     }
   }
 
-  double _convertToMillivolts(int rawValue) {
-    const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
-    const double vRef = 1.0; // volts
-    const double gain = 20.0; // amplifier gain
-    return ((rawValue / maxAdcValue) * (vRef * 1000 / gain));
-  }
 
   /// Download all recordings
   Future<void> _downloadAllRecordings() async {

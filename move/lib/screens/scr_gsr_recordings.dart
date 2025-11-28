@@ -568,9 +568,9 @@ class _ScrGSRRecordingsState extends State<ScrGSRRecordings> {
       try {
         // GSR samples are Int32 in little-endian format
         final rawValue = byteData.getInt32(i * GSRConstants.bytesPerSample, Endian.little);
-        final millivolts = _convertToMillivolts(rawValue);
+        //final millivolts = _convertToMillivolts(rawValue);
         // Match archived format: 2 decimal places, no time column
-        csvRows.add([millivolts.toStringAsFixed(2)]);
+        csvRows.add([rawValue.toString()]);
       } catch (e) {
         print('Error parsing sample $i: $e');
         break;

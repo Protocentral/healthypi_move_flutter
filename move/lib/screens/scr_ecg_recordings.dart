@@ -19,7 +19,7 @@ class EcgConstants {
   // File format constants
   static const int fileHeaderBytes = 10;
   static const int bytesPerSample = 4;
-  
+
   // ADC conversion constants
   static const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
   static const double vRef = 1.0; // volts
