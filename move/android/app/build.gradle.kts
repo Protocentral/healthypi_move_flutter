@@ -70,6 +70,9 @@ android {
             // Signing with the debug keys for now,
             // so `flutter run --release` works.
             // Use release signing when key.properties exists or CI keystore env var is set
+            isMinifyEnabled = false      // Note the 'is' prefix
+            isShrinkResources = false    // Note the 'is' prefix
+
             if (keystorePropertiesFile.exists() || System.getenv("KEYSTORE_BASE64") != null) {
                 signingConfig = signingConfigs.getByName("release")
             } else {
