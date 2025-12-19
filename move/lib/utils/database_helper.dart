@@ -22,7 +22,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 4, // Increment version for device_mac column
+      version: 5, // Increment version for research_sessions tables
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -82,7 +82,46 @@ class DatabaseHelper {
     ''');
     
     await db.execute('CREATE INDEX idx_app_metadata_updated ON app_metadata(updated_at)');
-    
+
+    // Research recording sessions table
+    await db.execute('''
+      CREATE TABLE research_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_mac TEXT NOT NULL,
+        session_timestamp INTEGER NOT NULL UNIQUE,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        duration_seconds INTEGER NOT NULL,
+        signal_mask INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        total_size_bytes INTEGER,
+        sync_status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+
+    await db.execute('CREATE INDEX idx_research_sessions_device ON research_sessions(device_mac)');
+    await db.execute('CREATE INDEX idx_research_sessions_timestamp ON research_sessions(session_timestamp)');
+    await db.execute('CREATE INDEX idx_research_sessions_status ON research_sessions(status)');
+
+    // Research recording signal files table
+    await db.execute('''
+      CREATE TABLE research_files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_timestamp INTEGER NOT NULL,
+        signal_type TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        sample_count INTEGER NOT NULL,
+        sample_rate_hz INTEGER NOT NULL,
+        file_size_bytes INTEGER NOT NULL,
+        downloaded_at TEXT,
+        FOREIGN KEY (session_timestamp) REFERENCES research_sessions(session_timestamp) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('CREATE INDEX idx_research_files_session ON research_files(session_timestamp)');
+    await db.execute('CREATE INDEX idx_research_files_signal ON research_files(signal_type)');
+
     print('DatabaseHelper: Tables created with indexes');
   }
 
@@ -132,7 +171,49 @@ class DatabaseHelper {
       await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp, device_mac)');
       print('DatabaseHelper: Upgraded to version 4 - added device_mac column');
     }
-    
+
+    if (oldVersion < 5) {
+      // Add research recording tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS research_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          device_mac TEXT NOT NULL,
+          session_timestamp INTEGER NOT NULL UNIQUE,
+          start_time TEXT NOT NULL,
+          end_time TEXT,
+          duration_seconds INTEGER NOT NULL,
+          signal_mask INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          total_size_bytes INTEGER,
+          sync_status TEXT DEFAULT 'pending',
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      ''');
+
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_research_sessions_device ON research_sessions(device_mac)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_research_sessions_timestamp ON research_sessions(session_timestamp)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_research_sessions_status ON research_sessions(status)');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS research_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_timestamp INTEGER NOT NULL,
+          signal_type TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          sample_count INTEGER NOT NULL,
+          sample_rate_hz INTEGER NOT NULL,
+          file_size_bytes INTEGER NOT NULL,
+          downloaded_at TEXT,
+          FOREIGN KEY (session_timestamp) REFERENCES research_sessions(session_timestamp) ON DELETE CASCADE
+        )
+      ''');
+
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_research_files_session ON research_files(session_timestamp)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_research_files_signal ON research_files(signal_type)');
+
+      print('DatabaseHelper: Upgraded to version 5 - added research recording tables');
+    }
+
     // Migrate lastSynced from SharedPreferences to database (moved outside version check)
     if (oldVersion < 3) {
       try {
@@ -716,6 +797,183 @@ class DatabaseHelper {
             : todayStartTimestamp,  // Use today's start as timestamp
       },
     };
+  }
+
+  // ============================================================================
+  // Research Recording Methods
+  // ============================================================================
+
+  /// Insert or update a research recording session
+  Future<int> insertResearchSession({
+    required String deviceMac,
+    required int sessionTimestamp,
+    required DateTime startTime,
+    DateTime? endTime,
+    required int durationSeconds,
+    required int signalMask,
+    String status = 'complete',
+    int? totalSizeBytes,
+    String syncStatus = 'pending',
+  }) async {
+    final db = await database;
+    return await db.insert(
+      'research_sessions',
+      {
+        'device_mac': deviceMac,
+        'session_timestamp': sessionTimestamp,
+        'start_time': startTime.toIso8601String(),
+        'end_time': endTime?.toIso8601String(),
+        'duration_seconds': durationSeconds,
+        'signal_mask': signalMask,
+        'status': status,
+        'total_size_bytes': totalSizeBytes,
+        'sync_status': syncStatus,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get all research sessions for a device
+  Future<List<Map<String, dynamic>>> getResearchSessions({String? deviceMac}) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+
+    return await db.query(
+      'research_sessions',
+      where: 'device_mac = ?',
+      whereArgs: [effectiveMac],
+      orderBy: 'session_timestamp DESC',
+    );
+  }
+
+  /// Get a specific research session by timestamp
+  Future<Map<String, dynamic>?> getResearchSession(int sessionTimestamp) async {
+    final db = await database;
+    final result = await db.query(
+      'research_sessions',
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+      limit: 1,
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  /// Update research session status
+  Future<int> updateResearchSessionStatus(int sessionTimestamp, String status) async {
+    final db = await database;
+    return await db.update(
+      'research_sessions',
+      {'status': status},
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+    );
+  }
+
+  /// Update research session sync status
+  Future<int> updateResearchSessionSyncStatus(int sessionTimestamp, String syncStatus) async {
+    final db = await database;
+    return await db.update(
+      'research_sessions',
+      {'sync_status': syncStatus},
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+    );
+  }
+
+  /// Delete a research session and its files
+  Future<int> deleteResearchSession(int sessionTimestamp) async {
+    final db = await database;
+    // Files are deleted via CASCADE
+    return await db.delete(
+      'research_sessions',
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+    );
+  }
+
+  /// Delete all research sessions for a device
+  Future<int> deleteAllResearchSessions({String? deviceMac}) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    return await db.delete(
+      'research_sessions',
+      where: 'device_mac = ?',
+      whereArgs: [effectiveMac],
+    );
+  }
+
+  /// Insert a research file record
+  Future<int> insertResearchFile({
+    required int sessionTimestamp,
+    required String signalType,
+    required String filePath,
+    required int sampleCount,
+    required int sampleRateHz,
+    required int fileSizeBytes,
+  }) async {
+    final db = await database;
+    return await db.insert(
+      'research_files',
+      {
+        'session_timestamp': sessionTimestamp,
+        'signal_type': signalType,
+        'file_path': filePath,
+        'sample_count': sampleCount,
+        'sample_rate_hz': sampleRateHz,
+        'file_size_bytes': fileSizeBytes,
+        'downloaded_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Get all files for a research session
+  Future<List<Map<String, dynamic>>> getResearchFiles(int sessionTimestamp) async {
+    final db = await database;
+    return await db.query(
+      'research_files',
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+      orderBy: 'signal_type ASC',
+    );
+  }
+
+  /// Check if a research session has been downloaded
+  Future<bool> isResearchSessionDownloaded(int sessionTimestamp) async {
+    final db = await database;
+    final result = await db.query(
+      'research_files',
+      where: 'session_timestamp = ?',
+      whereArgs: [sessionTimestamp],
+    );
+    return result.isNotEmpty;
+  }
+
+  /// Get research session statistics
+  Future<Map<String, dynamic>> getResearchSessionStats({String? deviceMac}) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+
+    final result = await db.rawQuery('''
+      SELECT
+        COUNT(*) as session_count,
+        SUM(duration_seconds) as total_duration,
+        SUM(total_size_bytes) as total_size,
+        MIN(session_timestamp) as oldest,
+        MAX(session_timestamp) as newest
+      FROM research_sessions
+      WHERE device_mac = ?
+    ''', [effectiveMac]);
+
+    if (result.isEmpty) {
+      return {
+        'session_count': 0,
+        'total_duration': 0,
+        'total_size': 0,
+      };
+    }
+
+    return result.first;
   }
 
   // ============================================================================
