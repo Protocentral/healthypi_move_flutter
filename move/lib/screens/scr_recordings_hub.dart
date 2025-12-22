@@ -169,7 +169,6 @@ class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderS
   @override
   void initState() {
     super.initState();
-    // Initialize nested tab controller with the number of sub-tabs you want
     _nestedTabController = TabController(length: 3, vsync: this);
   }
 
@@ -185,7 +184,7 @@ class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderS
       children: [
         // Nested TabBar
         Container(
-          color: const Color(0xFF1E1E1E),
+          color: const Color(0xFF121212),
           child: TabBar(
             controller: _nestedTabController,
             indicatorColor: hPi4Global.hpi4Color,
@@ -203,11 +202,8 @@ class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderS
           child: TabBarView(
             controller: _nestedTabController,
             children: [
-              // Sub-tab 1: All recordings
               ScrEcgRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
-              // Sub-tab 2: Recent recordings
               ScrHRVRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
-              // Sub-tab 3: Favorite recordings
               ScrGSRRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
             ],
           ),
