@@ -29,7 +29,7 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -62,15 +62,7 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
           tabs: const [
             Tab(
               icon: Icon(Icons.monitor_heart, size: 20),
-              text: 'ECG',
-            ),
-            Tab(
-              icon: Icon(Icons.monitor_heart, size: 20),
-              text: 'HRV',
-            ),
-            Tab(
-              icon: Icon(Symbols.eda, size: 20),
-              text: 'GSR',
+              text: 'Spot Check',
             ),
             Tab(
               icon: Icon(Symbols.science, size: 20),
@@ -83,12 +75,8 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
         controller: _tabController,
         children: [
           // Tab 1: Spot Check (ECG recordings)
-          _SpotCheckECGTab(deviceMacAddress: widget.deviceMacAddress),
-          // Tab 2: Spot Check (HRV recordings)
-          _SpotCheckHRVTab(deviceMacAddress: widget.deviceMacAddress),
-          // Tab 3: Spot Check (HRV recordings)
-          _SpotCheckGSRTab(deviceMacAddress: widget.deviceMacAddress),
-          // Tab 4: Research recordings
+          _SpotCheckTab(deviceMacAddress: widget.deviceMacAddress),
+          // Tab 2: Research recordings
           _ResearchTab(key: _researchTabKey, deviceMacAddress: widget.deviceMacAddress),
         ],
       ),
@@ -97,7 +85,7 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
 
   List<Widget> _buildAppBarActions() {
     // Only show actions for Research tab (index 1)
-    if (_tabController.index != 2) return [];
+    if (_tabController.index != 1) return [];
 
     return [
       IconButton(
@@ -165,44 +153,83 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
   }
 }
 
-/// Spot Check tab - wraps the existing ECG recordings functionality
-class _SpotCheckECGTab extends StatelessWidget {
+
+class _SpotCheckTab extends StatefulWidget {
   final String deviceMacAddress;
 
-  const _SpotCheckECGTab({required this.deviceMacAddress});
+  const _SpotCheckTab({required this.deviceMacAddress});
+
+  @override
+  State<_SpotCheckTab> createState() => _SpotCheckTabState();
+}
+
+class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderStateMixin {
+  late TabController _nestedTabController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize nested tab controller with the number of sub-tabs you want
+    _nestedTabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _nestedTabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Nested TabBar
+        Container(
+          color: const Color(0xFF1E1E1E),
+          child: TabBar(
+            controller: _nestedTabController,
+            indicatorColor: hPi4Global.hpi4Color,
+            labelColor: hPi4Global.hpi4Color,
+            unselectedLabelColor: Colors.grey[400],
+            tabs: const [
+              Tab(text: 'ECG'),
+              Tab(text: 'HRV'),
+              Tab(text: 'GSR'),
+            ],
+          ),
+        ),
+        // Nested TabBarView
+        Expanded(
+          child: TabBarView(
+            controller: _nestedTabController,
+            children: [
+              // Sub-tab 1: All recordings
+              ScrEcgRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
+              // Sub-tab 2: Recent recordings
+              ScrHRVRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
+              // Sub-tab 3: Favorite recordings
+              ScrGSRRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+}
+
+/// Spot Check tab - wraps the existing ECG recordings functionality
+/*class _SpotCheckTab extends StatelessWidget {
+  final String deviceMacAddress;
+
+  const _SpotCheckTab({required this.deviceMacAddress});
 
   @override
   Widget build(BuildContext context) {
     // Directly embed the ECG recordings content
     return ScrEcgRecordingsContent(deviceMacAddress: deviceMacAddress);
   }
-}
-
-/// Spot Check tab - wraps the existing HRV recordings functionality
-class _SpotCheckHRVTab extends StatelessWidget {
-  final String deviceMacAddress;
-
-  const _SpotCheckHRVTab({required this.deviceMacAddress});
-
-  @override
-  Widget build(BuildContext context) {
-    // Directly embed the ECG recordings content
-    return ScrHRVRecordingsContent(deviceMacAddress: deviceMacAddress);
-  }
-}
-
-/// Spot Check tab - wraps the existing GSR recordings functionality
-class _SpotCheckGSRTab extends StatelessWidget {
-  final String deviceMacAddress;
-
-  const _SpotCheckGSRTab({required this.deviceMacAddress});
-
-  @override
-  Widget build(BuildContext context) {
-    // Directly embed the ECG recordings content
-    return ScrGSRRecordingsContent(deviceMacAddress: deviceMacAddress);
-  }
-}
+}*/
 
 /// Research recordings tab
 class _ResearchTab extends StatefulWidget {
