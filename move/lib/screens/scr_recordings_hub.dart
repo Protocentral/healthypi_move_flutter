@@ -8,6 +8,8 @@ import '../globals.dart';
 import '../models/research_recording.dart';
 import '../utils/research_recording_manager.dart';
 import 'scr_ecg_recordings.dart';
+import 'scr_hrv_recordings.dart';
+import 'scr_gsr_recordings.dart';
 
 /// Unified recordings hub screen with tabs for Spot Check and Research recordings
 class ScrRecordingsHub extends StatefulWidget {
@@ -27,7 +29,7 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
   }
 
@@ -60,7 +62,15 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
           tabs: const [
             Tab(
               icon: Icon(Icons.monitor_heart, size: 20),
-              text: 'Spot Check',
+              text: 'ECG',
+            ),
+            Tab(
+              icon: Icon(Icons.monitor_heart, size: 20),
+              text: 'HRV',
+            ),
+            Tab(
+              icon: Icon(Symbols.eda, size: 20),
+              text: 'GSR',
             ),
             Tab(
               icon: Icon(Symbols.science, size: 20),
@@ -73,8 +83,12 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
         controller: _tabController,
         children: [
           // Tab 1: Spot Check (ECG recordings)
-          _SpotCheckTab(deviceMacAddress: widget.deviceMacAddress),
-          // Tab 2: Research recordings
+          _SpotCheckECGTab(deviceMacAddress: widget.deviceMacAddress),
+          // Tab 2: Spot Check (HRV recordings)
+          _SpotCheckHRVTab(deviceMacAddress: widget.deviceMacAddress),
+          // Tab 3: Spot Check (HRV recordings)
+          _SpotCheckGSRTab(deviceMacAddress: widget.deviceMacAddress),
+          // Tab 4: Research recordings
           _ResearchTab(key: _researchTabKey, deviceMacAddress: widget.deviceMacAddress),
         ],
       ),
@@ -83,7 +97,7 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
 
   List<Widget> _buildAppBarActions() {
     // Only show actions for Research tab (index 1)
-    if (_tabController.index != 1) return [];
+    if (_tabController.index != 2) return [];
 
     return [
       IconButton(
@@ -152,15 +166,41 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
 }
 
 /// Spot Check tab - wraps the existing ECG recordings functionality
-class _SpotCheckTab extends StatelessWidget {
+class _SpotCheckECGTab extends StatelessWidget {
   final String deviceMacAddress;
 
-  const _SpotCheckTab({required this.deviceMacAddress});
+  const _SpotCheckECGTab({required this.deviceMacAddress});
 
   @override
   Widget build(BuildContext context) {
     // Directly embed the ECG recordings content
     return ScrEcgRecordingsContent(deviceMacAddress: deviceMacAddress);
+  }
+}
+
+/// Spot Check tab - wraps the existing HRV recordings functionality
+class _SpotCheckHRVTab extends StatelessWidget {
+  final String deviceMacAddress;
+
+  const _SpotCheckHRVTab({required this.deviceMacAddress});
+
+  @override
+  Widget build(BuildContext context) {
+    // Directly embed the ECG recordings content
+    return ScrHRVRecordingsContent(deviceMacAddress: deviceMacAddress);
+  }
+}
+
+/// Spot Check tab - wraps the existing GSR recordings functionality
+class _SpotCheckGSRTab extends StatelessWidget {
+  final String deviceMacAddress;
+
+  const _SpotCheckGSRTab({required this.deviceMacAddress});
+
+  @override
+  Widget build(BuildContext context) {
+    // Directly embed the ECG recordings content
+    return ScrGSRRecordingsContent(deviceMacAddress: deviceMacAddress);
   }
 }
 
@@ -863,9 +903,9 @@ class _ResearchRecordingConfigScreenState
   }
 
   RecordingConfig get _config => RecordingConfig(
-        durationSeconds: _selectedDurationMinutes * 60,
-        signalMask: ResearchSignalTypeExtension.toMask(_selectedSignals.toList()),
-      );
+    durationSeconds: _selectedDurationMinutes * 60,
+    signalMask: ResearchSignalTypeExtension.toMask(_selectedSignals.toList()),
+  );
 
   Future<void> _startRecording() async {
     if (_manager == null || _selectedSignals.isEmpty) return;
@@ -924,42 +964,42 @@ class _ResearchRecordingConfigScreenState
       ),
       body: _isInitializing
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text(
-                    'Connecting to device...',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            )
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Connecting to device...',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+      )
           : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                        const SizedBox(height: 16),
-                        Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.white70),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Go Back'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _buildConfigForm(),
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      )
+          : _buildConfigForm(),
     );
   }
 
@@ -1082,18 +1122,18 @@ class _ResearchRecordingConfigScreenState
                   : _startRecording,
               icon: _isStarting
                   ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
                   : const Icon(Icons.fiber_manual_record, color: Colors.red),
               label: Text(_isStarting ? 'Starting...' : 'START RECORDING'),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                    _selectedSignals.isEmpty ? Colors.grey : hPi4Global.hpi4Color,
+                _selectedSignals.isEmpty ? Colors.grey : hPi4Global.hpi4Color,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1498,42 +1538,42 @@ class _ResearchSessionDetailScreenState
       ),
       body: _isInitializing
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text(
-                    'Connecting to device...',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            )
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Connecting to device...',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
+      )
           : _errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
-                        const SizedBox(height: 16),
-                        Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.white70),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Go Back'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : _buildContent(),
+          ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Go Back'),
+              ),
+            ],
+          ),
+        ),
+      )
+          : _buildContent(),
     );
   }
 
@@ -1700,13 +1740,13 @@ class _ResearchSessionDetailScreenState
                         onPressed: _isDownloading || _isExporting ? null : _exportAllAsZip,
                         icon: _isExporting
                             ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                             : const Icon(Icons.archive),
                         label: Text(_isExporting ? 'Exporting...' : 'Export as ZIP'),
                         style: ElevatedButton.styleFrom(

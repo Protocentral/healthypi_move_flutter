@@ -170,6 +170,12 @@ class hPi4Global {
   static const List<int> ActivityTrend = [0x04];
 
   static const List<int> ECGRecord = [0x10];
+  static const List<int> BIOZRecord = [0x11];
+  static const List<int> PPGRecord = [0x12];
+  static const List<int> PPGFingerRecord = [0x13];
+  static const List<int> GSRRecord = [0x14];
+  static const List<int> HRVRecord = [0x15];
+
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;

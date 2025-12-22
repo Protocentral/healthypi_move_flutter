@@ -15,16 +15,16 @@ import '../utils/snackbar.dart';
 class EcgConstants {
   // Sample rate for ECG recordings in Hz
   static const int samplingRateHz = 128;
-  
+
   // File format constants
   static const int fileHeaderBytes = 10;
   static const int bytesPerSample = 4;
-  
+
   // ADC conversion constants
   static const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
   static const double vRef = 1.0; // volts
   static const double gain = 20.0; // amplifier gain
-  
+
   // Display formatting
   static const int sampleCountThreshold = 1000;
   static const int estimatedMinutesBetweenSessions = 5;
@@ -39,24 +39,24 @@ class EcgRecording {
   final int sessionLength;
   final DateTime timestamp;
   final String filePath;
-  
+
   bool isDownloading = false;
   double downloadProgress = 0.0;
-  
+
   EcgRecording({
     required this.sessionId,
     required this.sessionLength,
     required this.timestamp,
   }) : filePath = '/lfs/ecg/$sessionId';
-  
+
   String get displayName => 'ECG Recording #$sessionId';
-  
+
   String get dateTime {
     // Debug timestamp (device stores in local time)
     print('ECG Recording: Session $sessionId timestamp: ${timestamp.toIso8601String()} (year: ${timestamp.year})');
     return DateFormat('EEE d MMM yyyy h:mm a').format(timestamp);
   }
-  
+
   String get durationText {
     // sessionLength is the number of data bytes (points start from beginning of file)
     // Calculate sample count: dataBytes / bytesPerSample
@@ -64,7 +64,7 @@ class EcgRecording {
     final durationSeconds = (sampleCount / EcgConstants.samplingRateHz).toInt();
     return '$durationSeconds seconds • ${_formatSampleCount(sampleCount)} samples';
   }
-  
+
   static String _formatSampleCount(int count) {
     if (count >= EcgConstants.sampleCountThreshold) {
       return '${(count / EcgConstants.sampleCountThreshold).toStringAsFixed(1)}k';
@@ -76,9 +76,9 @@ class EcgRecording {
 /// Modern ECG recordings management screen using FsManager for downloads
 class ScrEcgRecordings extends StatefulWidget {
   final String deviceMacAddress;
-  
+
   const ScrEcgRecordings({super.key, required this.deviceMacAddress});
-  
+
   @override
   State<ScrEcgRecordings> createState() => _ScrEcgRecordingsState();
 }
@@ -88,42 +88,42 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
   mcumgr.FsManager? _fsManager;
   BluetoothCharacteristic? _commandCharacteristic;
   BluetoothCharacteristic? _dataCharacteristic;
-  
+
   List<EcgRecording> _recordings = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
   String? _errorMessage;
-  
+
   final List<StreamSubscription> _activeSubscriptions = [];
-  
+
   int _totalSessionCount = 0;
   List<LogHeader> _logHeaderList = [];
-  
+
   @override
   void initState() {
     super.initState();
     _initialize();
   }
-  
+
   @override
   void dispose() {
     _cleanup();
     super.dispose();
   }
-  
+
   Future<void> _initialize() async {
     try {
       // Create device from MAC address and connect
       _device = BluetoothDevice.fromId(widget.deviceMacAddress);
-      
+
       if (_device!.isDisconnected) {
         await _device!.connect(license: License.values.first);
         await Future.delayed(const Duration(milliseconds: 500));
       }
-      
+
       // Discover services and characteristics
       final services = await _device!.discoverServices();
-      
+
       for (var service in services) {
         if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
           for (var characteristic in service.characteristics) {
@@ -136,14 +136,14 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
           }
         }
       }
-      
+
       if (_commandCharacteristic == null || _dataCharacteristic == null) {
         throw Exception('Required characteristics not found');
       }
-      
+
       // Initialize FsManager for downloads
       _fsManager = mcumgr.FsManager(_device!.remoteId.toString());
-      
+
       // Load recordings list
       await _loadRecordingsList();
     } catch (e) {
@@ -155,33 +155,33 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       }
     }
   }
-  
+
   Future<void> _loadRecordingsList() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
       _logHeaderList.clear();
     });
-    
+
     try {
       // Fetch session count
       await _fetchSessionCount();
-      
+
       // Fetch session indices
       await _fetchSessionIndices();
-      
+
       // Convert to EcgRecording objects
       final recordings = <EcgRecording>[];
       print('ECG Recordings: Converting ${_logHeaderList.length} headers to recording objects...');
-      
+
       for (final header in _logHeaderList) {
         // sessionLength is the number of data bytes (no header bytes to subtract)
         // Calculate sample count: dataBytes / bytesPerSample
         final sampleCount = header.sessionLength ~/ EcgConstants.bytesPerSample;
         final durationSeconds = (sampleCount / EcgConstants.samplingRateHz).toInt();
-        
+
         // Parse timestamp from session ID (Unix epoch in seconds)
         // Device stores timestamps in LOCAL time, so interpret as local
         const millisecondsPerSecond = 1000;
@@ -189,18 +189,18 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         final dt = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: false);
         print('ECG Recordings:   - Session ${header.logFileID}: ${header.sessionLength} bytes = $sampleCount samples = ${durationSeconds}s');
         print('ECG Recordings:     Timestamp: ${header.logFileID}s → ${dt.toIso8601String()} (year: ${dt.year})');
-        
+
         recordings.add(EcgRecording(
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
           timestamp: dt,
         ));
       }
-      
+
       // Sort by session ID descending (most recent first)
       recordings.sort((a, b) => b.sessionId.compareTo(a.sessionId));
       print('ECG Recordings: Recordings sorted. Displaying ${recordings.length} card(s)');
-      
+
       if (mounted) {
         setState(() {
           _recordings = recordings;
@@ -216,18 +216,18 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       }
     }
   }
-  
+
   /// Fetch session count using custom BLE protocol
   Future<void> _fetchSessionCount() async {
     print('ECG Recordings: Fetching session count...');
-    
+
     final completer = Completer<int>();
-    
+
     late StreamSubscription<List<int>> subscription;
     subscription = _dataCharacteristic!.onValueReceived.listen((value) {
       final bdata = Uint8List.fromList(value).buffer.asByteData();
       final pktType = bdata.getUint8(0);
-      
+
       if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
         final trendCode = bdata.getUint8(2);
         if (trendCode == hPi4Global.ECGRecord[0]) {
@@ -239,18 +239,18 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         }
       }
     });
-    
+
     _activeSubscriptions.add(subscription);
     _device!.cancelWhenDisconnected(subscription);
     await _dataCharacteristic!.setNotifyValue(true);
-    
+
     // Send command
     final commandPacket = <int>[];
     commandPacket.addAll(hPi4Global.ECGLogCount);
     commandPacket.addAll(hPi4Global.ECGRecord);
     await _sendCommand(commandPacket);
     print('ECG Recordings: Sent ECGLogCount command');
-    
+
     await completer.future.timeout(
       const Duration(seconds: 10),
       onTimeout: () {
@@ -261,31 +261,31 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       },
     );
   }
-  
+
   /// Fetch session indices using custom BLE protocol
   Future<void> _fetchSessionIndices() async {
     if (_totalSessionCount == 0) {
       print('ECG Recordings: No sessions to fetch (count = 0)');
       return;
     }
-    
+
     print('ECG Recordings: Fetching indices for $_totalSessionCount session(s)...');
-    
+
     final completer = Completer<void>();
-    
+
     late StreamSubscription<List<int>> subscription;
     subscription = _dataCharacteristic!.onValueReceived.listen((value) {
       final bdata = Uint8List.fromList(value).buffer.asByteData();
       final pktType = bdata.getUint8(0);
-      
+
       if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
         final logFileID = bdata.getInt64(1, Endian.little);
         final sessionLength = bdata.getUint16(9, Endian.little); // uint16 as per device protocol
-        
+
         print('ECG Recordings: Received index - Session ID: $logFileID, Length: $sessionLength samples');
-        
+
         _logHeaderList.add((logFileID: logFileID, sessionLength: sessionLength));
-        
+
         if (_logHeaderList.length == _totalSessionCount) {
           print('ECG Recordings: All ${_logHeaderList.length} indices received');
           subscription.cancel();
@@ -294,18 +294,18 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         }
       }
     });
-    
+
     _activeSubscriptions.add(subscription);
     _device!.cancelWhenDisconnected(subscription);
     await _dataCharacteristic!.setNotifyValue(true);
-    
+
     // Send command
     final commandPacket = <int>[];
     commandPacket.addAll(hPi4Global.ECGLogIndex);
     commandPacket.addAll(hPi4Global.ECGRecord);
     await _sendCommand(commandPacket);
     print('ECG Recordings: Sent ECGLogIndex command');
-    
+
     await completer.future.timeout(
       const Duration(seconds: 30),
       onTimeout: () {
@@ -315,14 +315,14 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         throw TimeoutException('Timeout fetching session indices');
       },
     );
-    
+
     print('ECG Recordings: Session indices fetch complete. Total headers: ${_logHeaderList.length}');
   }
-  
+
   Future<void> _sendCommand(List<int> commandList) async {
     await _commandCharacteristic?.write(commandList, withoutResponse: true);
   }
-  
+
   /// Delete a single ECG recording
   Future<void> _deleteRecording(EcgRecording recording) async {
     final confirmed = await showDialog<bool>(
@@ -355,21 +355,21 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       final commandPacket = <int>[];
       commandPacket.addAll(hPi4Global.ECGLogDelete);
       commandPacket.addAll(hPi4Global.ECGRecord);
-      
+
       // Add session ID as 2-byte little-endian
       final sessionIdBytes = ByteData(2);
       sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
       commandPacket.addAll(sessionIdBytes.buffer.asUint8List());
-      
+
       await _sendCommand(commandPacket);
       print('ECG Recordings: Sent delete command for session ${recording.sessionId}');
-      
+
       // Wait a moment for device to process
       await Future.delayed(const Duration(milliseconds: 500));
-      
+
       // Refresh the list
       await _loadRecordingsList();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -423,16 +423,16 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       final commandPacket = <int>[];
       commandPacket.addAll(hPi4Global.ECGLogWipeAll);
       commandPacket.addAll(hPi4Global.ECGRecord);
-      
+
       await _sendCommand(commandPacket);
       print('ECG Recordings: Sent wipe all command');
-      
+
       // Wait for device to process
       await Future.delayed(const Duration(seconds: 1));
-      
+
       // Refresh the list
       await _loadRecordingsList();
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -453,24 +453,24 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       }
     }
   }
-  
+
   /// Download a single ECG recording using FsManager
   Future<void> _downloadRecording(EcgRecording recording) async {
     if (recording.isDownloading) return;
-    
+
     setState(() {
       recording.isDownloading = true;
       recording.downloadProgress = 0.0;
     });
-    
+
     try {
       final completer = Completer<List<int>>();
-      
+
       late StreamSubscription downloadSubscription;
       downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
         if (event.path == recording.filePath) {
           print('ECG Download Event: ${event.runtimeType} for ${event.path}');
-          
+
           if (event is mcumgr.OnDownloadCompleted) {
             print('ECG Download: Completed - ${event.data.length} bytes');
             downloadSubscription.cancel();
@@ -491,7 +491,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
             // So we'll estimate progress based on time or use a simple incremental approach
             // This is a limitation of the current mcumgr_flutter package
             print('ECG Download: Progress event received (no accessible progress data)');
-            
+
             // Simulate progress - increment by small amount each callback
             // This at least shows activity even if not accurate
             if (mounted) {
@@ -504,10 +504,10 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
           }
         }
       });
-      
+
       _activeSubscriptions.add(downloadSubscription);
       await _fsManager!.download(recording.filePath);
-      
+
       final binaryData = await completer.future.timeout(
         const Duration(seconds: 30),
         onTimeout: () {
@@ -516,16 +516,16 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
           throw TimeoutException('Download timeout');
         },
       );
-      
+
       // Convert to CSV and export
       await _exportToCsv(recording, binaryData);
-      
+
       if (mounted) {
         setState(() {
           recording.isDownloading = false;
         });
       }
-      
+
       Snackbar.show(
         ABC.c,
         'Recording downloaded successfully!',
@@ -537,7 +537,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
           recording.isDownloading = false;
         });
       }
-      
+
       Snackbar.show(
         ABC.c,
         'Download failed: $e',
@@ -545,25 +545,25 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       );
     }
   }
-  
+
   /// Convert ECG binary data to CSV and share
   Future<void> _exportToCsv(EcgRecording recording, List<int> binaryData) async {
     print('ECG Export: Binary data length: ${binaryData.length} bytes');
     print('ECG Export: Expected session length: ${recording.sessionLength} bytes');
-    
+
     // FsManager downloads raw files from device filesystem - no packet type byte or header
     // Data starts immediately with ECG samples (Int32 little-endian)
     List<int> cleanData = binaryData;
-    
+
     final byteData = ByteData.sublistView(Uint8List.fromList(cleanData));
     final numSamples = cleanData.length ~/ EcgConstants.bytesPerSample;
-    
+
     print('ECG Export: Calculated $numSamples samples');
-    
+
     // Create CSV content - match archived format (ECG values only, no time column)
     final csvRows = <List<String>>[];
     csvRows.add(['ECG(mV)']); // Match archived format exactly
-    
+
     for (int i = 0; i < numSamples; i++) {
       try {
         // ECG samples are Int32 in little-endian format
@@ -576,29 +576,29 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         break;
       }
     }
-    
+
     print('ECG Export: Generated ${csvRows.length - 1} CSV rows');
-    
+
     // Convert to CSV string
     String csvContent = const ListToCsvConverter().convert(csvRows);
-    
+
     // Save and share
     await _saveAndShareCsv(
       csvContent,
       'ecg_recording_${recording.sessionId}_${DateFormat('yyyyMMdd_HHmmss').format(recording.timestamp)}.csv',
     );
   }
-  
+
   /// Save CSV to file and share it
   Future<void> _saveAndShareCsv(String csvContent, String fileName) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final path = directory.path;
       await Directory(path).create(recursive: true);
-      
+
       final file = File('$path/$fileName');
       await file.writeAsString(csvContent);
-      
+
       final xFile = XFile(file.path);
       await Share.shareXFiles(
         [xFile],
@@ -609,14 +609,14 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       rethrow;
     }
   }
-  
+
   double _convertToMillivolts(int rawValue) {
     const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
     const double vRef = 1.0; // volts
     const double gain = 20.0; // amplifier gain
     return ((rawValue / maxAdcValue) * (vRef * 1000 / gain));
   }
-  
+
   /// Download all recordings
   Future<void> _downloadAllRecordings() async {
     final confirmed = await showDialog<bool>(
@@ -641,9 +641,9 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         ],
       ),
     );
-    
+
     if (confirmed != true) return;
-    
+
     for (final recording in _recordings) {
       if (!recording.isDownloading) {
         await _downloadRecording(recording);
@@ -652,18 +652,18 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       }
     }
   }
-  
+
   void _cleanup() {
     for (var sub in _activeSubscriptions) {
       sub.cancel();
     }
     _activeSubscriptions.clear();
-    
+
     if (_fsManager != null) {
       _fsManager!.kill();
       _fsManager = null;
     }
-    
+
     // Disconnect from device
     if (_device != null) {
       _device!.disconnect().catchError((e) {
@@ -672,7 +672,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       _device = null;
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -735,7 +735,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       body: _buildBody(),
     );
   }
-  
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -752,7 +752,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         ),
       );
     }
-    
+
     if (_errorMessage != null) {
       return Center(
         child: Padding(
@@ -781,7 +781,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         ),
       );
     }
-    
+
     if (_recordings.isEmpty) {
       return Center(
         child: Padding(
@@ -819,7 +819,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
         ),
       );
     }
-    
+
     return RefreshIndicator(
       onRefresh: _loadRecordingsList,
       child: ListView.builder(
@@ -829,7 +829,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       ),
     );
   }
-  
+
   Widget _buildRecordingCard(EcgRecording recording) {
     return Card(
       color: const Color(0xFF2D2D2D),
@@ -892,7 +892,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
                 ),
               ],
             ),
-            
+
             if (recording.isDownloading) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
