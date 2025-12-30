@@ -13,6 +13,7 @@ import '../models/research_recording.dart';
 /// Manager for research recording operations
 /// Handles BLE communication, file downloads, and data parsing
 class ResearchRecordingManager {
+
   final BluetoothDevice device;
   BluetoothCharacteristic? _commandCharacteristic;
   BluetoothCharacteristic? _dataCharacteristic;
@@ -365,10 +366,10 @@ class ResearchRecordingManager {
   /// Download a signal file from device
   /// Returns the raw binary data
   Future<Uint8List> downloadSignalFile(
-    ResearchRecording session,
-    ResearchSignalType signal, {
-    void Function(double progress)? onProgress,
-  }) async {
+      ResearchRecording session,
+      ResearchSignalType signal, {
+        void Function(double progress)? onProgress,
+      }) async {
     if (_fsManager == null) {
       throw Exception('Not initialized - call initialize() first');
     }
@@ -419,9 +420,9 @@ class ResearchRecordingManager {
   /// Download all signal files for a session
   /// Returns a map of signal type to binary data
   Future<Map<ResearchSignalType, Uint8List>> downloadSession(
-    ResearchRecording session, {
-    void Function(ResearchSignalType signal, double progress)? onProgress,
-  }) async {
+      ResearchRecording session, {
+        void Function(ResearchSignalType signal, double progress)? onProgress,
+      }) async {
     final results = <ResearchSignalType, Uint8List>{};
 
     for (final signal in session.signals) {
@@ -551,12 +552,12 @@ class ResearchRecordingManager {
   // Export Functions
   // ============================================================================
 
-  /// Export signal data to CSV file
-  Future<File> exportToCsv(
-    ResearchRecording session,
-    ResearchSignalType signal,
-    Uint8List data,
-  ) async {
+  /// Generate CSV content from binary data (returns string, not file)
+  String _generateCsvContent(
+      ResearchRecording session,
+      ResearchSignalType signal,
+      Uint8List data,
+      ) {
     final header = parseHeader(data);
     final rows = <List<String>>[];
 
@@ -633,7 +634,16 @@ class ResearchRecordingManager {
         break;
     }
 
-    final csvContent = const ListToCsvConverter().convert(rows);
+    return const ListToCsvConverter().convert(rows);
+  }
+
+  /// Export signal data to CSV file
+  Future<File> exportToCsv(
+      ResearchRecording session,
+      ResearchSignalType signal,
+      Uint8List data,
+      ) async {
+    final csvContent = _generateCsvContent(session, signal, data);
     final directory = await getApplicationDocumentsDirectory();
     final fileName = '${signal.shortName.toLowerCase()}_${session.sessionTimestamp}.csv';
     final file = File('${directory.path}/$fileName');
@@ -645,9 +655,9 @@ class ResearchRecordingManager {
 
   /// Export session metadata to JSON file
   Future<File> exportMetadataToJson(
-    ResearchRecording session,
-    Map<ResearchSignalType, Uint8List> signalData,
-  ) async {
+      ResearchRecording session,
+      Map<ResearchSignalType, Uint8List> signalData,
+      ) async {
     final metadata = <String, dynamic>{
       'sessionTimestamp': session.sessionTimestamp,
       'startTime': session.startTime.toIso8601String(),
@@ -680,11 +690,11 @@ class ResearchRecordingManager {
     return file;
   }
 
-  /// Export all session data to ZIP archive
+  /// Export all session data to ZIP archive (CSV files only, no binary)
   Future<File> exportToZip(
-    ResearchRecording session,
-    Map<ResearchSignalType, Uint8List> signalData,
-  ) async {
+      ResearchRecording session,
+      Map<ResearchSignalType, Uint8List> signalData,
+      ) async {
     final archive = Archive();
 
     // Add metadata JSON
@@ -699,26 +709,16 @@ class ResearchRecordingManager {
           'sampleCount': header.numSamples,
           'fileSize': entry.value.length,
         };
-      } catch (e) {
-        // Skip if header parsing fails
-      }
 
-      // Add raw binary file
-      archive.addFile(ArchiveFile(
-        entry.key.fileName,
-        entry.value.length,
-        entry.value,
-      ));
-
-      // Add CSV export
-      try {
-        final csvFile = await exportToCsv(session, entry.key, entry.value);
-        final csvContent = await csvFile.readAsBytes();
+        // Generate and add CSV content directly to archive
+        final csvContent = _generateCsvContent(session, entry.key, entry.value);
+        final csvBytes = utf8.encode(csvContent);
         archive.addFile(ArchiveFile(
           '${entry.key.shortName.toLowerCase()}.csv',
-          csvContent.length,
-          csvContent,
+          csvBytes.length,
+          csvBytes,
         ));
+        print('[ResearchRecordingManager] Added CSV to ZIP: ${entry.key.shortName.toLowerCase()}.csv');
       } catch (e) {
         print('[ResearchRecordingManager] Error creating CSV for ${entry.key}: $e');
       }
@@ -730,6 +730,9 @@ class ResearchRecordingManager {
 
     // Create ZIP
     final zipData = ZipEncoder().encode(archive);
+    if (zipData == null) {
+      throw Exception('Failed to create ZIP archive');
+    }
 
     final directory = await getApplicationDocumentsDirectory();
     final fileName = 'research_recording_${session.sessionTimestamp}.zip';
@@ -739,6 +742,7 @@ class ResearchRecordingManager {
     print('[ResearchRecordingManager] Exported ZIP: ${file.path}');
     return file;
   }
+
 
   /// Get local storage directory for a session
   Future<Directory> getSessionDirectory(ResearchRecording session, String deviceMac) async {

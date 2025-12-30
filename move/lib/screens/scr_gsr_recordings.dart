@@ -420,7 +420,7 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
 
     for (int i = 0; i < numSamples; i++) {
       try {
-        final rawValue = byteData.getUint16(i * GSRConstants.bytesPerSample, Endian.little);
+        final rawValue = byteData.getInt32(i * GSRConstants.bytesPerSample, Endian.little);
         csvRows.add([rawValue.toString()]);
       } catch (e) {
         print('Error parsing sample $i: $e');
