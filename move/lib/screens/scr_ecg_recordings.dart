@@ -38,6 +38,7 @@ class EcgRecording {
   final int sessionId;
   final int sessionLength;
   final DateTime timestamp;
+  final int timestampSec;
   final String filePath;
 
   bool isDownloading = false;
@@ -47,6 +48,7 @@ class EcgRecording {
     required this.sessionId,
     required this.sessionLength,
     required this.timestamp,
+    required this.timestampSec,
   }) : filePath = '/lfs/ecg/$sessionId';
 
   String get displayName => 'ECG Recording #$sessionId';
@@ -194,6 +196,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
           timestamp: dt,
+            timestampSec: header.logFileID
         ));
       }
 
@@ -356,10 +359,14 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       commandPacket.addAll(hPi4Global.ECGLogDelete);
       commandPacket.addAll(hPi4Global.ECGRecord);
 
-      // Add session ID as 2-byte little-endian
+      final timestampBytes = ByteData(8);
+      timestampBytes.setInt64(0, recording.timestampSec, Endian.little);
+      commandPacket.addAll(timestampBytes.buffer.asUint8List());
+
+      /*// Add session ID as 2-byte little-endian
       final sessionIdBytes = ByteData(2);
       sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
-      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());
+      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());*/
 
       await _sendCommand(commandPacket);
       print('ECG Recordings: Sent delete command for session ${recording.sessionId}');
@@ -1041,6 +1048,7 @@ class _ScrEcgRecordingsContentState extends State<ScrEcgRecordingsContent> {
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
           timestamp: dt,
+            timestampSec: header.logFileID
         ));
       }
 

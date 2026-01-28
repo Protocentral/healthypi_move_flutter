@@ -38,6 +38,7 @@ class HRVRecording {
   final int sessionId;
   final int sessionLength;
   final DateTime timestamp;
+  final int timestampSec;
   final String filePath;
 
   bool isDownloading = false;
@@ -47,6 +48,7 @@ class HRVRecording {
     required this.sessionId,
     required this.sessionLength,
     required this.timestamp,
+    required this.timestampSec,
   }) : filePath = '/lfs/hrv/$sessionId';
 
   String get displayName => 'HRV Recording #$sessionId';
@@ -176,6 +178,7 @@ class _ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
           timestamp: dt,
+          timestampSec: header.logFileID
         ));
       }
 
@@ -309,9 +312,13 @@ class _ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
       commandPacket.addAll(hPi4Global.ECGLogDelete);
       commandPacket.addAll(hPi4Global.HRVRecord);
 
-      final sessionIdBytes = ByteData(2);
+      final timestampBytes = ByteData(8);
+      timestampBytes.setInt64(0, recording.timestampSec, Endian.little);
+      commandPacket.addAll(timestampBytes.buffer.asUint8List());
+
+      /*final sessionIdBytes = ByteData(2);
       sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
-      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());
+      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());*/
 
       await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
       await Future.delayed(const Duration(milliseconds: 500));
