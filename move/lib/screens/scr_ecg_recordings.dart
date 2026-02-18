@@ -76,7 +76,7 @@ class EcgRecording {
 }
 
 /// Modern ECG recordings management screen using FsManager for downloads
-class ScrEcgRecordings extends StatefulWidget {
+/*class ScrEcgRecordings extends StatefulWidget {
   final String deviceMacAddress;
 
   const ScrEcgRecordings({super.key, required this.deviceMacAddress});
@@ -942,7 +942,7 @@ class _ScrEcgRecordingsState extends State<ScrEcgRecordings> {
       ),
     );
   }
-}
+}*/
 
 /// Content-only version of ECG recordings for embedding in tabs
 /// This widget provides the same functionality without the Scaffold/AppBar
@@ -1182,9 +1182,14 @@ class _ScrEcgRecordingsContentState extends State<ScrEcgRecordingsContent> {
       commandPacket.addAll(hPi4Global.ECGLogDelete);
       commandPacket.addAll(hPi4Global.ECGRecord);
 
-      final sessionIdBytes = ByteData(2);
+      /*final sessionIdBytes = ByteData(2);
       sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
-      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());
+      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());*/
+
+      final timestampBytes = ByteData(8);
+      timestampBytes.setInt64(0, recording.timestampSec, Endian.little);
+      commandPacket.addAll(timestampBytes.buffer.asUint8List());
+
 
       await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
       await Future.delayed(const Duration(milliseconds: 500));
