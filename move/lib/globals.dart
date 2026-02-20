@@ -170,6 +170,12 @@ class hPi4Global {
   static const List<int> ActivityTrend = [0x04];
 
   static const List<int> ECGRecord = [0x10];
+  static const List<int> BIOZRecord = [0x11];
+  static const List<int> PPGRecord = [0x12];
+  static const List<int> PPGFingerRecord = [0x13];
+  static const List<int> GSRRecord = [0x14];
+  static const List<int> HRVRecord = [0x15];
+
 
   static const int CES_CMDIF_TYPE_LOG_IDX = 0x05;
   static const int CES_CMDIF_TYPE_DATA = 0x02;
@@ -180,6 +186,59 @@ class hPi4Global {
   static const List<int> StartBPTCal = [0x61];
   static const List<int> SetBPTCalMode = [0x60];
   static const List<int> EndBPTCal = [0x62];
+
+  // Research Recording Commands (Long-term multi-signal recording)
+  static const List<int> REC_CONFIGURE = [0x70];
+  static const List<int> REC_START = [0x71];
+  static const List<int> REC_STOP = [0x72];
+  static const List<int> REC_GET_STATUS = [0x73];
+  static const List<int> REC_GET_SESSION_LIST = [0x74];
+  static const List<int> REC_DELETE_SESSION = [0x75];
+  static const List<int> REC_WIPE_ALL = [0x76];
+
+  // Research Recording Signal Mask Bits
+  static const int SIGNAL_PPG_WRIST = 0x01;   // Bit 0: PPG Wrist (IR, Red, Green @ 25 Hz)
+  static const int SIGNAL_PPG_FINGER = 0x02; // Bit 1: PPG Finger (IR, Red @ 25 Hz)
+  static const int SIGNAL_ACCEL = 0x04;      // Bit 2: IMU Accelerometer (X, Y, Z @ 100 Hz)
+  static const int SIGNAL_GYRO = 0x08;       // Bit 3: IMU Gyroscope (X, Y, Z @ 100 Hz)
+  static const int SIGNAL_GSR = 0x10;        // Bit 4: GSR (@ 32 Hz)
+
+  // Research Recording States
+  static const int REC_STATE_IDLE = 0;
+  static const int REC_STATE_ARMED = 1;
+  static const int REC_STATE_RECORDING = 2;
+  static const int REC_STATE_FINALIZING = 3;
+  static const int REC_STATE_ERROR = 4;
+
+  // Research Recording Response Types
+  static const int CES_CMDIF_TYPE_REC_SESSION = 0x05; // Session list entry
+
+  // Research Recording File Format
+  static const int REC_FILE_MAGIC = 0x48504952; // "HPIR" in little-endian
+  static const int REC_FILE_HEADER_SIZE = 32;
+
+  // Research Recording Signal Types (in file header)
+  static const int REC_SIGNAL_TYPE_PPG_WRIST = 0;
+  static const int REC_SIGNAL_TYPE_PPG_FINGER = 1;
+  static const int REC_SIGNAL_TYPE_ACCEL = 2;
+  static const int REC_SIGNAL_TYPE_GYRO = 3;
+  static const int REC_SIGNAL_TYPE_GSR = 4;
+
+  // Research Recording Sample Sizes (bytes per sample)
+  static const int REC_SAMPLE_SIZE_PPG_WRIST = 12;  // 3 x uint32
+  static const int REC_SAMPLE_SIZE_PPG_FINGER = 8; // 2 x uint32
+  static const int REC_SAMPLE_SIZE_ACCEL = 6;      // 3 x int16
+  static const int REC_SAMPLE_SIZE_GYRO = 6;       // 3 x int16
+  static const int REC_SAMPLE_SIZE_GSR = 4;        // 1 x int32
+
+  // Research Recording Sample Rates (Hz)
+  static const int REC_SAMPLE_RATE_PPG = 25;
+  static const int REC_SAMPLE_RATE_ACCEL = 100;
+  static const int REC_SAMPLE_RATE_GYRO = 100;
+  static const int REC_SAMPLE_RATE_GSR = 32;
+
+  // Research Recording File Paths on Device
+  static const String DEVICE_DIR_RESEARCH = 'rec';
 
   // Device filesystem paths for SMP downloads (LittleFS structure)
   static const String DEVICE_DIR_HR = 'trhr';

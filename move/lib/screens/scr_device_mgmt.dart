@@ -4,7 +4,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_device_scan.dart';
 import 'package:move/screens/scr_stream_selection.dart';
-import 'package:move/screens/scr_ecg_recordings.dart';
+import 'package:move/screens/scr_recordings_hub.dart';
 import 'package:move/screens/scr_dfu_new.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../utils/sizeConfig.dart';
@@ -463,10 +463,10 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // ECG Recordings
+                  // Recordings (Spot Check + Research)
                   _buildActionButton(
-                    icon: Icons.monitor_heart,
-                    label: 'ECG Recordings',
+                    icon: Symbols.assignment,
+                    label: 'Recordings',
                     color: hPi4Global.hpi4Color,
                     onPressed: () async {
                       // Get paired device info
@@ -480,11 +480,11 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                         );
                         return;
                       }
-                      
-                      // Navigate directly to ECG recordings with device MAC
+
+                      // Navigate to unified Recordings Hub
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (context) => ScrEcgRecordings(
+                          builder: (context) => ScrRecordingsHub(
                             deviceMacAddress: deviceInfo.macAddress,
                           ),
                         ),
