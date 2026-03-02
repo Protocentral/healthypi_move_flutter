@@ -54,7 +54,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
   bool listeningPPGStream = false;
   bool listeningGSRStream = false;
   bool listeningFingerPPGStream = false;
-  bool startStreaming = false;
+  bool startStreaming = true;
 
   @override
   void initState() {
@@ -426,7 +426,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         ),
         actions: [
           // Start/Stop button
-          Padding(
+          /*Padding(
             padding: const EdgeInsets.only(right: 8.0),
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
@@ -439,11 +439,8 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
                 elevation: 2,
               ),
               onPressed: () async {
-                if (startStreaming == false) {
-                  setState(() {
-                    startStreaming = true;
-                  });
-                } else {
+                if (startStreaming == true) {
+                  // Currently streaming → STOP it
                   closeAllStreams();
                   ecgLineData.removeAt(0);
                   ppgLineData.removeAt(0);
@@ -452,6 +449,16 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
                   setState(() {
                     startStreaming = false;
                   });
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => ScrStreamsSelection(device: widget.device),
+                    ),
+                  );
+                } else {
+                  // Currently stopped → START it
+                  setState(() {
+                    startStreaming = true;
+                  });
                 }
               },
               icon: Icon(
@@ -459,11 +466,11 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
                 size: 20,
               ),
               label: Text(
-                startStreaming ? 'Stop' : 'Start',
+                startStreaming ? 'Cancel' : 'Start',
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
-          ),
+          ),*/
         ],
         centerTitle: false,
       ),

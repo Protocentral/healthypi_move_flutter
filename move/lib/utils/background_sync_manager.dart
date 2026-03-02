@@ -416,28 +416,41 @@ class BackgroundSyncManager {
   }
 
   Future<void> _sendCurrentDateTime(BluetoothDevice device) async {
-    // Send LOCAL time to device - device stores timestamps as-is in local time
-    // This ensures timestamps remain consistent with the timezone they were recorded in
     final dt = DateTime.now();
     final cdate = DateFormat("yy").format(dt);
-    
+
+    // Get timezone offset in total minutes (e.g., IST = +330, EST = -300)
+    final offsetMinutes = dt.timeZoneOffset.inMinutes; // signed int
+
     debugPrint('Syncing device time: ${dt.toString()} (local time)');
-    
+    debugPrint('Timezone: ${dt.timeZoneName}, Offset: ${offsetMinutes} mins');
+
     List<int> commandDateTimePacket = [];
     ByteData sessionParametersLength = ByteData(8);
     commandDateTimePacket.addAll(hPi4Global.WISER_CMD_SET_DEVICE_TIME);
-    
+
     sessionParametersLength.setUint8(0, dt.second);
     sessionParametersLength.setUint8(1, dt.minute);
     sessionParametersLength.setUint8(2, dt.hour);
     sessionParametersLength.setUint8(3, dt.day);
     sessionParametersLength.setUint8(4, dt.month);
     sessionParametersLength.setUint8(5, int.parse(cdate));
-    
-    Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 6);
+
+    // Encode signed offset in minutes as Int16 (2 bytes, big-endian)
+    // Range: -840 to +840 minutes covers all real-world timezones
+    sessionParametersLength.setInt16(6, offsetMinutes, Endian.little);
+
+    Uint8List cmdByteList = sessionParametersLength.buffer.asUint8List(0, 8);
     commandDateTimePacket.addAll(cmdByteList);
+
+    debugPrint('Full Cmd: ${commandDateTimePacket.map((b) => '0x${b.toRadixString(16).padLeft(2, '0').toUpperCase()}').join(' ')}');
+    debugPrint('Decoded → ss:${dt.second} mm:${dt.minute} hh:${dt.hour} dd:${dt.day} MM:${dt.month} yy:${int.parse(cdate)} tzOffset:${offsetMinutes}min');
+    debugPrint('-------------------------------');
+    // ──────────────────────────────────────────────────────────
+
     await _sendCommand(commandDateTimePacket, device);
   }
+
 
   Future<void> _sendCommand(List<int> commandList, BluetoothDevice device) async {
     if (_commandCharacteristic != null) {

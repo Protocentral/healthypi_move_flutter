@@ -14,19 +14,12 @@ import '../utils/snackbar.dart';
 
 // GSR Recording Constants
 class GSRConstants {
-  // Sample rate for GSR recordings in Hz
   static const int samplingRateHz = 128;
-
-  // File format constants
   static const int fileHeaderBytes = 10;
   static const int bytesPerSample = 4;
-
-  // ADC conversion constants
-  static const int maxAdcValue = 8388608; // 2^23 for 24-bit signed
-  static const double vRef = 1.0; // volts
-  static const double gain = 20.0; // amplifier gain
-
-  // Display formatting
+  static const int maxAdcValue = 8388608;
+  static const double vRef = 1.0;
+  static const double gain = 20.0;
   static const int sampleCountThreshold = 1000;
   static const int estimatedMinutesBetweenSessions = 5;
   static const int estimatedMaxSessionId = 100;
@@ -55,14 +48,11 @@ class GSRRecording {
   String get displayName => 'GSR Recording #$sessionId';
 
   String get dateTime {
-    // Debug timestamp (device stores in local time)
     print('GSR Recording: Session $sessionId timestamp: ${timestamp.toIso8601String()} (year: ${timestamp.year})');
     return DateFormat('EEE d MMM yyyy h:mm a').format(timestamp);
   }
 
   String get durationText {
-    // sessionLength is the number of data bytes (points start from beginning of file)
-    // Calculate sample count: dataBytes / bytesPerSample
     final sampleCount = sessionLength ~/ GSRConstants.bytesPerSample;
     final durationSeconds = (sampleCount / GSRConstants.samplingRateHz).toInt();
     return '$durationSeconds seconds • ${_formatSampleCount(sampleCount)} samples';
@@ -75,18 +65,20 @@ class GSRRecording {
     return count.toString();
   }
 }
+
 /// Content-only version of GSR recordings for embedding in tabs
-/// This widget provides the same functionality without the Scaffold/AppBar
 class ScrGSRRecordingsContent extends StatefulWidget {
   final String deviceMacAddress;
 
   const ScrGSRRecordingsContent({super.key, required this.deviceMacAddress});
 
   @override
-  State<ScrGSRRecordingsContent> createState() => _ScrGSRRecordingsContentState();
+  State<ScrGSRRecordingsContent> createState() => ScrGSRRecordingsContentState();
 }
 
-class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
+// NOTE: Public (no underscore) so it can be accessed via GlobalKey
+// from scr_recordings_hub.dart
+class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
   BluetoothDevice? _device;
   mcumgr.FsManager? _fsManager;
   BluetoothCharacteristic? _commandCharacteristic;
@@ -119,7 +111,9 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
       _device = BluetoothDevice.fromId(widget.deviceMacAddress);
 
       if (_device!.isDisconnected) {
-        await _device!.connect(license: License.values.first, timeout: const Duration(seconds: 15));
+        await _device!.connect(
+            license: License.values.first,
+            timeout: const Duration(seconds: 15));
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
@@ -179,7 +173,7 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
           sessionId: header.logFileID,
           sessionLength: header.sessionLength,
           timestamp: dt,
-            timestampSec: header.logFileID
+          timestampSec: header.logFileID,
         ));
       }
 
@@ -282,12 +276,45 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     );
   }
 
+  /// Public method called from ScrRecordingsHub to wipe all GSR recordings
+  Future<void> wipeAll() async {
+    if (_commandCharacteristic == null) return;
+
+    try {
+      final commandPacket = <int>[];
+      commandPacket.addAll(hPi4Global.ECGLogWipeAll); // <-- replace with your GSR wipe-all constant if different
+      commandPacket.addAll(hPi4Global.GSRRecord);
+      await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _loadRecordingsList();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All GSR recordings wiped from device'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Wipe failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteRecording(GSRRecording recording) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2D2D2D),
-        title: const Text('Delete Recording', style: TextStyle(color: Colors.white)),
+        title: const Text('Delete Recording',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'Are you sure you want to delete this GSR recording? This action cannot be undone.',
           style: TextStyle(color: Colors.white70),
@@ -316,10 +343,6 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
       final timestampBytes = ByteData(8);
       timestampBytes.setInt64(0, recording.timestampSec, Endian.little);
       commandPacket.addAll(timestampBytes.buffer.asUint8List());
-
-      /*final sessionIdBytes = ByteData(2);
-      sessionIdBytes.setUint16(0, recording.sessionId & 0xFFFF, Endian.little);
-      commandPacket.addAll(sessionIdBytes.buffer.asUint8List());*/
 
       await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
       await Future.delayed(const Duration(milliseconds: 500));
@@ -366,7 +389,8 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
           } else if (event is mcumgr.OnDownloadFailed) {
             downloadSubscription.cancel();
             _activeSubscriptions.remove(downloadSubscription);
-            completer.completeError(Exception('Download failed: ${event.cause}'));
+            completer.completeError(
+                Exception('Download failed: ${event.cause}'));
           } else if (event is mcumgr.OnDownloadCancelled) {
             downloadSubscription.cancel();
             _activeSubscriptions.remove(downloadSubscription);
@@ -374,7 +398,8 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
           } else if (event is mcumgr.OnDownloadProgressChanged) {
             if (mounted) {
               setState(() {
-                recording.downloadProgress = (recording.downloadProgress + 0.05).clamp(0.0, 0.9);
+                recording.downloadProgress =
+                    (recording.downloadProgress + 0.05).clamp(0.0, 0.9);
               });
             }
           }
@@ -412,22 +437,20 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     }
   }
 
-  /// Convert GSR binary data to CSV and share
   Future<void> _exportToCsv(GSRRecording recording, List<int> binaryData) async {
-
     List<int> cleanData = binaryData;
-
     final byteData = ByteData.sublistView(Uint8List.fromList(cleanData));
     final numSamples = cleanData.length ~/ GSRConstants.bytesPerSample;
 
     print('GSR Export: Calculated $numSamples samples');
 
     final csvRows = <List<String>>[];
-    csvRows.add(['GSR']); // Match archived format exactly
+    csvRows.add(['GSR']);
 
     for (int i = 0; i < numSamples; i++) {
       try {
-        final rawValue = byteData.getInt32(i * GSRConstants.bytesPerSample, Endian.little);
+        final rawValue =
+        byteData.getInt32(i * GSRConstants.bytesPerSample, Endian.little);
         csvRows.add([rawValue.toString()]);
       } catch (e) {
         print('Error parsing sample $i: $e');
@@ -438,7 +461,6 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     print('GSR Export: Generated ${csvRows.length - 1} CSV rows');
     String csvContent = const ListToCsvConverter().convert(csvRows);
 
-    // Save and share
     await _saveAndShareCsv(
       csvContent,
       'GSR_recording_${recording.sessionId}_${DateFormat('yyyyMMdd_HHmmss').format(recording.timestamp)}.csv',
@@ -474,8 +496,6 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
       _fsManager!.kill();
       _fsManager = null;
     }
-
-    // Don't disconnect device - it's shared with other tabs
   }
 
   @override
@@ -572,7 +592,8 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
         itemCount: _recordings.length,
-        itemBuilder: (context, index) => _buildRecordingCard(_recordings[index]),
+        itemBuilder: (context, index) =>
+            _buildRecordingCard(_recordings[index]),
       ),
     );
   }
@@ -644,7 +665,8 @@ class _ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
               LinearProgressIndicator(
                 value: recording.downloadProgress,
                 backgroundColor: Colors.grey[700],
-                valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                valueColor:
+                AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
               ),
               const SizedBox(height: 4),
               Text(

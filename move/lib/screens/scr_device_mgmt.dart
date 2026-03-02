@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:convert/convert.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
@@ -7,9 +8,11 @@ import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/screens/scr_recordings_hub.dart';
 import 'package:move/screens/scr_dfu_new.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
+import '../utils/extra.dart';
 import '../utils/sizeConfig.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
+import '../utils/snackbar.dart';
 import '../utils/update_checker.dart';
 import 'scr_device_settings.dart';
 import '../home.dart';
@@ -26,6 +29,14 @@ class ScrDeviceMgmt extends StatefulWidget {
 
 class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
   String selectedOption = "sync";
+
+  BluetoothDevice? _device;
+
+  BluetoothService? commandService;
+  BluetoothCharacteristic? commandCharacteristic;
+
+  BluetoothService? dataService;
+  BluetoothCharacteristic? dataCharacteristic;
 
   @override
   void initState() {
@@ -75,6 +86,101 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
     }
   }
 
+  Future<void> _connectAndSend() async {
+    try {
+      debugPrint('Auto-connecting to device: ${_device}');
+
+      // Connect if not already connected
+      if (_device!.isDisconnected) {
+        await _device?.connect(license: License.values.first, timeout: const Duration(seconds: 15));
+        await Future.delayed(const Duration(milliseconds: 500));
+
+      }
+
+      // Navigate to stream selection screen
+      if (mounted) {
+        await sendDeleteAllCommand();
+        // Directly navigate to HomePage to trigger database deletion
+        await DeviceManager.unpairDevice();
+        await onDisconnectPressed();
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => HomePage()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        // Auto-return after showing error
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> sendDeleteAllCommand() async {
+    await Future.delayed(Duration.zero, () async {
+      List<int> commandPacket = [];
+      commandPacket.addAll(hPi4Global.sessionLogWipeAll);
+      await _sendCommand(commandPacket);
+      logConsole(commandPacket.toString());
+    });
+  }
+
+  Future<void> _sendCommand(
+      List<int> commandList) async {
+    try {
+      // Check if device is still connected
+      if (_device== null) {
+        logConsole("Device disconnected, skipping command");
+        return;
+      }
+
+      logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
+
+      List<BluetoothService> services = await _device!.discoverServices();
+
+      // Find a service and characteristic by UUID
+      for (BluetoothService service in services) {
+        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
+          commandService = service;
+          for (BluetoothCharacteristic characteristic
+          in service.characteristics) {
+            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
+              commandCharacteristic = characteristic;
+              break;
+            }
+          }
+        }
+      }
+
+      if (commandService != null && commandCharacteristic != null) {
+        // Write to the characteristic
+        await commandCharacteristic?.write(commandList, withoutResponse: true);
+        logConsole('Data written: $commandList');
+      }
+    } catch (e) {
+      logConsole("Error sending command: $e");
+      // Silently handle error if device is disconnected
+    }
+  }
+
+  Future onDisconnectPressed() async {
+    try {
+      await _device!.disconnectAndUpdateStream();
+      Snackbar.show(ABC.c, "Disconnect: Success", success: true);
+    } catch (e, backtrace) {
+      Snackbar.show(
+        ABC.c,
+        prettyException("Disconnect Error:", e),
+        success: false,
+      );
+      print("$e backtrace: $backtrace");
+    }
+  }
+
+
   showConfirmationDialog(BuildContext context, String action) {
     return showDialog(
       context: context,
@@ -104,11 +210,18 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   ),
                 ),
                 onPressed: () async {
-                  // Directly navigate to HomePage to trigger database deletion
-                  await DeviceManager.unpairDevice();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => HomePage()),
-                  );
+                  final deviceInfo = await DeviceManager.getPairedDevice();
+                  if (deviceInfo == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No device paired. Please pair a device first.'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+                  _device = BluetoothDevice.fromId(deviceInfo.macAddress);
+                  await _connectAndSend();
                 },
               ),
               TextButton(

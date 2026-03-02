@@ -24,7 +24,10 @@ class ScrRecordingsHub extends StatefulWidget {
 class _ScrRecordingsHubState extends State<ScrRecordingsHub>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final GlobalKey<_ResearchTabState> _researchTabKey = GlobalKey<_ResearchTabState>();
+  final GlobalKey<_ResearchTabState> _researchTabKey =
+  GlobalKey<_ResearchTabState>();
+  final GlobalKey<_SpotCheckTabState> _spotCheckTabKey =
+  GlobalKey<_SpotCheckTabState>();
 
   @override
   void initState() {
@@ -41,7 +44,6 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
   }
 
   void _onTabChanged() {
-    // Rebuild to update actions based on current tab
     if (mounted) setState(() {});
   }
 
@@ -74,53 +76,85 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Tab 1: Spot Check (ECG recordings)
-          _SpotCheckTab(deviceMacAddress: widget.deviceMacAddress),
-          // Tab 2: Research recordings
-          _ResearchTab(key: _researchTabKey, deviceMacAddress: widget.deviceMacAddress),
+          _SpotCheckTab(
+            key: _spotCheckTabKey,
+            deviceMacAddress: widget.deviceMacAddress,
+            // FIX: fires setState on the hub so _buildAppBarActions()
+            // re-reads currentTabLabel whenever the nested ECG/HRV/GSR tab changes
+            onNestedTabChanged: () {
+              if (mounted) setState(() {});
+            },
+          ),
+          _ResearchTab(
+            key: _researchTabKey,
+            deviceMacAddress: widget.deviceMacAddress,
+          ),
         ],
       ),
     );
   }
 
   List<Widget> _buildAppBarActions() {
-    // Only show actions for Research tab (index 1)
-    if (_tabController.index != 1) return [];
-
-    return [
-      IconButton(
-        icon: const Icon(Icons.refresh),
-        tooltip: 'Refresh',
-        onPressed: () {
-          _researchTabKey.currentState?.refreshSessions();
-        },
-      ),
-      PopupMenuButton<String>(
-        icon: const Icon(Icons.more_vert),
-        onSelected: (value) async {
-          switch (value) {
-            case 'wipe_all':
-              _showWipeAllDialog();
-              break;
-          }
-        },
-        itemBuilder: (context) => [
-          const PopupMenuItem(
-            value: 'wipe_all',
-            child: Row(
-              children: [
-                Icon(Icons.delete_forever, color: Colors.red, size: 20),
-                SizedBox(width: 12),
-                Text('Wipe All Research Data', style: TextStyle(color: Colors.red)),
-              ],
+    if (_tabController.index == 1) {
+      // Research tab actions
+      return [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh',
+          onPressed: () {
+            _researchTabKey.currentState?.refreshSessions();
+          },
+        ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) async {
+            if (value == 'wipe_all') _showWipeAllResearchDialog();
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'wipe_all',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_forever, color: Colors.red, size: 20),
+                  SizedBox(width: 12),
+                  Text('Wipe All Research Data',
+                      style: TextStyle(color: Colors.red)),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    ];
+          ],
+        ),
+      ];
+    } else {
+      // Spot Check tab actions — label now updates correctly on nested tab change
+      final label = _spotCheckTabKey.currentState?.currentTabLabel ?? 'ECG';
+      return [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert),
+          onSelected: (value) async {
+            if (value == 'wipe_all') {
+              _spotCheckTabKey.currentState?.wipeCurrentTab(context);
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: 'wipe_all',
+              child: Row(
+                children: [
+                  const Icon(Icons.delete_forever, color: Colors.red, size: 20),
+                  const SizedBox(width: 12),
+                  Text('Wipe All $label Data',
+                      style: const TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ];
+    }
   }
 
-  Future<void> _showWipeAllDialog() async {
+  Future<void> _showWipeAllResearchDialog() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -153,23 +187,52 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
   }
 }
 
+// ---------------------------------------------------------------------------
+// Spot Check Tab (ECG / HRV / GSR nested tabs)
+// ---------------------------------------------------------------------------
 
 class _SpotCheckTab extends StatefulWidget {
   final String deviceMacAddress;
+  // FIX: callback so the parent hub rebuilds its appbar when the nested tab changes
+  final VoidCallback? onNestedTabChanged;
 
-  const _SpotCheckTab({required this.deviceMacAddress});
+  const _SpotCheckTab({
+  super.key,
+  required this.deviceMacAddress,
+  this.onNestedTabChanged,
+  });
 
   @override
   State<_SpotCheckTab> createState() => _SpotCheckTabState();
 }
 
-class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderStateMixin {
+class _SpotCheckTabState extends State<_SpotCheckTab>
+    with SingleTickerProviderStateMixin {
   late TabController _nestedTabController;
+
+  final GlobalKey<ScrEcgRecordingsContentState> _ecgKey =
+  GlobalKey<ScrEcgRecordingsContentState>();
+  final GlobalKey<ScrHRVRecordingsContentState> _hrvKey =
+  GlobalKey<ScrHRVRecordingsContentState>();
+  final GlobalKey<ScrGSRRecordingsContentState> _gsrKey =
+  GlobalKey<ScrGSRRecordingsContentState>();
+
+  static const _tabLabels = ['ECG', 'HRV', 'GSR'];
+
+  /// The label of the currently visible nested tab (used by the parent appbar).
+  String get currentTabLabel => _tabLabels[_nestedTabController.index];
 
   @override
   void initState() {
     super.initState();
     _nestedTabController = TabController(length: 3, vsync: this);
+    _nestedTabController.addListener(() {
+      if (mounted) {
+        setState(() {});
+        // FIX: notify parent hub so it calls setState and re-reads currentTabLabel
+        widget.onNestedTabChanged?.call();
+      }
+    });
   }
 
   @override
@@ -178,11 +241,55 @@ class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderS
     super.dispose();
   }
 
+  /// Called by the parent hub to trigger a wipe on the currently visible tab.
+  Future<void> wipeCurrentTab(BuildContext context) async {
+    final label = currentTabLabel;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2D2D2D),
+        title: Text(
+          'Wipe All $label Recordings?',
+          style: const TextStyle(color: Colors.white),
+        ),
+        content: Text(
+          'This will permanently delete ALL $label recordings from the device.\n\nThis action cannot be undone.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Wipe All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    switch (_nestedTabController.index) {
+      case 0:
+        _ecgKey.currentState?.wipeAll();
+        break;
+      case 1:
+        _hrvKey.currentState?.wipeAll();
+        break;
+      case 2:
+        _gsrKey.currentState?.wipeAll();
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Nested TabBar
         Container(
           color: const Color(0xFF121212),
           child: TabBar(
@@ -197,37 +304,34 @@ class _SpotCheckTabState extends State<_SpotCheckTab> with SingleTickerProviderS
             ],
           ),
         ),
-        // Nested TabBarView
         Expanded(
           child: TabBarView(
             controller: _nestedTabController,
             children: [
-              ScrEcgRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
-              ScrHRVRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
-              ScrGSRRecordingsContent(deviceMacAddress: widget.deviceMacAddress),
+              ScrEcgRecordingsContent(
+                key: _ecgKey,
+                deviceMacAddress: widget.deviceMacAddress,
+              ),
+              ScrHRVRecordingsContent(
+                key: _hrvKey,
+                deviceMacAddress: widget.deviceMacAddress,
+              ),
+              ScrGSRRecordingsContent(
+                key: _gsrKey,
+                deviceMacAddress: widget.deviceMacAddress,
+              ),
             ],
           ),
         ),
       ],
     );
   }
-
 }
 
-/// Spot Check tab - wraps the existing ECG recordings functionality
-/*class _SpotCheckTab extends StatelessWidget {
-  final String deviceMacAddress;
+// ---------------------------------------------------------------------------
+// Research Tab
+// ---------------------------------------------------------------------------
 
-  const _SpotCheckTab({required this.deviceMacAddress});
-
-  @override
-  Widget build(BuildContext context) {
-    // Directly embed the ECG recordings content
-    return ScrEcgRecordingsContent(deviceMacAddress: deviceMacAddress);
-  }
-}*/
-
-/// Research recordings tab
 class _ResearchTab extends StatefulWidget {
   final String deviceMacAddress;
 
@@ -266,7 +370,9 @@ class _ResearchTabState extends State<_ResearchTab> {
       _device = BluetoothDevice.fromId(widget.deviceMacAddress);
 
       if (_device!.isDisconnected) {
-        await _device!.connect(license: License.values.first, timeout: const Duration(seconds: 15));
+        await _device!.connect(
+            license: License.values.first,
+            timeout: const Duration(seconds: 15));
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
@@ -315,13 +421,11 @@ class _ResearchTabState extends State<_ResearchTab> {
     }
   }
 
-  /// Public method to refresh sessions from parent
   Future<void> refreshSessions() async {
     await _loadSessions();
     await _checkActiveRecording();
   }
 
-  /// Public method to wipe all sessions from parent
   Future<void> wipeAllSessions() async {
     if (_manager == null) return;
 
@@ -395,7 +499,7 @@ class _ResearchTabState extends State<_ResearchTab> {
 
           if (!status.isRecording) {
             _statusPollTimer?.cancel();
-            _loadSessions(); // Refresh list when recording completes
+            _loadSessions();
           }
         }
       } catch (e) {
@@ -440,7 +544,8 @@ class _ResearchTabState extends State<_ResearchTab> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2D2D2D),
-        title: const Text('Delete Recording?', style: TextStyle(color: Colors.white)),
+        title: const Text('Delete Recording?',
+            style: TextStyle(color: Colors.white)),
         content: Text(
           'Delete this research recording from ${session.formattedDateTime}?\n\nThis action cannot be undone.',
           style: const TextStyle(color: Colors.white70),
@@ -518,10 +623,7 @@ class _ResearchTabState extends State<_ResearchTab> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Active recording banner
         if (_activeRecordingStatus != null) _buildActiveRecordingBanner(),
-
-        // Main content
         Expanded(child: _buildBody()),
       ],
     );
@@ -697,15 +799,16 @@ class _ResearchTabState extends State<_ResearchTab> {
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: _sessions.length,
-            itemBuilder: (context, index) => _buildSessionCard(_sessions[index]),
+            itemBuilder: (context, index) =>
+                _buildSessionCard(_sessions[index]),
           ),
         ),
-        // FAB for new recording
         Positioned(
           bottom: 16,
           right: 16,
           child: FloatingActionButton.extended(
-            onPressed: _activeRecordingStatus != null ? null : _navigateToNewRecording,
+            onPressed:
+            _activeRecordingStatus != null ? null : _navigateToNewRecording,
             backgroundColor: _activeRecordingStatus != null
                 ? Colors.grey
                 : hPi4Global.hpi4Color,
@@ -750,9 +853,9 @@ class _ResearchTabState extends State<_ResearchTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Research Recording',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -772,7 +875,6 @@ class _ResearchTabState extends State<_ResearchTab> {
               ],
             ),
             const SizedBox(height: 12),
-            // Session info
             Row(
               children: [
                 _buildInfoChip(Icons.timer, session.formattedDuration),
@@ -781,7 +883,6 @@ class _ResearchTabState extends State<_ResearchTab> {
               ],
             ),
             const SizedBox(height: 8),
-            // Signals
             Wrap(
               spacing: 8,
               runSpacing: 4,
@@ -790,7 +891,8 @@ class _ResearchTabState extends State<_ResearchTab> {
                   avatar: Icon(signal.icon, size: 16, color: Colors.white70),
                   label: Text(
                     signal.shortName,
-                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                    style:
+                    const TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                   backgroundColor: Colors.grey[700],
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -799,7 +901,6 @@ class _ResearchTabState extends State<_ResearchTab> {
               }).toList(),
             ),
             const SizedBox(height: 12),
-            // Actions
             Row(
               children: [
                 Expanded(
@@ -850,7 +951,10 @@ class _ResearchTabState extends State<_ResearchTab> {
   }
 }
 
-/// Research recording configuration screen
+// ---------------------------------------------------------------------------
+// Research Recording Config Screen
+// ---------------------------------------------------------------------------
+
 class _ResearchRecordingConfigScreen extends StatefulWidget {
   final String deviceMacAddress;
   final VoidCallback? onRecordingStarted;
@@ -873,7 +977,6 @@ class _ResearchRecordingConfigScreenState
   bool _isStarting = false;
   String? _errorMessage;
 
-  // Configuration
   int _selectedDurationMinutes = 10;
   final Set<ResearchSignalType> _selectedSignals = {
     ResearchSignalType.ppgWrist,
@@ -899,7 +1002,9 @@ class _ResearchRecordingConfigScreenState
       _device = BluetoothDevice.fromId(widget.deviceMacAddress);
 
       if (_device!.isDisconnected) {
-        await _device!.connect(license: License.values.first, timeout: const Duration(seconds: 15));
+        await _device!.connect(
+            license: License.values.first,
+            timeout: const Duration(seconds: 15));
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
@@ -927,7 +1032,8 @@ class _ResearchRecordingConfigScreenState
 
   RecordingConfig get _config => RecordingConfig(
     durationSeconds: _selectedDurationMinutes * 60,
-    signalMask: ResearchSignalTypeExtension.toMask(_selectedSignals.toList()),
+    signalMask:
+    ResearchSignalTypeExtension.toMask(_selectedSignals.toList()),
   );
 
   Future<void> _startRecording() async {
@@ -938,13 +1044,11 @@ class _ResearchRecordingConfigScreenState
     });
 
     try {
-      // Configure
       final configResult = await _manager!.configure(_config);
       if (configResult != 0) {
         throw Exception('Configuration failed (code: $configResult)');
       }
 
-      // Start
       final startResult = await _manager!.startRecording();
       if (startResult != 0) {
         throw Exception('Start failed (code: $startResult)');
@@ -1006,7 +1110,8 @@ class _ResearchRecordingConfigScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              Icon(Icons.error_outline,
+                  size: 64, color: Colors.red[300]),
               const SizedBox(height: 16),
               Text(
                 _errorMessage!,
@@ -1032,7 +1137,6 @@ class _ResearchRecordingConfigScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Duration selector
           _buildSectionHeader('DURATION'),
           const SizedBox(height: 8),
           Wrap(
@@ -1056,8 +1160,6 @@ class _ResearchRecordingConfigScreenState
             }).toList(),
           ),
           const SizedBox(height: 24),
-
-          // Signal selector
           _buildSectionHeader('SIGNALS TO RECORD'),
           const SizedBox(height: 8),
           ...ResearchSignalType.values.map((signal) {
@@ -1100,8 +1202,6 @@ class _ResearchRecordingConfigScreenState
             );
           }),
           const SizedBox(height: 24),
-
-          // Storage estimate
           _buildSectionHeader('STORAGE ESTIMATE'),
           const SizedBox(height: 8),
           Card(
@@ -1122,7 +1222,8 @@ class _ResearchRecordingConfigScreenState
                         ),
                         Text(
                           '${_selectedSignals.length} signal(s) × ${_selectedDurationMinutes} min',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          style:
+                          TextStyle(color: Colors.grey[500], fontSize: 12),
                         ),
                       ],
                     ),
@@ -1134,15 +1235,12 @@ class _ResearchRecordingConfigScreenState
             ),
           ),
           const SizedBox(height: 32),
-
-          // Start button
           SizedBox(
             width: double.infinity,
             height: 56,
             child: ElevatedButton.icon(
-              onPressed: _selectedSignals.isEmpty || _isStarting
-                  ? null
-                  : _startRecording,
+              onPressed:
+              _selectedSignals.isEmpty || _isStarting ? null : _startRecording,
               icon: _isStarting
                   ? const SizedBox(
                 width: 20,
@@ -1190,7 +1288,10 @@ class _ResearchRecordingConfigScreenState
   }
 }
 
-/// Research session detail and download screen
+// ---------------------------------------------------------------------------
+// Research Session Detail Screen
+// ---------------------------------------------------------------------------
+
 class _ResearchSessionDetailScreen extends StatefulWidget {
   final ResearchRecording session;
   final String deviceMacAddress;
@@ -1214,7 +1315,6 @@ class _ResearchSessionDetailScreenState
   bool _isInitializing = true;
   String? _errorMessage;
 
-  // Download state
   bool _isDownloading = false;
   String _downloadStatus = '';
   double _downloadProgress = 0.0;
@@ -1222,14 +1322,12 @@ class _ResearchSessionDetailScreenState
   Map<ResearchSignalType, Uint8List> _downloadedData = {};
   Map<ResearchSignalType, bool> _downloadedSignals = {};
 
-  // Export state
   bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
     _initialize();
-    // Initialize download status for each signal
     for (var signal in widget.session.signals) {
       _downloadedSignals[signal] = false;
     }
@@ -1298,7 +1396,6 @@ class _ResearchSessionDetailScreenState
         },
       );
 
-      // Save to local storage
       await _manager!.saveSignalFile(
         widget.session,
         signal,
@@ -1356,23 +1453,15 @@ class _ResearchSessionDetailScreenState
 
       setState(() {
         _currentSignal = signal;
-        _downloadStatus = 'Downloading ${signal.displayName} (${completed + 1}/${signals.length})...';
+        _downloadStatus =
+        'Downloading ${signal.displayName} (${completed + 1}/${signals.length})...';
         _downloadProgress = completed / signals.length;
       });
 
       try {
-        final data = await _manager!.downloadSignalFile(
-          widget.session,
-          signal,
-        );
-
+        final data = await _manager!.downloadSignalFile(widget.session, signal);
         await _manager!.saveSignalFile(
-          widget.session,
-          signal,
-          data,
-          widget.deviceMacAddress,
-        );
-
+            widget.session, signal, data, widget.deviceMacAddress);
         _downloadedData[signal] = data;
         _downloadedSignals[signal] = true;
         completed++;
@@ -1392,7 +1481,8 @@ class _ResearchSessionDetailScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Downloaded $completed/${signals.length} signals'),
-          backgroundColor: completed == signals.length ? Colors.green : Colors.orange,
+          backgroundColor:
+          completed == signals.length ? Colors.green : Colors.orange,
         ),
       );
     }
@@ -1412,19 +1502,13 @@ class _ResearchSessionDetailScreenState
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-    });
+    setState(() => _isExporting = true);
 
     try {
       final file = await _manager!.exportToCsv(widget.session, signal, data);
 
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-
-        // Share the file
+        setState(() => _isExporting = false);
         await Share.shareXFiles(
           [XFile(file.path)],
           text: '${signal.displayName} data from research recording',
@@ -1432,10 +1516,7 @@ class _ResearchSessionDetailScreenState
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-
+        setState(() => _isExporting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Export failed: $e'),
@@ -1457,19 +1538,14 @@ class _ResearchSessionDetailScreenState
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-    });
+    setState(() => _isExporting = true);
 
     try {
-      final file = await _manager!.exportToZip(widget.session, _downloadedData);
+      final file =
+      await _manager!.exportToZip(widget.session, _downloadedData);
 
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-
-        // Share the ZIP file
+        setState(() => _isExporting = false);
         await Share.shareXFiles(
           [XFile(file.path)],
           text: 'Research recording from ${widget.session.formattedDateTime}',
@@ -1477,10 +1553,7 @@ class _ResearchSessionDetailScreenState
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-
+        setState(() => _isExporting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Export failed: $e'),
@@ -1496,7 +1569,8 @@ class _ResearchSessionDetailScreenState
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF2D2D2D),
-        title: const Text('Delete Recording?', style: TextStyle(color: Colors.white)),
+        title: const Text('Delete Recording?',
+            style: TextStyle(color: Colors.white)),
         content: Text(
           'Delete this research recording from ${widget.session.formattedDateTime}?\n\nThis will remove it from the device and cannot be undone.',
           style: const TextStyle(color: Colors.white70),
@@ -1580,7 +1654,8 @@ class _ResearchSessionDetailScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
+              Icon(Icons.error_outline,
+                  size: 64, color: Colors.red[300]),
               const SizedBox(height: 16),
               Text(
                 _errorMessage!,
@@ -1606,7 +1681,6 @@ class _ResearchSessionDetailScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Session info card
           Card(
             color: const Color(0xFF2D2D2D),
             child: Padding(
@@ -1657,11 +1731,14 @@ class _ResearchSessionDetailScreenState
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      _buildInfoChip(Icons.timer, widget.session.formattedDuration),
+                      _buildInfoChip(
+                          Icons.timer, widget.session.formattedDuration),
                       const SizedBox(width: 8),
-                      _buildInfoChip(Icons.storage, widget.session.formattedSize),
+                      _buildInfoChip(
+                          Icons.storage, widget.session.formattedSize),
                       const SizedBox(width: 8),
-                      _buildInfoChip(Icons.sensors, '${widget.session.signals.length} signals'),
+                      _buildInfoChip(Icons.sensors,
+                          '${widget.session.signals.length} signals'),
                     ],
                   ),
                 ],
@@ -1669,8 +1746,6 @@ class _ResearchSessionDetailScreenState
             ),
           ),
           const SizedBox(height: 16),
-
-          // Download progress
           if (_isDownloading) ...[
             Card(
               color: const Color(0xFF2D2D2D),
@@ -1697,7 +1772,8 @@ class _ResearchSessionDetailScreenState
                     LinearProgressIndicator(
                       value: _downloadProgress,
                       backgroundColor: Colors.grey[700],
-                      valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          hPi4Global.hpi4Color),
                     ),
                   ],
                 ),
@@ -1705,12 +1781,11 @@ class _ResearchSessionDetailScreenState
             ),
             const SizedBox(height: 16),
           ],
-
-          // Download all button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _isDownloading || _isExporting ? null : _downloadAllSignals,
+              onPressed:
+              _isDownloading || _isExporting ? null : _downloadAllSignals,
               icon: const Icon(Icons.download),
               label: const Text('Download All Signals'),
               style: ElevatedButton.styleFrom(
@@ -1724,8 +1799,6 @@ class _ResearchSessionDetailScreenState
             ),
           ),
           const SizedBox(height: 24),
-
-          // Signals section
           Text(
             'SIGNALS',
             style: TextStyle(
@@ -1738,8 +1811,6 @@ class _ResearchSessionDetailScreenState
           const SizedBox(height: 8),
           ...widget.session.signals.map((signal) => _buildSignalCard(signal)),
           const SizedBox(height: 24),
-
-          // Export section
           if (_downloadedData.isNotEmpty) ...[
             Text(
               'EXPORT',
@@ -1760,7 +1831,9 @@ class _ResearchSessionDetailScreenState
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isDownloading || _isExporting ? null : _exportAllAsZip,
+                        onPressed: _isDownloading || _isExporting
+                            ? null
+                            : _exportAllAsZip,
                         icon: _isExporting
                             ? const SizedBox(
                           width: 18,
@@ -1771,7 +1844,8 @@ class _ResearchSessionDetailScreenState
                           ),
                         )
                             : const Icon(Icons.archive),
-                        label: Text(_isExporting ? 'Exporting...' : 'Export as ZIP'),
+                        label: Text(
+                            _isExporting ? 'Exporting...' : 'Export as ZIP'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green[700],
                           foregroundColor: Colors.white,
@@ -1858,7 +1932,8 @@ class _ResearchSessionDetailScreenState
                   IconButton(
                     icon: const Icon(Icons.share, size: 20),
                     color: hPi4Global.hpi4Color,
-                    onPressed: _isExporting ? null : () => _exportToCsv(signal),
+                    onPressed:
+                    _isExporting ? null : () => _exportToCsv(signal),
                     tooltip: 'Export CSV',
                   ),
                   const Icon(
@@ -1872,7 +1947,8 @@ class _ResearchSessionDetailScreenState
               IconButton(
                 icon: const Icon(Icons.download, size: 20),
                 color: hPi4Global.hpi4Color,
-                onPressed: _isDownloading ? null : () => _downloadSignal(signal),
+                onPressed:
+                _isDownloading ? null : () => _downloadSignal(signal),
                 tooltip: 'Download',
               ),
           ],
