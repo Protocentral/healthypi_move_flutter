@@ -145,6 +145,52 @@ so gate all SMP work (sync, records, DFU) behind one **"SMP busy"** flag. DFU us
 ported `img_mgmt.dart` (SHA-256, device-driven offset chunking sized off the live
 `maxWriteLength`, test → `os reset` → confirm) — see OpenView's Firmware tab.
 
+### 2.4 Recommended BLE architecture changes (beyond the plugin swap)
+
+The current app has **no BLE abstraction** — 24 files call `FlutterBluePlus` /
+`BluetoothDevice` directly, each connecting/disconnecting the same device and managing
+its own stream subscriptions. That scatter is *why* the migration touches so many files
+and why the disconnect sequences are fragile. While we're in here, adopt the structure
+OpenView already uses (and which the shared SMP package reinforces):
+
+1. **A single `BleService` facade (the only file that imports `universal_ble`).**
+   Scan (with the HealthyPi name filter) + system/bonded devices, connect/disconnect
+   **by `deviceId`**, per-characteristic notify streams + write, adapter state, MTU.
+   Screens depend on the facade, never the plugin → the plugin stays swappable and the
+   next screen migrations become "use the facade" instead of 19 bespoke rewrites.
+   (Mirror OpenView `lib/transport/ble_service.dart` + `TransportService`.)
+
+2. **One connection owner (`ConnectionManager`).** A single object owns the active link
+   to the paired device; screens *acquire/release* it rather than each calling
+   `BluetoothDevice.fromId(mac).connect()` independently. This removes the current
+   per-screen connect/disconnect races and the `FsManager.kill()` + delay dance.
+   (Mirror OpenView `ConnectionController`.)
+
+3. **Model the two GATT "modes" explicitly on that one connection:**
+   - **Streaming** — live ECG/PPG/HR/SpO₂ over the custom streaming characteristics
+     (`UUID_STREAM_*`, HR/SpO₂/temp chars) for live-view screens.
+   - **SMP** — HPI_HS sync + DFU via `HealthStoreClient` over the SMP characteristic.
+   Same physical connection; the connection owner arbitrates so the two never overlap
+   on the wire. The legacy **custom cmd/data channel is retired** (its session/log-index
+   commands are replaced by SMP `SYNC`); only the live-streaming chars remain.
+
+4. **`deviceId` (String) is the canonical device handle everywhere** — no
+   `BluetoothDevice` objects passed between screens (universal_ble forces this; it's
+   also cleaner). The paired MAC already *is* this string.
+
+5. **Centralize BLE/connection state in one `provider`/`bloc`** (the connection owner as
+   a `ChangeNotifier`), replacing the per-screen `setState` stream subscriptions. The
+   trend/live screens `watch` it.
+
+6. **Share the abstraction with OpenView.** Both apps end on the same `BleService` +
+   the `mcumgr_dart` SMP package, so fixes/gotchas (MTU-settle, reconnect, defensive
+   CBOR) live in one place.
+
+**Sequencing:** introduce the `BleService` facade + `ConnectionManager` **before** the
+bulk screen migrations (Stages 2–4) so each screen migrates onto the facade. The scan
+screen (Stage 1, already done on raw universal_ble) can be refactored onto the facade
+when it lands — low priority since it works.
+
 ---
 
 ## 3. Sample-tier sync (the workhorse)
