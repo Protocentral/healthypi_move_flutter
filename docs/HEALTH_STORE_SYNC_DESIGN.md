@@ -191,6 +191,35 @@ bulk screen migrations (Stages 2–4) so each screen migrates onto the facade. T
 screen (Stage 1, already done on raw universal_ble) can be refactored onto the facade
 when it lands — low priority since it works.
 
+### 2.5 ⚠️ Migrate per **flow**, not per **file** (FBP/universal_ble don't share a connection)
+
+**Critical constraint discovered during Stage 2:** `flutter_blue_plus`, `universal_ble`,
+and `mcumgr_flutter` each keep their **own OS-level connection** to a peripheral (own
+`CBCentralManager` on iOS / `BluetoothGatt` on Android). A device connected by one is
+**not connected** from another's perspective. So you **cannot** migrate a screen that
+*uses* a connection (subscribe/write/stream) while the screen that *establishes* it is
+still on FBP — the migrated screen sees no link at runtime.
+
+Consequence: the coexistence approach keeps the app **compiling**, but each **connected
+flow must migrate whole** — the connection-establishment point *and* every screen that
+rides that connection, in one change:
+- **Scan/pair flow** — `scr_device_scan` (✅ done; self-contained: it connects + disconnects).
+- **Streaming flow** — `scr_device_mgmt`'s streaming-entry connect **+** `scr_stream_selection`
+  **+** `scr_live_stream` must move together onto `ConnectionManager`.
+- **Sync flow** — `background_sync_manager` → `HealthStoreClient` (whole).
+- **DFU flow** — `scr_dfu` (FBP + mcumgr) → ported `img_mgmt` on the SMP link (whole).
+- **Records flow** — `scr_{ecg,gsr,hrv}_recordings` + `research_recording_manager` →
+  `HpiHs` RECORDS (whole).
+
+**`scr_device_mgmt` is the linchpin** — it's the hub that connects the device and
+dispatches to streaming/DFU/records/settings. It should migrate its connection to
+`ConnectionManager` as part of (or just before) the streaming flow, and must not hold a
+concurrent FBP connection to the same device while a universal_ble flow runs.
+
+**Recommendation:** hardware-verify the scan/pair flow + the `deviceId == remoteId.str`
+assumption on a real Move **first** (it underpins every bridge), then migrate flows
+whole, one at a time, testing each on-device before the next.
+
 ---
 
 ## 3. Sample-tier sync (the workhorse)
