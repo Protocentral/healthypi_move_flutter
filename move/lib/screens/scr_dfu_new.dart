@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
-import 'package:mcumgr_flutter/models/firmware_upgrade_mode.dart';
-import 'package:mcumgr_flutter/models/image_upload_alignment.dart';
 
 import '../globals.dart';
 import '../home.dart';
+import '../mcumgr/img_mgmt.dart';
 import '../models/firmware_release.dart';
+import '../smp/smp_ble_transport.dart';
+import '../smp/smp_client.dart';
+import '../utils/ble_manager.dart';
+import '../utils/connection_manager.dart';
+import '../utils/device_manager.dart';
 import '../utils/firmware_update_service.dart';
 import '../utils/manifest.dart';
 import '../utils/snackbar.dart';
@@ -38,8 +40,9 @@ class ScrDFUNew extends StatefulWidget {
 
 class _ScrDFUNewState extends State<ScrDFUNew> {
   // Device connection
-  BluetoothDevice? _currentDevice;
-  List<BluetoothService> _services = [];
+  final ConnectionManager _conn = ConnectionManager.instance;
+  String? _deviceMac;
+  String _deviceName = 'HealthyPi Move';
 
   // DFU state
   DFUScreenState _dfuState = DFUScreenState.initializing;
@@ -57,10 +60,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   final Map<int, double> _imageProgress = {};
   int _currentImageIndex = 0;  // Track which image is currently being uploaded
 
-  // MCU Manager
-  final mcumgr.FirmwareUpdateManagerFactory _managerFactory = mcumgr.FirmwareUpdateManagerFactory();
-  StreamSubscription<mcumgr.ProgressUpdate>? _updateManagerSubscription;
-  StreamSubscription<mcumgr.FirmwareUpgradeState>? _updateStateSubscription;
+  // SMP DFU session (ported img_mgmt over universal_ble)
+  SmpBleTransport? _dfuTransport;
+  SmpClient? _dfuClient;
+  bool _dfuCancelled = false;
 
   // Advanced options
   bool _isManualMode = false;
@@ -83,9 +86,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   @override
   void dispose() {
-    _updateManagerSubscription?.cancel();
-    _updateStateSubscription?.cancel();
-    _currentDevice?.disconnect();
+    _dfuCancelled = true;
+    _dfuClient?.dispose();
+    _dfuTransport?.dispose();
+    _conn.disconnect();
     super.dispose();
   }
 
@@ -107,20 +111,16 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     });
 
     try {
-      // Step 1: Connect to device
+      // Step 1: Connect to device (scan-assisted connect + service discovery)
       debugPrint('[DFU] Connecting to device: ${widget.deviceMacAddress}');
-      final device = BluetoothDevice.fromId(widget.deviceMacAddress!);
-      _currentDevice = device;
+      _deviceMac = widget.deviceMacAddress!;
+      final paired = await DeviceManager.getPairedDevice();
+      if (paired != null) _deviceName = paired.displayName;
 
-      if (device.isDisconnected) {
-        await device.connect(license: License.values.first, timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
+      await _conn.connect(_deviceMac!, name: _deviceName);
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      // Step 2: Discover services and read firmware version
-      final services = await device.discoverServices();
-      _services = services;
-
+      // Step 2: Read firmware version
       await _readCurrentFirmwareVersion();
 
       // Step 3: Check for updates from GitHub
@@ -173,22 +173,11 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   /// Read current firmware version from device
   Future<void> _readCurrentFirmwareVersion() async {
     try {
-      for (var service in _services) {
-        if (service.uuid == Guid("180a")) {
-          // Device Information Service
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid("2a26")) {
-              // Firmware Revision String
-              final fwVersion = await characteristic.read();
-              _currentFWVersion = String.fromCharCodes(fwVersion).trim();
-              debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
-              return;
-            }
-          }
-        }
-      }
-      debugPrint('[DFU] Warning: Firmware version characteristic not found');
-      _currentFWVersion = "Unknown";
+      // Device Information Service 0x180A → Firmware Revision String 0x2A26.
+      final fwVersion =
+          await BleManager.instance.read(_deviceMac!, "180a", "2a26");
+      _currentFWVersion = String.fromCharCodes(fwVersion).trim();
+      debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
     } catch (e) {
       debugPrint('[DFU] Failed to read firmware version: $e');
       _currentFWVersion = "Unknown";
@@ -259,86 +248,68 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _currentImageIndex = 0;
     });
 
+    _dfuCancelled = false;
     try {
-      final updateManager = await _managerFactory.getUpdateManager(
-        _currentDevice!.remoteId.toString(),
-      );
+      // SMP session riding the existing ConnectionManager link.
+      final transport = SmpBleTransport(_deviceMac!, manageConnection: false);
+      await transport.connect();
+      _dfuTransport = transport;
+      final client = SmpClient(transport);
+      _dfuClient = client;
+      final img =
+          ImgMgmt(client, maxWriteLength: () => _dfuTransport?.maxWriteLength);
+      await transport.refreshMtu(); // ensure a large chunk size
 
-      updateManager.setup();
-
-      // Load firmware images
-      List<mcumgr.Image> fwImages = [];
-      for (final file in _manifest!.files) {
+      // Upload + confirm each image in the manifest (MCUboot confirmOnly).
+      final files = _manifest!.files;
+      for (int i = 0; i < files.length; i++) {
+        if (_dfuCancelled) throw Exception('cancelled');
+        final file = files[i];
         final firmwareFile = File('${_extractedDir!.path}/${file.file}');
-        final firmwareFileData = await firmwareFile.readAsBytes();
-        final image = mcumgr.Image(image: file.image, data: firmwareFileData);
-        fwImages.add(image);
+        final bytes = await firmwareFile.readAsBytes();
+
+        if (mounted) setState(() => _currentImageIndex = i);
+        debugPrint('[DFU] Uploading image ${i + 1}/${files.length} '
+            '(index ${file.image}, ${bytes.length} B)');
+
+        final sha = await img.upload(
+          bytes,
+          imageIndex: file.image,
+          onProgress: (sent, total) {
+            if (mounted) {
+              setState(() {
+                final p = total > 0 ? sent / total : 0.0;
+                _dfuProgress = p;
+                _imageProgress[i] = p * 100;
+                _currentImageIndex = i;
+              });
+            }
+          },
+        );
+
+        // confirmOnly: mark the uploaded image permanent (swap on next reboot).
+        await img.confirm(sha);
+        debugPrint('[DFU] Image ${i + 1} uploaded + confirmed');
       }
 
-      const fwConfig = mcumgr.FirmwareUpgradeConfiguration(
-        estimatedSwapTime: Duration(seconds: 0),
-        byteAlignment: ImageUploadAlignment.fourByte,
-        eraseAppSettings: true,
-        firmwareUpgradeMode: FirmwareUpgradeMode.confirmOnly,
-      );
-
-      // Create completer to wait for completion
-      final completer = Completer<bool>();
-
-      // Listen to state changes to detect completion
-      _updateStateSubscription = updateManager.updateStateStream!.listen((event) {
-        debugPrint('[DFU] State: ${event.toString()}');
-
-        // Check for completion state (success is the final state)
-        if (event == mcumgr.FirmwareUpgradeState.success) {
-          if (!completer.isCompleted) {
-            debugPrint('[DFU] Update completed with success state');
-            completer.complete(true);
-          }
-        }
-      });
-
-      // Listen to progress updates
-      _updateManagerSubscription = updateManager.progressStream.listen((event) {
-        if (mounted) {
-          setState(() {
-            // Match progress to correct image file based on size
-            for (int i = 0; i < _manifest!.files.length; i++) {
-              if (event.imageSize == _manifest!.files[i].size) {
-                final progress = (event.bytesSent / event.imageSize);
-                _dfuProgress = progress;
-                _imageProgress[i] = progress * 100;
-                _currentImageIndex = i;  // Track which image is currently being uploaded
-
-                debugPrint('[DFU] Image ${i + 1}/${_manifest!.files.length}: ${(progress * 100).toStringAsFixed(1)}%');
-                break;
-              }
-            }
-          });
-        }
-      });
-
-      // Start the update (non-blocking)
-      updateManager.update(fwImages, configuration: fwConfig);
-
-      // Wait for completion or timeout after 5 minutes
-      await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          debugPrint('[DFU] Update timeout');
-          throw TimeoutException('Update took too long');
-        },
-      );
-
-      // Update completed successfully
       debugPrint('[DFU] Update completed successfully');
 
-      // Show completion dialog
+      // Release the SMP session (keeps the ConnectionManager link).
+      await _dfuClient?.dispose();
+      _dfuClient = null;
+      await _dfuTransport?.disconnect();
+      await _dfuTransport?.dispose();
+      _dfuTransport = null;
+
       if (mounted && context.mounted) {
         _showCompletionDialog();
       }
     } catch (e) {
       debugPrint('[DFU] Update error: $e');
+      await _dfuClient?.dispose();
+      _dfuClient = null;
+      await _dfuTransport?.dispose();
+      _dfuTransport = null;
       if (mounted) {
         setState(() {
           _dfuState = DFUScreenState.error;
@@ -458,7 +429,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () async {
-              await _currentDevice?.disconnect();
+              await _conn.disconnect();
               if (mounted) {
                 Navigator.of(context).pop();
               }
@@ -495,7 +466,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       return _buildLoadingState();
     }
 
-    if (_dfuState == DFUScreenState.error && _currentDevice == null) {
+    if (_dfuState == DFUScreenState.error && _deviceMac == null) {
       return _buildErrorState();
     }
 
@@ -596,7 +567,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _currentDevice?.platformName ?? 'HealthyPi Move',
+                    _deviceName,
                     style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
@@ -1084,7 +1055,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           elevation: 2,
         ),
         onPressed: () async {
-          await _currentDevice?.disconnect();
+          await _conn.disconnect();
           if (mounted) {
             Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
           }
