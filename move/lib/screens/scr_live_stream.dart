@@ -111,10 +111,15 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
   }
 
   void _onValue(Uint8List value) {
-    final byteData = value.buffer.asByteData(value.offsetInBytes, value.length);
+    // Copy into a fresh, offset-0 buffer before reinterpreting as Int32/Uint32.
+    // universal_ble delivers Uint8Lists that are views into a larger buffer
+    // (non-zero offsetInBytes / oversized buffer), so reading `value.buffer`
+    // directly would be misaligned. This matches the original FBP parsing
+    // (`Uint8List.fromList(value).buffer.as…List()`), host-endian (little).
+    final bytes = Uint8List.fromList(value);
     switch (widget.selectedType) {
       case "ECG":
-        final list = byteData.buffer.asInt32List();
+        final list = bytes.buffer.asInt32List();
         for (final element in list) {
           setStateIfMounted(() =>
               ecgLineData.add(FlSpot(ecgDataCounter++, element.toDouble())));
@@ -122,7 +127,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         }
         break;
       case "PPG":
-        final list = byteData.buffer.asUint32List();
+        final list = bytes.buffer.asUint32List();
         for (final element in list) {
           setStateIfMounted(() =>
               ppgLineData.add(FlSpot(ppgDataCounter++, element.toDouble())));
@@ -130,7 +135,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         }
         break;
       case "GSR":
-        final list = byteData.buffer.asInt32List();
+        final list = bytes.buffer.asInt32List();
         for (final element in list) {
           setStateIfMounted(() =>
               gsrLineData.add(FlSpot(gsrDataCounter++, element.toDouble())));
@@ -138,7 +143,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         }
         break;
       case "Finger PPG":
-        final list = byteData.buffer.asUint32List();
+        final list = bytes.buffer.asUint32List();
         for (final element in list) {
           setStateIfMounted(() => fingerPPGLineData
               .add(FlSpot(fingerPPGDataCounter++, element.toDouble())));
