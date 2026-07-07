@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:universal_ble/universal_ble.dart';
 import 'package:move/utils/snackbar.dart';
 
 import '../globals.dart';
@@ -8,13 +8,20 @@ import '../models/device_info.dart';
 import '../utils/device_manager.dart';
 import '../utils/database_helper.dart';
 
-/// Clean, focused screen for BLE device scanning and pairing
-/// Purpose: Scan for HealthyPi Move devices and pair them
-/// Can optionally connect to device and trigger callback for operations
+/// Clean, focused screen for BLE device scanning and pairing.
+/// Purpose: scan for HealthyPi Move devices and pair them. Can optionally connect
+/// and trigger a callback (with the BLE **deviceId**) for downstream operations.
+///
+/// Migrated from `flutter_blue_plus` to `universal_ble` (see
+/// docs/HEALTH_STORE_SYNC_DESIGN.md §2.0). `universal_ble`'s `deviceId` is the same
+/// platform identifier as FBP's `remoteId.str` (CoreBluetooth UUID on Apple, MAC on
+/// Android), so it is used unchanged as the stored MAC and lets not-yet-migrated FBP
+/// screens bridge via `BluetoothDevice.fromId(deviceId)`.
 class ScrDeviceScan extends StatefulWidget {
-  final Function(BluetoothDevice)? onDeviceConnected;
+  /// Fired with the connected device's **deviceId** (== FBP remoteId string).
+  final Function(String deviceId)? onDeviceConnected;
   final bool pairOnly;
-  
+
   const ScrDeviceScan({
     super.key,
     this.onDeviceConnected,
@@ -26,89 +33,91 @@ class ScrDeviceScan extends StatefulWidget {
 }
 
 class _ScrDeviceScanState extends State<ScrDeviceScan> {
-  List<ScanResult> _scanResults = [];
+  /// Discovered HealthyPi Move devices, keyed by deviceId (dedup + rssi update).
+  final Map<String, BleDevice> _devices = {};
   bool _isScanning = false;
-  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
+  AvailabilityState _adapterState = AvailabilityState.unknown;
 
-  late StreamSubscription<List<ScanResult>> _scanResultsSubscription;
-  late StreamSubscription<bool> _isScanningSubscription;
-  late StreamSubscription<BluetoothAdapterState> _adapterStateSubscription;
+  StreamSubscription<BleDevice>? _scanSubscription;
+  StreamSubscription<AvailabilityState>? _adapterStateSubscription;
+  Timer? _scanTimeout;
+
+  static const String _nameMatch = 'healthypi move';
+
+  List<BleDevice> get _scanResults {
+    final list = _devices.values.toList();
+    list.sort((a, b) => (b.rssi ?? -999).compareTo(a.rssi ?? -999));
+    return list;
+  }
 
   @override
   void initState() {
     super.initState();
-    
-    // Subscribe to scan results
-    _scanResultsSubscription = FlutterBluePlus.scanResults.listen(
-      (results) {
-        if (mounted) {
-          setState(() {
-            _scanResults = results;
-          });
-        }
-      },
-      onError: (e) => Snackbar.show(ABC.c, prettyException("Scan Error:", e), success: false),
-    );
 
-    // Subscribe to scanning state
-    _isScanningSubscription = FlutterBluePlus.isScanning.listen(
-      (state) {
-        if (mounted) {
-          setState(() {
-            _isScanning = state;
-          });
-        }
-      },
-    );
+    _adapterStateSubscription = UniversalBle.availabilityStream.listen((state) {
+      if (mounted) setState(() => _adapterState = state);
+    });
+    UniversalBle.getBluetoothAvailabilityState().then((state) {
+      if (mounted) setState(() => _adapterState = state);
+    });
 
-    // Subscribe to adapter state
-    _adapterStateSubscription = FlutterBluePlus.adapterState.listen(
-      (state) {
-        if (mounted) {
-          setState(() {
-            _adapterState = state;
-          });
-        }
-      },
-    );
-
-    // Start scanning immediately
+    // Start scanning immediately.
     _startScan();
   }
 
   @override
   void dispose() {
-    _scanResultsSubscription.cancel();
-    _isScanningSubscription.cancel();
-    _adapterStateSubscription.cancel();
+    _scanTimeout?.cancel();
+    _scanSubscription?.cancel();
+    _adapterStateSubscription?.cancel();
+    UniversalBle.stopScan().catchError((_) {});
     super.dispose();
   }
 
   Future<void> _startScan() async {
     try {
-      // Check adapter state
-      if (_adapterState != BluetoothAdapterState.on) {
+      final state = await UniversalBle.getBluetoothAvailabilityState();
+      if (state != AvailabilityState.poweredOn) {
         Snackbar.show(ABC.c, "Bluetooth is not enabled", success: false);
         return;
       }
 
-      // Start scanning with name filter for HealthyPi Move devices
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 15),
-        androidUsesFineLocation: true,
-        withNames: ['healthypi move'],
+      setState(() {
+        _devices.clear();
+        _isScanning = true;
+      });
+
+      _scanSubscription ??= UniversalBle.scanStream.listen(
+        (device) {
+          final name = (device.name ?? '').toLowerCase();
+          // Keep only HealthyPi Move devices (FBP used an exact name filter;
+          // match by substring so an id-suffixed advertised name still shows).
+          if (!name.contains(_nameMatch)) return;
+          if (mounted) setState(() => _devices[device.deviceId] = device);
+        },
+        onError: (e) =>
+            Snackbar.show(ABC.c, prettyException("Scan Error:", e), success: false),
       );
+
+      await UniversalBle.startScan();
+
+      // universal_ble's startScan has no timeout — bound it like FBP's 15 s.
+      _scanTimeout?.cancel();
+      _scanTimeout = Timer(const Duration(seconds: 15), _stopScan);
     } catch (e) {
+      setState(() => _isScanning = false);
       Snackbar.show(ABC.c, prettyException("Start Scan Error:", e), success: false);
     }
   }
 
   Future<void> _stopScan() async {
+    _scanTimeout?.cancel();
     try {
-      await FlutterBluePlus.stopScan();
+      await UniversalBle.stopScan();
     } catch (e) {
       Snackbar.show(ABC.c, prettyException("Stop Scan Error:", e), success: false);
     }
+    if (mounted) setState(() => _isScanning = false);
   }
 
   /// Show warning dialog when switching devices with existing data
@@ -204,12 +213,12 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
         ],
       ),
     );
-    
+
     return result ?? false;
   }
 
   /// Connect to device and either pair it or trigger callback
-  Future<void> _connectToDevice(BluetoothDevice device, String deviceName) async {
+  Future<void> _connectToDevice(String deviceId, String deviceName) async {
     try {
       // Show loading
       if (!mounted) return;
@@ -245,21 +254,18 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       // Stop scanning first
       await _stopScan();
 
-      // Connect to device
-      await device.connect(
-        license: License.values.first,
-        timeout: const Duration(seconds: 15),
-        mtu: null,
-      );
+      // Connect to device (OS handles bonding/passkey on native).
+      await UniversalBle.connect(deviceId,
+          timeout: const Duration(seconds: 15));
 
       // If we have a callback (for live view, fetch recordings, etc.)
       if (widget.onDeviceConnected != null) {
         // Close loading dialog
         if (!mounted) return;
         Navigator.of(context).pop();
-        
-        // Trigger callback with connected device
-        widget.onDeviceConnected!(device);
+
+        // Trigger callback with connected device id
+        widget.onDeviceConnected!(deviceId);
         return;
       }
 
@@ -267,34 +273,34 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       // Check if there's already a paired device with data
       final existingDevice = await DeviceManager.getPairedDevice();
       bool shouldProceed = true;
-      
-      if (existingDevice != null && existingDevice.macAddress != device.remoteId.str) {
+
+      if (existingDevice != null && existingDevice.macAddress != deviceId) {
         // Check if existing device has any synced data
         final hasData = await DatabaseHelper.instance.hasDataForDevice(existingDevice.macAddress);
-        
+
         if (hasData) {
           // Show confirmation dialog
           if (!mounted) return;
           shouldProceed = await _showDataLossWarningDialog(existingDevice.displayName);
-          
+
           if (shouldProceed) {
             // Delete old device data
             await DatabaseHelper.instance.deleteDataForDevice(existingDevice.macAddress);
           }
         }
       }
-      
+
       if (!shouldProceed) {
         // User cancelled, disconnect and exit
-        await device.disconnect();
+        await UniversalBle.disconnect(deviceId);
         if (!mounted) return;
         Navigator.of(context).pop();
         return;
       }
-      
+
       // Create device info
       final deviceInfo = DeviceInfo(
-        macAddress: device.remoteId.str,
+        macAddress: deviceId,
         deviceName: deviceName,
         firstPaired: DateTime.now(),
       );
@@ -303,7 +309,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       await DeviceManager.savePairedDevice(deviceInfo);
 
       // Disconnect (we're just pairing, not syncing)
-      await device.disconnect();
+      await UniversalBle.disconnect(deviceId);
 
       // Close loading dialog
       if (!mounted) return;
@@ -324,7 +330,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       if (mounted) {
         Navigator.of(context).pop();
       }
-      
+
       Snackbar.show(
         ABC.c,
         prettyException("Connection Error:", e),
@@ -375,7 +381,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       body: Column(
         children: [
           // Status banner
-          if (_adapterState != BluetoothAdapterState.on)
+          if (_adapterState != AvailabilityState.poweredOn)
             Container(
               color: Colors.red[700],
               width: double.infinity,
@@ -392,7 +398,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                 ],
               ),
             ),
-          
+
           // Scanning indicator
           if (_isScanning)
             Container(
@@ -490,15 +496,13 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: _scanResults.length,
                     itemBuilder: (context, index) {
-                      final result = _scanResults[index];
+                      final device = _scanResults[index];
+                      final name = (device.name != null && device.name!.isNotEmpty)
+                          ? device.name!
+                          : 'Unknown Device';
                       return _DeviceListTile(
-                        result: result,
-                        onTap: () => _connectToDevice(
-                          result.device,
-                          result.advertisementData.advName.isNotEmpty
-                              ? result.advertisementData.advName
-                              : result.device.platformName,
-                        ),
+                        device: device,
+                        onTap: () => _connectToDevice(device.deviceId, name),
                       );
                     },
                   ),
@@ -511,26 +515,22 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
 
 /// Individual device tile in scan results
 class _DeviceListTile extends StatelessWidget {
-  final ScanResult result;
+  final BleDevice device;
   final VoidCallback onTap;
 
   const _DeviceListTile({
-    required this.result,
+    required this.device,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final device = result.device;
-    final advName = result.advertisementData.advName;
-    final platformName = device.platformName;
-    final rssi = result.rssi;
+    final rssi = device.rssi ?? -999;
 
     // Determine display name
-    String displayName = advName.isNotEmpty ? advName : platformName;
-    if (displayName.isEmpty) {
-      displayName = 'Unknown Device';
-    }
+    String displayName = (device.name != null && device.name!.isNotEmpty)
+        ? device.name!
+        : 'Unknown Device';
 
     // Signal strength indicator
     IconData signalIcon;
@@ -573,7 +573,7 @@ class _DeviceListTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Device info
               Expanded(
                 child: Column(
@@ -589,7 +589,7 @@ class _DeviceListTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      device.remoteId.str,
+                      device.deviceId,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[500],
@@ -617,7 +617,7 @@ class _DeviceListTile extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Pair button
               ElevatedButton(
                 onPressed: onTap,

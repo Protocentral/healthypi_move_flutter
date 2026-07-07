@@ -339,6 +339,15 @@ The wire shapes below are handled defensively but should be pinned from live cap
 
 ---
 
+## 10a. Follow-up: publish the SMP core as a pub.dev package (decided)
+
+Once this BLE migration is complete, extract the generic SMP/MCUmgr core (currently
+copied into both OpenView and Move) into a **pure-Dart pub.dev package**
+(`mcumgr_dart`) + a `mcumgr_universal_ble` transport companion; keep `hpi_hs`/`hs_*`
+out (app/vendor-specific). Both apps then depend on the package instead of carrying
+copies. Fills a real gap — `mcumgr_flutter` is native mobile-only. Do it **after** the
+migration stabilizes.
+
 ## 11. Reference
 
 - HPI_HS contract: `HPI_HS_API.md` (firmware repo).
