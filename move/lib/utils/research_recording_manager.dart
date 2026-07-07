@@ -2,64 +2,55 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:convert';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import 'package:archive/archive.dart';
 import '../globals.dart';
 import '../models/research_recording.dart';
+import '../mcumgr/fs_mgmt.dart';
+import '../smp/smp_ble_transport.dart';
+import '../smp/smp_client.dart';
+import 'connection_manager.dart';
 
-/// Manager for research recording operations
-/// Handles BLE communication, file downloads, and data parsing
+/// Manager for research recording operations.
+/// Handles BLE communication, file downloads, and data parsing.
+///
+/// Migrated to `universal_ble`: the recording-control commands ride the custom
+/// cmd/data GATT service via [ConnectionManager]; file downloads use the ported
+/// MCUmgr [FsMgmt] over an SMP session that **shares** the ConnectionManager link
+/// (`manageConnection: false`) instead of `mcumgr_flutter`'s FsManager.
 class ResearchRecordingManager {
+  final String deviceId;
+  final ConnectionManager _conn = ConnectionManager.instance;
 
-  final BluetoothDevice device;
-  BluetoothCharacteristic? _commandCharacteristic;
-  BluetoothCharacteristic? _dataCharacteristic;
-  mcumgr.FsManager? _fsManager;
+  SmpBleTransport? _smpTransport;
+  SmpClient? _smpClient;
+  FsMgmt? _fs;
 
   final List<StreamSubscription> _activeSubscriptions = [];
 
   bool _isInitialized = false;
 
-  ResearchRecordingManager(this.device);
+  ResearchRecordingManager(this.deviceId);
 
-  /// Initialize the manager - must be called before using any methods
+  /// Initialize the manager - must be called before using any methods.
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // Discover services if needed
-    List<BluetoothService> services;
-    if (device.servicesList.isEmpty) {
-      services = await device.discoverServices();
-    } else {
-      services = device.servicesList;
+    if (!_conn.isConnected) {
+      throw Exception('Device not connected');
     }
 
-    // Find command service and characteristics
-    for (var service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        for (var characteristic in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-            _dataCharacteristic = characteristic;
-          }
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-            _commandCharacteristic = characteristic;
-          }
-        }
-      }
-    }
-
-    if (_commandCharacteristic == null || _dataCharacteristic == null) {
-      throw Exception('Required BLE characteristics not found');
-    }
-
-    // Initialize FsManager for file downloads
-    _fsManager = mcumgr.FsManager(device.remoteId.toString());
+    // SMP session for MCUmgr FS downloads, riding the existing link.
+    final transport = SmpBleTransport(deviceId, manageConnection: false);
+    await transport.connect();
+    _smpTransport = transport;
+    _smpClient = SmpClient(transport);
+    _fs = FsMgmt(_smpClient!,
+        maxWriteLength: () => _smpTransport?.maxWriteLength);
 
     _isInitialized = true;
-    print('[ResearchRecordingManager] Initialized for device: ${device.remoteId}');
+    print('[ResearchRecordingManager] Initialized for device: $deviceId');
   }
 
   /// Dispose of resources
@@ -69,21 +60,21 @@ class ResearchRecordingManager {
     }
     _activeSubscriptions.clear();
 
-    if (_fsManager != null) {
-      _fsManager!.kill();
-      _fsManager = null;
-    }
+    await _smpClient?.dispose();
+    _smpClient = null;
+    await _smpTransport?.disconnect(); // manageConnection:false → just unsubscribes
+    await _smpTransport?.dispose();
+    _smpTransport = null;
+    _fs = null;
 
     _isInitialized = false;
     print('[ResearchRecordingManager] Disposed');
   }
 
-  /// Send a command to the device
+  /// Send a command to the device (custom cmd characteristic).
   Future<void> _sendCommand(List<int> command) async {
-    if (_commandCharacteristic == null) {
-      throw Exception('Not initialized - call initialize() first');
-    }
-    await _commandCharacteristic!.write(command, withoutResponse: true);
+    await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+        Uint8List.fromList(command));
     print('[ResearchRecordingManager] Sent command: ${command.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
   }
 
@@ -100,8 +91,10 @@ class ResearchRecordingManager {
 
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 3 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_CONFIGURE[0]) {
@@ -114,8 +107,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(config.toCommandPacket());
 
@@ -134,8 +125,10 @@ class ResearchRecordingManager {
   Future<int> startRecording() async {
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 3 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_START[0]) {
@@ -148,8 +141,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(hPi4Global.REC_START);
 
@@ -168,8 +159,10 @@ class ResearchRecordingManager {
   Future<int> stopRecording() async {
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 3 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_STOP[0]) {
@@ -182,8 +175,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(hPi4Global.REC_STOP);
 
@@ -201,8 +192,10 @@ class ResearchRecordingManager {
   Future<RecordingStatus> getStatus() async {
     final completer = Completer<RecordingStatus>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 8 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_GET_STATUS[0]) {
@@ -215,8 +208,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(hPi4Global.REC_GET_STATUS);
 
@@ -240,8 +231,10 @@ class ResearchRecordingManager {
     final completer = Completer<List<ResearchRecording>>();
     Timer? timeoutTimer;
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       // Reset timeout on each received packet
       timeoutTimer?.cancel();
 
@@ -266,8 +259,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(hPi4Global.REC_GET_SESSION_LIST);
 
@@ -296,8 +287,10 @@ class ResearchRecordingManager {
   Future<int> deleteSession(ResearchRecording session) async {
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 3 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_DELETE_SESSION[0]) {
@@ -310,8 +303,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(session.toDeleteCommandPacket());
 
@@ -330,8 +321,10 @@ class ResearchRecordingManager {
   Future<int> wipeAll() async {
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       if (value.length >= 3 &&
           value[0] == hPi4Global.CES_CMDIF_TYPE_CMD_RSP &&
           value[1] == hPi4Global.REC_WIPE_ALL[0]) {
@@ -344,8 +337,6 @@ class ResearchRecordingManager {
     });
 
     _activeSubscriptions.add(subscription);
-    device.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     await _sendCommand(hPi4Global.REC_WIPE_ALL);
 
@@ -370,51 +361,21 @@ class ResearchRecordingManager {
       ResearchSignalType signal, {
         void Function(double progress)? onProgress,
       }) async {
-    if (_fsManager == null) {
+    final fs = _fs;
+    if (fs == null) {
       throw Exception('Not initialized - call initialize() first');
     }
 
     final filePath = session.signalFilePath(signal);
     print('[ResearchRecordingManager] Downloading: $filePath');
 
-    final completer = Completer<Uint8List>();
-
-    late StreamSubscription downloadSubscription;
-    downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
-      if (event.path == filePath) {
-        if (event is mcumgr.OnDownloadCompleted) {
-          print('[ResearchRecordingManager] Download completed: ${event.data.length} bytes');
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.complete(Uint8List.fromList(event.data));
-        } else if (event is mcumgr.OnDownloadFailed) {
-          print('[ResearchRecordingManager] Download failed: ${event.cause}');
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.completeError(Exception('Download failed: ${event.cause}'));
-        } else if (event is mcumgr.OnDownloadCancelled) {
-          print('[ResearchRecordingManager] Download cancelled');
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.completeError(Exception('Download cancelled'));
-        } else if (event is mcumgr.OnDownloadProgressChanged) {
-          // Progress callback if provided
-          onProgress?.call(0.5); // Estimate since we don't have exact progress
-        }
-      }
-    });
-
-    _activeSubscriptions.add(downloadSubscription);
-    await _fsManager!.download(filePath);
-
-    return completer.future.timeout(
-      const Duration(minutes: 5),
-      onTimeout: () {
-        downloadSubscription.cancel();
-        _activeSubscriptions.remove(downloadSubscription);
-        throw TimeoutException('Download timeout for $filePath');
-      },
+    final data = await fs.download(
+      filePath,
+      onProgress: (done, total) =>
+          onProgress?.call(total > 0 ? done / total : 0.0),
     );
+    print('[ResearchRecordingManager] Download completed: ${data.length} bytes');
+    return data;
   }
 
   /// Download all signal files for a session

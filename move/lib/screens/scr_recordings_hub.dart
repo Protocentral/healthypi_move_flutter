@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import '../utils/connection_manager.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import '../globals.dart';
@@ -342,7 +342,6 @@ class _ResearchTab extends StatefulWidget {
 }
 
 class _ResearchTabState extends State<_ResearchTab> {
-  BluetoothDevice? _device;
   ResearchRecordingManager? _manager;
 
   List<ResearchRecording> _sessions = [];
@@ -367,20 +366,10 @@ class _ResearchTabState extends State<_ResearchTab> {
 
   Future<void> _initialize() async {
     try {
-      _device = BluetoothDevice.fromId(widget.deviceMacAddress);
+      await ConnectionManager.instance.connect(widget.deviceMacAddress);
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      if (_device!.isDisconnected) {
-        await _device!.connect(
-            license: License.values.first,
-            timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      if (_device!.servicesList.isEmpty) {
-        await _device!.discoverServices();
-      }
-
-      _manager = ResearchRecordingManager(_device!);
+      _manager = ResearchRecordingManager(widget.deviceMacAddress);
       await _manager!.initialize();
 
       await _loadSessions();
@@ -971,7 +960,6 @@ class _ResearchRecordingConfigScreen extends StatefulWidget {
 
 class _ResearchRecordingConfigScreenState
     extends State<_ResearchRecordingConfigScreen> {
-  BluetoothDevice? _device;
   ResearchRecordingManager? _manager;
   bool _isInitializing = true;
   bool _isStarting = false;
@@ -999,20 +987,10 @@ class _ResearchRecordingConfigScreenState
 
   Future<void> _initialize() async {
     try {
-      _device = BluetoothDevice.fromId(widget.deviceMacAddress);
+      await ConnectionManager.instance.connect(widget.deviceMacAddress);
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      if (_device!.isDisconnected) {
-        await _device!.connect(
-            license: License.values.first,
-            timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      if (_device!.servicesList.isEmpty) {
-        await _device!.discoverServices();
-      }
-
-      _manager = ResearchRecordingManager(_device!);
+      _manager = ResearchRecordingManager(widget.deviceMacAddress);
       await _manager!.initialize();
 
       if (mounted) {
@@ -1310,7 +1288,6 @@ class _ResearchSessionDetailScreen extends StatefulWidget {
 
 class _ResearchSessionDetailScreenState
     extends State<_ResearchSessionDetailScreen> {
-  BluetoothDevice? _device;
   ResearchRecordingManager? _manager;
   bool _isInitializing = true;
   String? _errorMessage;
@@ -1341,21 +1318,10 @@ class _ResearchSessionDetailScreenState
 
   Future<void> _initialize() async {
     try {
-      _device = BluetoothDevice.fromId(widget.deviceMacAddress);
+      await ConnectionManager.instance.connect(widget.deviceMacAddress);
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      if (_device!.isDisconnected) {
-        await _device!.connect(
-          license: License.values.first,
-          timeout: const Duration(seconds: 15),
-        );
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      if (_device!.servicesList.isEmpty) {
-        await _device!.discoverServices();
-      }
-
-      _manager = ResearchRecordingManager(_device!);
+      _manager = ResearchRecordingManager(widget.deviceMacAddress);
       await _manager!.initialize();
 
       if (mounted) {

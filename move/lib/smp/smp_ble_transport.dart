@@ -17,7 +17,16 @@ import 'smp_transport.dart';
 /// iff [connect] finds the SMP service; otherwise it throws
 /// [SmpTransportException] and the caller shows a "not an SMP device" gate.
 class SmpBleTransport implements SmpTransport {
-  SmpBleTransport(this.deviceId, {String? name}) : _label = name;
+  SmpBleTransport(this.deviceId, {String? name, this.manageConnection = true})
+      : _label = name;
+
+  /// When true (default) this transport owns the BLE link: [connect] calls
+  /// `UniversalBle.connect` and [disconnect] drops the device. When false it
+  /// **rides an existing link** (e.g. one already opened by `ConnectionManager`)
+  /// — [connect] skips the OS connect and [disconnect] only unsubscribes, so it
+  /// won't tear down a shared streaming connection. Used by SMP sessions (FS/DFU)
+  /// that share the Move's single universal_ble connection.
+  final bool manageConnection;
 
   /// Nordic SMP GATT identifiers.
   static const String smpServiceUuid = '8d53dc1d-1db7-4cd3-868b-8a527460aa84';
@@ -56,7 +65,10 @@ class SmpBleTransport implements SmpTransport {
   Future<void> connect() async {
     _setState(SmpConnectionState.connecting);
     try {
-      await UniversalBle.connect(deviceId, timeout: const Duration(seconds: 20));
+      if (manageConnection) {
+        await UniversalBle.connect(deviceId,
+            timeout: const Duration(seconds: 20));
+      }
 
       // Subscribe to connection changes only AFTER connect succeeds, so a
       // replayed `disconnected` can't tear us down mid-bring-up.
@@ -148,10 +160,19 @@ class SmpBleTransport implements SmpTransport {
   @override
   Future<void> disconnect() async {
     _setState(SmpConnectionState.disconnecting);
+    // Unsubscribe from the SMP characteristic either way; only drop the actual
+    // BLE link when we own it (see [manageConnection]).
+    if (_serviceUuid != null && _charUuid != null) {
+      try {
+        await UniversalBle.unsubscribe(deviceId, _serviceUuid!, _charUuid!);
+      } catch (_) {}
+    }
     await _cleanup();
-    try {
-      await UniversalBle.disconnect(deviceId);
-    } catch (_) {}
+    if (manageConnection) {
+      try {
+        await UniversalBle.disconnect(deviceId);
+      } catch (_) {}
+    }
     _setState(SmpConnectionState.disconnected);
   }
 
