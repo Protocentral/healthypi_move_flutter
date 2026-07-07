@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
 import 'package:intl/intl.dart';
 import '../globals.dart';
+import '../mcumgr/fs_mgmt.dart';
+import '../smp/smp_ble_transport.dart';
+import '../smp/smp_client.dart';
+import 'connection_manager.dart';
 import 'database_helper.dart';
 import 'update_checker.dart';
 
@@ -61,6 +63,13 @@ class SyncResult {
   });
 }
 
+/// Downloads health-trend history (HR / SpO2 / Temp / Activity) from a paired
+/// HealthyPi Move into the local database.
+///
+/// BLE is routed through the universal_ble stack (matching the rest of the app):
+/// the custom cmd/data trend protocol goes over [ConnectionManager] (subscribe /
+/// write), and file downloads use the ported MCUmgr [FsMgmt] over an SMP session
+/// that **shares** the ConnectionManager link (`manageConnection: false`).
 class BackgroundSyncManager {
   static final BackgroundSyncManager instance = BackgroundSyncManager._();
   BackgroundSyncManager._();
@@ -72,16 +81,16 @@ class BackgroundSyncManager {
   bool get isSyncing => _isSyncing;
 
   final List<StreamSubscription> _activeSubscriptions = [];
-  
-  // BLE characteristics for communication
-  BluetoothCharacteristic? _commandCharacteristic;
-  BluetoothCharacteristic? _dataCharacteristic;
-  
-  // MCU Manager for file downloads
-  mcumgr.FsManager? _fsManager;
-  
-  // Current device being synced
-  BluetoothDevice? _currentDevice;
+
+  final ConnectionManager _conn = ConnectionManager.instance;
+
+  // SMP FS session (rides the ConnectionManager link) for file downloads.
+  SmpBleTransport? _smpTransport;
+  SmpClient? _smpClient;
+  FsMgmt? _fs;
+
+  // MAC of the device currently being synced (used to tag DB rows).
+  String? _deviceMac;
 
   Future<SyncResult> syncData({
     required String deviceMacAddress,
@@ -98,56 +107,26 @@ class BackgroundSyncManager {
     }
 
     _isSyncing = true;
+    _deviceMac = deviceMacAddress;
     final startTime = DateTime.now();
     final recordCounts = <String, int>{};
 
     try {
-      // Step 1: Create device and connect - ALL BLE logic contained here
+      // Step 1: Connect (ConnectionManager owns the link + discovers services).
       _emitProgress('all', 0.0, SyncState.connecting, 'Connecting to device...');
       onStatus('Connecting to device...');
-      
+
       debugPrint('═══════════════════════════════════════════════════════');
-      debugPrint('Background sync: Creating device from MAC: $deviceMacAddress');
-      final device = BluetoothDevice.fromId(deviceMacAddress);
-      _currentDevice = device;
-
-      if (device.isDisconnected) {
-        debugPrint('Background sync: Connecting to device...');
-        await device.connect(
-          license: License.values.first,
-          timeout: const Duration(seconds: 15),
-        );
-        await Future.delayed(const Duration(milliseconds: 500));
-        debugPrint('Background sync: Connected successfully');
-      } else {
-        debugPrint('Background sync: Device already connected');
-      }
-
-      final services = await device.discoverServices();
-      
-      // Find command service and characteristics
-      for (var service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-              _dataCharacteristic = characteristic;
-            }
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-              _commandCharacteristic = characteristic;
-            }
-          }
-        }
-      }
-
-      if (_commandCharacteristic == null || _dataCharacteristic == null) {
-        throw Exception('Required BLE characteristics not found');
-      }
+      debugPrint('Background sync: Connecting to device: $deviceMacAddress');
+      await _conn.connect(deviceMacAddress);
+      await Future.delayed(const Duration(milliseconds: 500));
+      debugPrint('Background sync: Connected successfully');
 
       // Step 1.5: Check firmware version before syncing
       _emitProgress('all', 0.02, SyncState.connecting, 'Checking firmware version...');
       onStatus('Checking firmware version...');
 
-      final firmwareVersion = await _readFirmwareVersion(services);
+      final firmwareVersion = await _readFirmwareVersion();
       debugPrint('Background sync: Firmware version: $firmwareVersion');
 
       if (!_isFirmwareVersionSupported(firmwareVersion)) {
@@ -158,17 +137,19 @@ class BackgroundSyncManager {
         );
       }
 
-      // ============================================================================
-      // MCU Manager Strategy: Create ONCE at start, dispose before disconnect
-      // ============================================================================
-      // Initialize MCU Manager for this sync session
-      debugPrint('Background sync: Creating MCU Manager instance...');
-      _fsManager = mcumgr.FsManager(_currentDevice!.remoteId.toString());
-      debugPrint('Background sync: MCU Manager created successfully');
-      // ============================================================================
+      // SMP FS session for file downloads, riding the existing link.
+      debugPrint('Background sync: Creating SMP FS session...');
+      final transport =
+          SmpBleTransport(deviceMacAddress, manageConnection: false);
+      await transport.connect();
+      _smpTransport = transport;
+      _smpClient = SmpClient(transport);
+      _fs = FsMgmt(_smpClient!,
+          maxWriteLength: () => _smpTransport?.maxWriteLength);
+      debugPrint('Background sync: SMP FS session ready');
 
       // Check for firmware updates in background (non-blocking)
-      UpdateChecker.checkForUpdatesInBackground(device.remoteId.str)
+      UpdateChecker.checkForUpdatesInBackground(deviceMacAddress)
           .then((updateAvailable) {
         if (updateAvailable) {
           debugPrint('Background sync: Firmware update available');
@@ -180,12 +161,12 @@ class BackgroundSyncManager {
       // Step 2: Set device time
       _emitProgress('all', 0.05, SyncState.connecting, 'Syncing device time...');
       onStatus('Syncing device time...');
-      await _sendCurrentDateTime(_currentDevice!);
-      
+      await _sendCurrentDateTime();
+
       // Step 3: Fetch session counts for each metric
       _emitProgress('all', 0.1, SyncState.downloading, 'Checking available data...');
       onStatus('Checking available data...');
-      
+
       final metrics = [
         {'type': hPi4Global.PREFIX_HR, 'trend': hPi4Global.HrTrend, 'name': 'Heart Rate'},
         {'type': hPi4Global.PREFIX_SPO2, 'trend': hPi4Global.Spo2Trend, 'name': 'SpO2'},
@@ -198,7 +179,7 @@ class BackgroundSyncManager {
       for (var metric in metrics) {
         final trendType = metric['trend'] as List<int>;
         final metricType = metric['type'] as String;
-        final count = await _fetchLogCount(_currentDevice!, trendType);
+        final count = await _fetchLogCount(trendType);
         sessionCounts[metricType] = count;
         debugPrint('Background sync: $metricType session count = $count');
       }
@@ -217,13 +198,13 @@ class BackgroundSyncManager {
       // Step 4: Fetch and download sessions for each metric
       int completedMetrics = 0;
       final totalMetrics = metrics.where((m) => sessionCounts[m['type'] as String]! > 0).length;
-      
+
       for (var metric in metrics) {
         final metricType = metric['type'] as String;
         final trendType = metric['trend'] as List<int>;
         final metricName = metric['name'] as String;
         final count = sessionCounts[metricType]!;
-        
+
         if (count == 0) continue;
 
         _emitProgress(metricType, 0.0, SyncState.downloading, 'Fetching $metricName indices...');
@@ -231,7 +212,7 @@ class BackgroundSyncManager {
         onProgress(metricType, 0.0);
 
         // Fetch log indices
-        final logHeaders = await _fetchLogIndexAndWait(_currentDevice!, trendType, count);
+        final logHeaders = await _fetchLogIndexAndWait(trendType, count);
         debugPrint('Background sync: Found ${logHeaders.length} $metricType sessions');
 
         // Get list of already synced sessions for this metric
@@ -247,7 +228,7 @@ class BackgroundSyncManager {
           // For past sessions, only download if not already synced
           return !syncedSessionIds.contains(h.logFileID);
         }).toList();
-        
+
         final todayCount = logHeaders.where((h) => _isToday(h)).length;
         final actualNewCount = newHeaders.length - todayCount;
         debugPrint('Background sync: $metricType - ${newHeaders.length} to download ($todayCount today, $actualNewCount new past sessions)');
@@ -266,14 +247,14 @@ class BackgroundSyncManager {
         for (int i = 0; i < newHeaders.length; i++) {
           final header = newHeaders[i];
           final progress = (i + 1) / newHeaders.length;
-          
+
           final isToday = _isToday(header);
           final action = isToday ? 'Updating' : 'Downloading';
           _emitProgress(metricType, progress, SyncState.downloading, '$action $metricName ${i + 1}/${newHeaders.length}');
           onProgress(metricType, progress);
 
           try {
-            final records = await _fetchLogFile(_currentDevice!, header.logFileID, header.sessionLength, trendType, metricType);
+            final records = await _fetchLogFile(header.logFileID, header.sessionLength, trendType, metricType);
             downloadedRecords += records;
           } catch (e) {
             debugPrint('Error downloading $metricType session ${header.logFileID}: $e');
@@ -283,7 +264,7 @@ class BackgroundSyncManager {
 
         recordCounts[metricType] = downloadedRecords;
         completedMetrics++;
-        
+
         final overallProgress = 0.1 + (completedMetrics / totalMetrics * 0.9);
         _emitProgress('all', overallProgress, SyncState.downloading, 'Progress: $completedMetrics/$totalMetrics');
         _emitProgress(metricType, 1.0, SyncState.completed, 'Completed $metricName');
@@ -301,7 +282,7 @@ class BackgroundSyncManager {
       onStatus('Sync completed');
 
       // Safe disconnect from device
-      await _safeDisconnect(_currentDevice!);
+      await _safeDisconnect();
 
       final totalRecords = recordCounts.values.fold(0, (sum, count) => sum + count);
       return SyncResult(
@@ -315,14 +296,14 @@ class BackgroundSyncManager {
       _emitProgress('all', 0.0, SyncState.error, 'Sync failed: $e');
       onStatus('Sync failed');
       debugPrint('Background sync error: $e');
-      
+
       // Try to disconnect even on error
       try {
-        await _safeDisconnect(_currentDevice!);
+        await _safeDisconnect();
       } catch (disconnectError) {
         debugPrint('Error disconnecting after sync failure: $disconnectError');
       }
-      
+
       return SyncResult(
         success: false,
         message: 'Sync failed: $e',
@@ -335,88 +316,30 @@ class BackgroundSyncManager {
     }
   }
 
-  /// Safe disconnect - properly releases BLE connection
-  /// Must be called after fsManager.kill() to ensure clean disconnect
-  Future<void> _safeDisconnect(BluetoothDevice device) async {
+  /// Tear down the SMP FS session and release the ConnectionManager link.
+  Future<void> _safeDisconnect() async {
     try {
-      debugPrint('═══════════════════════════════════════════════════════');
-      debugPrint('Background sync: DISCONNECT SEQUENCE INITIATED');
-      debugPrint('Background sync: Device: ${device.remoteId}');
-      debugPrint('═══════════════════════════════════════════════════════');
-      
-      // ============================================================================
-      // STEP 0: CRITICAL - Kill MCU Manager FIRST (releases internal BLE connection)
-      // ============================================================================
-      debugPrint('STEP 0: ⚠️ KILLING MCU MANAGER (releases native BLE resources)');
-      try {
-        if (_fsManager != null) {
-          // FsManager.kill() explicitly releases native BLE resources
-          // This is documented as necessary to prevent memory leaks
-          debugPrint('  Calling _fsManager.kill()...');
-          await _fsManager!.kill();
-          _fsManager = null;
-          
-          // Give native layer time to clean up BLE connection
-          await Future.delayed(const Duration(milliseconds: 1500));
-          debugPrint('  ✓ FsManager killed - native BLE resources released');
-        } else {
-          debugPrint('  FsManager already null, skipping kill()');
-        }
-      } catch (e) {
-        debugPrint('  ⚠️ Error killing FsManager: $e');
-        // Continue with disconnect anyway
-      }
-      // ============================================================================
-      
-      // STEP 1: Immediate cleanup - clear ALL references
-      debugPrint('STEP 1: Clearing ${_activeSubscriptions.length} subscriptions and references');
-      _cleanupSubscriptions();
-      _commandCharacteristic = null;
-      _dataCharacteristic = null;
-      
-      // STEP 2: Check initial state
-      await Future.delayed(const Duration(milliseconds: 500));
-      bool isConnected = await device.isConnected;
-      debugPrint('STEP 2: Initial connection status: $isConnected');
-      
-      if (!isConnected) {
-        debugPrint('✓ Device already disconnected - exiting');
-        return;
-      }
-      
-      // STEP 3: Simple disconnect
-      debugPrint('STEP 3: Calling device.disconnect()...');
-      try {
-        await device.disconnect(timeout: 5);
-        debugPrint('  ✓ Disconnect called successfully');
-      } catch (e) {
-        debugPrint('  ⚠️ Disconnect call failed: $e');
-      }
+      debugPrint('Background sync: Disconnect sequence initiated');
 
-      // STEP 4: Wait and verify
-      await Future.delayed(const Duration(milliseconds: 1000));
-      isConnected = await device.isConnected;
-      debugPrint('STEP 4: Post-disconnect status: $isConnected');
-      
-      if (isConnected) {
-        debugPrint('⚠️ Device still connected after disconnect call');
-        debugPrint('⚠️ This may indicate fsManager.kill() was not called or failed');
-      } else {
-        debugPrint('✓✓✓ SUCCESS - Device confirmed disconnected');
-      }
-      
-      debugPrint('═══════════════════════════════════════════════════════');
-      debugPrint('Background sync: DISCONNECT SEQUENCE COMPLETED');
-      debugPrint('═══════════════════════════════════════════════════════');
-      
-    } catch (e, stackTrace) {
-      debugPrint('❌❌❌ CRITICAL ERROR in disconnect sequence: $e');
-      debugPrint('Stack trace: $stackTrace');
+      // Dispose the SMP FS session first (unsubscribes its notify handler).
+      _cleanupSubscriptions();
+      await _smpClient?.dispose();
+      _smpClient = null;
+      await _smpTransport?.disconnect(); // manageConnection:false → just unsubscribes
+      await _smpTransport?.dispose();
+      _smpTransport = null;
+      _fs = null;
+
+      // Release the shared BLE link.
+      await _conn.disconnect();
+      debugPrint('Background sync: Disconnect sequence completed');
+    } catch (e) {
+      debugPrint('Background sync: Error during disconnect: $e');
       // Don't throw - we want sync to complete even if disconnect fails
     }
   }
 
-  Future<void> _sendCurrentDateTime(BluetoothDevice device) async {
+  Future<void> _sendCurrentDateTime() async {
     final dt = DateTime.now();
     final cdate = DateFormat("yy").format(dt);
 
@@ -449,14 +372,12 @@ class BackgroundSyncManager {
     debugPrint('-------------------------------');
     // ──────────────────────────────────────────────────────────
 
-    await _sendCommand(commandDateTimePacket, device);
+    await _sendCommand(commandDateTimePacket);
   }
 
-
-  Future<void> _sendCommand(List<int> commandList, BluetoothDevice device) async {
-    if (_commandCharacteristic != null) {
-      await _commandCharacteristic!.write(commandList, withoutResponse: true);
-    }
+  Future<void> _sendCommand(List<int> commandList) async {
+    await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+        Uint8List.fromList(commandList));
   }
 
   /// Check if a session is from today
@@ -465,7 +386,7 @@ class BackgroundSyncManager {
     final now = DateTime.now();
     // Interpret session timestamp as local time
     final headerDate = DateTime.fromMillisecondsSinceEpoch(header.logFileID * 1000, isUtc: false);
-    
+
     return now.year == headerDate.year &&
            now.month == headerDate.month &&
            now.day == headerDate.day;
@@ -517,13 +438,15 @@ class BackgroundSyncManager {
     }
   }
 
-  Future<int> _fetchLogCount(BluetoothDevice device, List<int> trendType) async {
+  Future<int> _fetchLogCount(List<int> trendType) async {
     final completer = Completer<int>();
     int sessionCount = 0;
 
     // Listen for session count response
-    late StreamSubscription<List<int>> tempSubscription;
-    tempSubscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> tempSubscription;
+    tempSubscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
       if (pktType == hPi4Global.CES_CMDIF_TYPE_CMD_RSP) {
@@ -538,14 +461,12 @@ class BackgroundSyncManager {
     });
 
     _activeSubscriptions.add(tempSubscription);
-    device.cancelWhenDisconnected(tempSubscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     // Send command
     List<int> commandPacket = [];
     commandPacket.addAll(hPi4Global.getSessionCount);
     commandPacket.addAll(trendType);
-    await _sendCommand(commandPacket, device);
+    await _sendCommand(commandPacket);
 
     return await completer.future.timeout(
       const Duration(seconds: 10),
@@ -554,7 +475,6 @@ class BackgroundSyncManager {
   }
 
   Future<List<LogHeader>> _fetchLogIndexAndWait(
-    BluetoothDevice device,
     List<int> trendType,
     int sessionCount,
   ) async {
@@ -562,8 +482,10 @@ class BackgroundSyncManager {
     final completer = Completer<void>();
 
     // Listen for log index packets
-    late StreamSubscription<List<int>> tempSubscription;
-    tempSubscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> tempSubscription;
+    tempSubscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       int pktType = bdata.getUint8(0);
       if (pktType == hPi4Global.CES_CMDIF_TYPE_LOG_IDX) {
@@ -582,14 +504,12 @@ class BackgroundSyncManager {
     });
 
     _activeSubscriptions.add(tempSubscription);
-    device.cancelWhenDisconnected(tempSubscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     // Send command to fetch indices
     List<int> commandPacket = [];
     commandPacket.addAll(hPi4Global.sessionLogIndex);
     commandPacket.addAll(trendType);
-    await _sendCommand(commandPacket, device);
+    await _sendCommand(commandPacket);
 
     await completer.future.timeout(
       const Duration(seconds: 30),
@@ -600,7 +520,6 @@ class BackgroundSyncManager {
   }
 
   Future<int> _fetchLogFile(
-    BluetoothDevice device,
     int sessionID,
     int sessionSize,
     List<int> trendType,
@@ -621,38 +540,11 @@ class BackgroundSyncManager {
     }
 
     final String deviceFilePath = "/lfs/$deviceDirectory/$sessionID";
-    
-    // Download file via MCU Manager
-    final completer = Completer<List<int>>();
-    
-    late StreamSubscription downloadSubscription;
-    downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
-      if (event.path == deviceFilePath) {
-        if (event is mcumgr.OnDownloadCompleted) {
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.complete(event.data);
-        } else if (event is mcumgr.OnDownloadFailed) {
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.completeError(Exception('Download failed: ${event.cause}'));
-        } else if (event is mcumgr.OnDownloadCancelled) {
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          completer.completeError(Exception('Download cancelled'));
-        }
-      }
-    });
 
-    _activeSubscriptions.add(downloadSubscription);
-    await _fsManager!.download(deviceFilePath);
-
-    final binaryData = await completer.future.timeout(
+    // Download file via MCUmgr FS (ported SMP client).
+    final binaryData = await _fs!.download(deviceFilePath).timeout(
       const Duration(seconds: 30),
-      onTimeout: () {
-        downloadSubscription.cancel();
-        throw TimeoutException('Download timeout');
-      },
+      onTimeout: () => throw TimeoutException('Download timeout'),
     );
 
     // Parse binary data and insert into database
@@ -663,7 +555,7 @@ class BackgroundSyncManager {
       cleanData,
       metricType,
       sessionID,
-      deviceMac: _currentDevice?.remoteId.str,
+      deviceMac: _deviceMac,
     );
 
     return recordCount;
@@ -687,25 +579,12 @@ class BackgroundSyncManager {
     _activeSubscriptions.clear();
   }
 
-  /// Read firmware version from Device Information Service
-  Future<String> _readFirmwareVersion(List<BluetoothService> services) async {
+  /// Read firmware version from Device Information Service (0x180A / 0x2A26)
+  Future<String> _readFirmwareVersion() async {
     try {
-      // Look for Device Information Service (0x180A)
-      for (var service in services) {
-        if (service.uuid == Guid("180a")) {
-          // Look for Firmware Revision String characteristic (0x2A26)
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid("2a26")) {
-              final value = await characteristic.read();
-              final version = String.fromCharCodes(value).trim();
-              return version;
-            }
-          }
-        }
-      }
-
-      debugPrint('Background sync: Firmware version characteristic not found');
-      return 'unknown';
+      final value = await _conn.read("180a", "2a26");
+      final version = String.fromCharCodes(value).trim();
+      return version.isEmpty ? 'unknown' : version;
     } catch (e) {
       debugPrint('Background sync: Error reading firmware version: $e');
       return 'unknown';

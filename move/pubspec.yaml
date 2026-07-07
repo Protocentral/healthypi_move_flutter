@@ -69,17 +69,14 @@ dependencies:
   syncfusion_flutter_pdf: ^31.1.20
   screenshot: ^3.0.0 # For capturing widget as image
 
-  # --- BLE migration (FBP -> universal_ble, matching OpenView 3) ---
-  # universal_ble is BSD-3, all platforms; the go-forward layer. flutter_blue_plus
-  # and mcumgr_flutter are kept ONLY during the staged migration so the app keeps
-  # compiling; remove both once every screen is off FBP and DFU is on the ported
-  # SMP img_mgmt. See docs/HEALTH_STORE_SYNC_DESIGN.md §2.0.
+  # --- BLE stack (universal_ble, matching OpenView 3) ---
+  # universal_ble is BSD-3, all platforms. Streaming rides ConnectionManager;
+  # SMP/MCUmgr (OS/Image/FS + HPI_HS) is the ported lib/smp + lib/mcumgr stack.
+  # flutter_blue_plus and mcumgr_flutter were fully removed after the migration.
+  # See docs/HEALTH_STORE_SYNC_DESIGN.md §2.0.
   universal_ble: ^2.0.1
   cbor: ^6.5.1 # SMP/MCUmgr CBOR payloads
   crypto: ^3.0.7 # DFU image SHA-256
-  flutter_blue_plus: ^2.0.0
-
-  mcumgr_flutter: ^0.6.1
   equatable: ^2.0.5
   flutter_archive: ^6.0.0
   flutter_bloc: ^9.1.1
