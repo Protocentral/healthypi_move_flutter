@@ -1,14 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:move/screens/scr_bpt_calibration.dart';
 import 'package:move/screens/scr_device_scan.dart';
 import 'package:move/screens/scr_stream_selection.dart';
 import 'package:move/screens/scr_recordings_hub.dart';
 import 'package:move/screens/scr_dfu_new.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
-import '../utils/extra.dart';
+import '../utils/connection_manager.dart';
 import '../utils/sizeConfig.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
@@ -30,13 +30,7 @@ class ScrDeviceMgmt extends StatefulWidget {
 class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
   String selectedOption = "sync";
 
-  BluetoothDevice? _device;
-
-  BluetoothService? commandService;
-  BluetoothCharacteristic? commandCharacteristic;
-
-  BluetoothService? dataService;
-  BluetoothCharacteristic? dataCharacteristic;
+  final ConnectionManager _conn = ConnectionManager.instance;
 
   @override
   void initState() {
@@ -86,16 +80,12 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
     }
   }
 
-  Future<void> _connectAndSend() async {
+  Future<void> _connectAndSend(String deviceId) async {
     try {
-      debugPrint('Auto-connecting to device: ${_device}');
+      debugPrint('Auto-connecting to device: $deviceId');
 
-      // Connect if not already connected
-      if (_device!.isDisconnected) {
-        await _device?.connect(license: License.values.first, timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-
-      }
+      await _conn.connect(deviceId);
+      await Future.delayed(const Duration(milliseconds: 500));
 
       // Navigate to stream selection screen
       if (mounted) {
@@ -128,38 +118,20 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
     });
   }
 
-  Future<void> _sendCommand(
-      List<int> commandList) async {
+  Future<void> _sendCommand(List<int> commandList) async {
     try {
-      // Check if device is still connected
-      if (_device== null) {
+      if (!_conn.isConnected) {
         logConsole("Device disconnected, skipping command");
         return;
       }
-
       logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
-
-      List<BluetoothService> services = await _device!.discoverServices();
-
-      // Find a service and characteristic by UUID
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-          commandService = service;
-          for (BluetoothCharacteristic characteristic
-          in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-              commandCharacteristic = characteristic;
-              break;
-            }
-          }
-        }
-      }
-
-      if (commandService != null && commandCharacteristic != null) {
-        // Write to the characteristic
-        await commandCharacteristic?.write(commandList, withoutResponse: true);
-        logConsole('Data written: $commandList');
-      }
+      await _conn.write(
+        hPi4Global.UUID_SERVICE_CMD,
+        hPi4Global.UUID_CHAR_CMD,
+        Uint8List.fromList(commandList),
+        withoutResponse: true,
+      );
+      logConsole('Data written: $commandList');
     } catch (e) {
       logConsole("Error sending command: $e");
       // Silently handle error if device is disconnected
@@ -168,7 +140,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
 
   Future onDisconnectPressed() async {
     try {
-      await _device!.disconnectAndUpdateStream();
+      await _conn.disconnect();
       Snackbar.show(ABC.c, "Disconnect: Success", success: true);
     } catch (e, backtrace) {
       Snackbar.show(
@@ -220,8 +192,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                     );
                     return;
                   }
-                  _device = BluetoothDevice.fromId(deviceInfo.macAddress);
-                  await _connectAndSend();
+                  await _connectAndSend(deviceInfo.macAddress);
                 },
               ),
               TextButton(
@@ -631,6 +602,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                           MaterialPageRoute(
                             builder: (context) => _LiveStreamConnector(
                               deviceMacAddress: deviceInfo.macAddress,
+                              deviceName: deviceInfo.displayName,
                             ),
                           ),
                         );
@@ -700,9 +672,11 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
 /// Connects to paired device and navigates to stream selection
 class _LiveStreamConnector extends StatefulWidget {
   final String deviceMacAddress;
-  
-  const _LiveStreamConnector({required this.deviceMacAddress});
-  
+  final String deviceName;
+
+  const _LiveStreamConnector(
+      {required this.deviceMacAddress, this.deviceName = 'HealthyPi Move'});
+
   @override
   State<_LiveStreamConnector> createState() => _LiveStreamConnectorState();
 }
@@ -712,49 +686,39 @@ class _LiveStreamConnectorState extends State<_LiveStreamConnector> {
   bool _hasError = false;
   String _statusMessage = 'Connecting to device...';
   String? _deviceName;
-  
+
   @override
   void initState() {
     super.initState();
+    _deviceName = widget.deviceName;
     _connectAndNavigate();
   }
-  
+
   Future<void> _connectAndNavigate() async {
     try {
       debugPrint('[LiveStream] Auto-connecting to device: ${widget.deviceMacAddress}');
-      
-      // Get BluetoothDevice from MAC address
-      final device = BluetoothDevice.fromId(widget.deviceMacAddress);
-      _deviceName = device.platformName.isNotEmpty ? device.platformName : 'HealthyPi Move';
-      
-      // Connect if not already connected
-      if (device.isDisconnected) {
-        if (mounted) {
-          setState(() {
-            _statusMessage = 'Connecting to $_deviceName...';
-          });
-        }
-        
-        await device.connect(license: License.values.first, timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      
+
       if (mounted) {
         setState(() {
-          _statusMessage = 'Discovering services...';
+          _statusMessage = 'Connecting to $_deviceName...';
         });
       }
-      
-      // Discover services
-      await device.discoverServices();
-      
+
+      // Connect via the ConnectionManager (owns the live-streaming link).
+      await ConnectionManager.instance
+          .connect(widget.deviceMacAddress, name: widget.deviceName);
+      await Future.delayed(const Duration(milliseconds: 500));
+
       debugPrint('[LiveStream] Connected successfully, navigating to stream selection');
-      
+
       // Navigate to stream selection screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (context) => ScrStreamsSelection(device: device),
+            builder: (context) => ScrStreamsSelection(
+              deviceId: widget.deviceMacAddress,
+              deviceName: widget.deviceName,
+            ),
           ),
         );
       }

@@ -1,22 +1,24 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:move/screens/scr_stream_selection.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import '../globals.dart';
+import '../utils/connection_manager.dart';
 import '../utils/sizeConfig.dart';
 
 class ScrLiveStream extends StatefulWidget {
-  ScrLiveStream({Key? key, required this.selectedType, required this.device})
-    : super();
+  ScrLiveStream({
+    Key? key,
+    required this.selectedType,
+    required this.deviceId,
+    this.deviceName = 'HealthyPi Move',
+  }) : super();
 
   final String selectedType;
-  final BluetoothDevice device;
+  final String deviceId;
+  final String deviceName;
 
   @override
   _ScrLiveStreamState createState() => _ScrLiveStreamState();
@@ -24,7 +26,6 @@ class ScrLiveStream extends StatefulWidget {
 
 class _ScrLiveStreamState extends State<ScrLiveStream> {
   GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey();
-  Key key = UniqueKey();
 
   final ecgLineData = <FlSpot>[];
   final ppgLineData = <FlSpot>[];
@@ -35,26 +36,13 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
   double ppgDataCounter = 0;
   double gsrDataCounter = 0;
   double fingerPPGDataCounter = 0;
-  double globalTemp = 0;
 
-  BluetoothService? ECGGSRService;
-  BluetoothService? PPGFINGERPPGService;
+  final ConnectionManager _conn = ConnectionManager.instance;
 
-  BluetoothCharacteristic? ECGCharacteristic;
-  BluetoothCharacteristic? PPGCharacteristic;
-  BluetoothCharacteristic? GSRCharacteristic;
-  BluetoothCharacteristic? FingerPPGCharacteristic;
-
-  late StreamSubscription<List<int>> streamECGSubscription;
-  late StreamSubscription<List<int>> streamPPGSubscription;
-  late StreamSubscription<List<int>> streamGSRSubscription;
-  late StreamSubscription<List<int>> streamFingerPPGSubscription;
-
-  bool listeningECGStream = false;
-  bool listeningPPGStream = false;
-  bool listeningGSRStream = false;
-  bool listeningFingerPPGStream = false;
-  bool startStreaming = true;
+  /// The (service, characteristic) UUIDs for the selected signal.
+  String? _service;
+  String? _characteristic;
+  StreamSubscription<Uint8List>? _streamSubscription;
 
   @override
   void initState() {
@@ -66,7 +54,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     ]);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      subscribeToChar(widget.device);
+      _startStreaming();
     });
   }
 
@@ -84,217 +72,89 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     gsrLineData.clear();
     fingerPPGLineData.clear();
 
-    closeAllStreams();
+    _closeStream();
 
     super.dispose();
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async {
-    List<BluetoothService> services = await deviceName.discoverServices();
-    if (widget.selectedType == "ECG") {
-      // Find a service and characteristic by UUID
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_ECG_SERVICE)) {
-          ECGGSRService = service;
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_ECG_CHAR)) {
-              ECGCharacteristic = characteristic;
-              await ECGCharacteristic?.setNotifyValue(true);
-              break;
-            }
-          }
-        }
-      }
-    } else if (widget.selectedType == "PPG") {
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERV_PPG)) {
-          PPGFINGERPPGService = service;
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_PPG)) {
-              PPGCharacteristic = characteristic;
-              await PPGCharacteristic?.setNotifyValue(true);
-              break;
-            }
-          }
-        }
-      }
-    } else if (widget.selectedType == "GSR") {
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_ECG_SERVICE)) {
-          ECGGSRService = service;
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_GSR_CHAR)) {
-              GSRCharacteristic = characteristic;
-              await GSRCharacteristic?.setNotifyValue(true);
-              break;
-            }
-          }
-        }
-      }
-    } else if (widget.selectedType == "Finger PPG") {
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERV_PPG)) {
-          PPGFINGERPPGService = service;
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_FINGERPPG)) {
-              FingerPPGCharacteristic = characteristic;
-              await FingerPPGCharacteristic?.setNotifyValue(true);
-              break;
-            }
-          }
-        }
-      }
-    } else {}
-    dataFormatBasedOnBoardsSelection();
-  }
-
-  void dataFormatBasedOnBoardsSelection() async {
-    if (widget.selectedType == "ECG") {
-      startECG32Listening();
-    } else if (widget.selectedType == "PPG") {
-      startPPG32Listening();
-    } else if (widget.selectedType == "GSR") {
-      startGSR32Listening();
-    } else if (widget.selectedType == "Finger PPG") {
-      startFingerPPG32Listening();
-    } else {}
-  }
-
-  void closeAllStreams() async {
-    if (listeningECGStream == true) {
-      await streamECGSubscription.cancel();
+  /// Resolve the (service, characteristic) for the selected signal, subscribe
+  /// via the ConnectionManager, and start parsing values into chart data.
+  void _startStreaming() {
+    switch (widget.selectedType) {
+      case "ECG":
+        _service = hPi4Global.UUID_ECG_SERVICE;
+        _characteristic = hPi4Global.UUID_ECG_CHAR;
+        break;
+      case "PPG":
+        _service = hPi4Global.UUID_SERV_PPG;
+        _characteristic = hPi4Global.UUID_CHAR_PPG;
+        break;
+      case "GSR":
+        _service = hPi4Global.UUID_ECG_SERVICE;
+        _characteristic = hPi4Global.UUID_GSR_CHAR;
+        break;
+      case "Finger PPG":
+        _service = hPi4Global.UUID_SERV_PPG;
+        _characteristic = hPi4Global.UUID_CHAR_FINGERPPG;
+        break;
+      default:
+        return;
     }
 
-    if (listeningPPGStream == true) {
-      await streamPPGSubscription.cancel();
-    }
-
-    if (listeningGSRStream == true) {
-      await streamGSRSubscription.cancel();
-    }
-
-    if (listeningFingerPPGStream == true) {
-      await streamFingerPPGSubscription.cancel();
-    }
-  }
-
-  void startECG32Listening() async {
-    print("AKW: Started listening to stream");
-    listeningECGStream = true;
-
-    streamECGSubscription = ECGCharacteristic!.onValueReceived.listen(
-      (value) async {
-        ByteData ecgByteData = Uint8List.fromList(value).buffer.asByteData(0);
-        Int32List ecgList = ecgByteData.buffer.asInt32List();
-
-        ecgList.forEach((element) {
-          setStateIfMounted(() {
-            ecgLineData.add(FlSpot(ecgDataCounter++, (element.toDouble())));
-          });
-
-          if (ecgDataCounter >= 128 * 6) {
-            ecgLineData.removeAt(0);
-          }
-        });
-      },
+    _streamSubscription = _conn.subscribe(_service!, _characteristic!).listen(
+      _onValue,
       onError: (Object error) {
-        // Handle a possible error
-        print("Error while monitoring data characteristic \n$error");
+        debugPrint("Error while monitoring data characteristic \n$error");
       },
       cancelOnError: true,
     );
   }
 
-  void startPPG32Listening() async {
-    print("AKW: Started listening to ppg stream");
-    listeningPPGStream = true;
-
-    streamPPGSubscription = PPGCharacteristic!.onValueReceived.listen(
-      (value) async {
-        // print("AKW: Rx PPG: " + event.length.toString());
-        ByteData ppgByteData = Uint8List.fromList(value).buffer.asByteData(0);
-        Uint32List ppgList = ppgByteData.buffer.asUint32List();
-
-        ppgList.forEach((element) {
-          setStateIfMounted(() {
-            ppgLineData.add(FlSpot(ppgDataCounter++, (element.toDouble())));
-          });
-
-          if (ppgDataCounter >= 64 * 3) {
-            ppgLineData.removeAt(0);
-          }
-        });
-      },
-      onError: (Object error) {
-        // Handle a possible error
-        print("Error while monitoring data characteristic \n$error");
-      },
-      cancelOnError: true,
-    );
+  void _onValue(Uint8List value) {
+    final byteData = value.buffer.asByteData(value.offsetInBytes, value.length);
+    switch (widget.selectedType) {
+      case "ECG":
+        final list = byteData.buffer.asInt32List();
+        for (final element in list) {
+          setStateIfMounted(() =>
+              ecgLineData.add(FlSpot(ecgDataCounter++, element.toDouble())));
+          if (ecgDataCounter >= 128 * 6) ecgLineData.removeAt(0);
+        }
+        break;
+      case "PPG":
+        final list = byteData.buffer.asUint32List();
+        for (final element in list) {
+          setStateIfMounted(() =>
+              ppgLineData.add(FlSpot(ppgDataCounter++, element.toDouble())));
+          if (ppgDataCounter >= 64 * 3) ppgLineData.removeAt(0);
+        }
+        break;
+      case "GSR":
+        final list = byteData.buffer.asInt32List();
+        for (final element in list) {
+          setStateIfMounted(() =>
+              gsrLineData.add(FlSpot(gsrDataCounter++, element.toDouble())));
+          if (gsrDataCounter >= 128 * 6) gsrLineData.removeAt(0);
+        }
+        break;
+      case "Finger PPG":
+        final list = byteData.buffer.asUint32List();
+        for (final element in list) {
+          setStateIfMounted(() => fingerPPGLineData
+              .add(FlSpot(fingerPPGDataCounter++, element.toDouble())));
+          if (fingerPPGDataCounter >= 64 * 3) fingerPPGLineData.removeAt(0);
+        }
+        break;
+    }
   }
 
-  void startGSR32Listening() async {
-    print("AKW: Started listening to GSR stream");
-    listeningGSRStream = true;
-
-    streamGSRSubscription = GSRCharacteristic!.onValueReceived.listen(
-      (value) async {
-        ByteData gsrByteData = Uint8List.fromList(value).buffer.asByteData(0);
-        Int32List ecgList = gsrByteData.buffer.asInt32List();
-
-        ecgList.forEach((element) {
-          setStateIfMounted(() {
-            gsrLineData.add(FlSpot(gsrDataCounter++, (element.toDouble())));
-          });
-
-          if (gsrDataCounter >= 128 * 6) {
-            gsrLineData.removeAt(0);
-          }
-        });
-      },
-      onError: (Object error) {
-        // Handle a possible error
-        print("Error while monitoring data characteristic \n$error");
-      },
-      cancelOnError: true,
-    );
-  }
-
-  void startFingerPPG32Listening() async {
-    print("AKW: Started listening to Finger ppg stream");
-    listeningFingerPPGStream = true;
-
-    streamFingerPPGSubscription = FingerPPGCharacteristic!.onValueReceived
-        .listen(
-          (value) async {
-            // print("AKW: Rx PPG: " + event.length.toString());
-            ByteData fingerppgByteData = Uint8List.fromList(
-              value,
-            ).buffer.asByteData(0);
-            Uint32List ppgList = fingerppgByteData.buffer.asUint32List();
-
-            ppgList.forEach((element) {
-              setStateIfMounted(() {
-                fingerPPGLineData.add(
-                  FlSpot(fingerPPGDataCounter++, (element.toDouble())),
-                );
-              });
-
-              if (fingerPPGDataCounter >= 64 * 3) {
-                fingerPPGLineData.removeAt(0);
-              }
-            });
-          },
-          onError: (Object error) {
-            // Handle a possible error
-            print("Error while monitoring data characteristic \n$error");
-          },
-          cancelOnError: true,
-        );
+  void _closeStream() {
+    _streamSubscription?.cancel();
+    _streamSubscription = null;
+    final s = _service, c = _characteristic;
+    if (s != null && c != null) {
+      _conn.unsubscribe(s, c).catchError((_) {});
+    }
   }
 
   Widget sizedBoxForCharts() {
@@ -323,7 +183,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
       dotData: FlDotData(show: false),
       gradient: LinearGradient(
         colors: [plotcolor, plotcolor],
-        //stops: const [0.1, 1.0],
       ),
       barWidth: 3,
       isCurved: false,
@@ -350,7 +209,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
           ),
           borderData: FlBorderData(
             show: false,
-            //border: Border.all(color: const Color(0xff37434d)),
           ),
           titlesData: FlTitlesData(
             leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -360,7 +218,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
           ),
           lineBarsData: [currentLine(source, plotColor)],
         ),
-        //swapAnimationDuration: Duration.zero,
         duration: Duration.zero,
       ),
     );
@@ -382,8 +239,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
     if (mounted) setState(f);
   }
 
-  String debugText = "Console Inited...";
-
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
@@ -395,10 +250,13 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            closeAllStreams();
+            _closeStream();
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
-                builder: (_) => ScrStreamsSelection(device: widget.device),
+                builder: (_) => ScrStreamsSelection(
+                  deviceId: widget.deviceId,
+                  deviceName: widget.deviceName,
+                ),
               ),
             );
           },
@@ -406,10 +264,13 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
         title: Row(
           children: [
             Icon(
-              widget.selectedType == "ECG" ? Icons.favorite :
-              widget.selectedType == "PPG" ? Icons.monitor_heart :
-              widget.selectedType == "GSR" ? Icons.water_drop :
-              Icons.show_chart,
+              widget.selectedType == "ECG"
+                  ? Icons.favorite
+                  : widget.selectedType == "PPG"
+                      ? Icons.monitor_heart
+                      : widget.selectedType == "GSR"
+                          ? Icons.water_drop
+                          : Icons.show_chart,
               color: hPi4Global.hpi4Color,
               size: 24,
             ),
@@ -424,54 +285,6 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
             ),
           ],
         ),
-        actions: [
-          // Start/Stop button
-          /*Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: startStreaming ? Colors.red[700] : Colors.green[700],
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: 2,
-              ),
-              onPressed: () async {
-                if (startStreaming == true) {
-                  // Currently streaming → STOP it
-                  closeAllStreams();
-                  ecgLineData.removeAt(0);
-                  ppgLineData.removeAt(0);
-                  gsrLineData.removeAt(0);
-                  fingerPPGLineData.removeAt(0);
-                  setState(() {
-                    startStreaming = false;
-                  });
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => ScrStreamsSelection(device: widget.device),
-                    ),
-                  );
-                } else {
-                  // Currently stopped → START it
-                  setState(() {
-                    startStreaming = true;
-                  });
-                }
-              },
-              icon: Icon(
-                startStreaming ? Icons.stop : Icons.play_arrow,
-                size: 20,
-              ),
-              label: Text(
-                startStreaming ? 'Cancel' : 'Start',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ),*/
-        ],
         centerTitle: false,
       ),
       body: Center(
@@ -502,9 +315,9 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      widget.device.platformName.isNotEmpty 
-                        ? widget.device.platformName 
-                        : 'HealthyPi Move',
+                      widget.deviceName.isNotEmpty
+                          ? widget.deviceName
+                          : 'HealthyPi Move',
                       style: TextStyle(
                         color: Colors.grey[300],
                         fontSize: 12,

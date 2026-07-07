@@ -1,21 +1,20 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/utils/extra.dart';
+import '../utils/connection_manager.dart';
 import '../utils/sizeConfig.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../globals.dart';
-import 'package:flutter/cupertino.dart';
 import '../home.dart';
 import '../utils/snackbar.dart';
 import 'scr_live_stream.dart';
 
 class ScrStreamsSelection extends StatefulWidget {
-  const ScrStreamsSelection({super.key, required this.device});
+  const ScrStreamsSelection(
+      {super.key, required this.deviceId, this.deviceName = 'HealthyPi Move'});
 
-  final BluetoothDevice device;
+  final String deviceId;
+  final String deviceName;
 
   @override
   _ScrStreamsSelectionState createState() => _ScrStreamsSelectionState();
@@ -61,7 +60,7 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
 
   Future onDisconnectPressed() async {
     try {
-      await widget.device.disconnectAndUpdateStream();
+      await ConnectionManager.instance.disconnect();
       Snackbar.show(ABC.c, "Disconnect: Success", success: true);
     } catch (e, backtrace) {
       Snackbar.show(
@@ -132,8 +131,8 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            widget.device.platformName.isNotEmpty 
-                              ? widget.device.platformName 
+                            widget.deviceName.isNotEmpty
+                              ? widget.deviceName
                               : 'HealthyPi Move',
                             style: const TextStyle(
                               fontSize: 16,
@@ -271,7 +270,8 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
             MaterialPageRoute(
               builder: (context) => ScrLiveStream(
                 selectedType: streamType,
-                device: widget.device,
+                deviceId: widget.deviceId,
+                deviceName: widget.deviceName,
               ),
             ),
           );
