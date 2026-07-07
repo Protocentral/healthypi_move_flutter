@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:convert/convert.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:move/utils/extra.dart';
+import 'package:move/utils/connection_manager.dart';
 
 import '../globals.dart';
 import '../home.dart';
@@ -49,15 +47,9 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   final TextEditingController _diastolicController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
-  BluetoothDevice? _device;
+  final ConnectionManager _conn = ConnectionManager.instance;
 
-  BluetoothService? commandService;
-  BluetoothCharacteristic? commandCharacteristic;
-
-  BluetoothService? dataService;
-  BluetoothCharacteristic? dataCharacteristic;
-
-  late StreamSubscription<List<int>> _streamDataSubscription;
+  StreamSubscription<Uint8List>? _streamDataSubscription;
 
   bool startListeningFlag = false;
 
@@ -97,51 +89,26 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         return;
       }
       
-      // Create device from MAC address and connect
-      _device = BluetoothDevice.fromId(deviceInfo.macAddress);
-      
+      // Connect to the paired device (scan-assisted connect + service discovery
+      // handled by ConnectionManager).
       if (mounted) {
         setState(() {
           _statusMessage = "Connecting to ${deviceInfo.displayName}...";
         });
       }
-      
-      if (_device!.isDisconnected) {
-        await _device!.connect(license: License.values.first);
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      
+
+      await _conn.connect(deviceInfo.macAddress, name: deviceInfo.displayName);
+
       // Update last connected time
       await DeviceManager.updateLastConnected();
-      
-      // Discover services and characteristics
-      final services = await _device!.discoverServices();
-      
-      for (var service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-          commandService = service;
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-              dataCharacteristic = characteristic;
-            }
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-              commandCharacteristic = characteristic;
-            }
-          }
-        }
-      }
-      
-      if (commandCharacteristic == null || dataCharacteristic == null) {
-        throw Exception('Required characteristics not found');
-      }
-      
+
       // Set up calibration mode
       if (mounted) {
         setState(() {
           _isInitializing = false;
           _currentState = CalibrationState.preCalibration;
         });
-        await sendSetCalibrationCommand(_device!);
+        await sendSetCalibrationCommand();
       }
     } catch (e) {
       if (mounted) {
@@ -224,40 +191,18 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     return Future.delayed(const Duration(milliseconds: 500));
   }
 
-  subscribeToChar(BluetoothDevice deviceName) async {
-    List<BluetoothService> services = await deviceName.discoverServices();
-    // Find a service and characteristic by UUID
-    for (BluetoothService service in services) {
-      if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-        commandService = service;
-        for (BluetoothCharacteristic characteristic
-            in service.characteristics) {
-          if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-            dataCharacteristic = characteristic;
-            await dataCharacteristic?.setNotifyValue(true);
-            break;
-          }
-        }
-      }
-    }
-  }
-
   void setStateIfMounted(f) {
     if (mounted) setState(f);
   }
 
 
 
-  Future<void> sendSetCalibrationCommand(BluetoothDevice device) async {
-    await Future.delayed(Duration.zero, () async {
-      List<int> commandPacket = [];
-      commandPacket.addAll(hPi4Global.SetBPTCalMode);
-      await _sendCommand(commandPacket, device);
-      logConsole(commandPacket.toString());
-    });
+  Future<void> sendSetCalibrationCommand() async {
+    List<int> commandPacket = [];
+    commandPacket.addAll(hPi4Global.SetBPTCalMode);
+    await _sendCommand(commandPacket);
+    logConsole(commandPacket.toString());
   }
-
-  BluetoothDevice get connectedDevice => _device!;
 
   void showSuccessDialog(
     BuildContext context,
@@ -396,12 +341,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     });
   }
 
-  Future<void> _startListeningData(BluetoothDevice deviceName) async {
+  Future<void> _startListeningData() async {
     logConsole("Started listening....");
     startListeningFlag = true;
-    _streamDataSubscription = dataCharacteristic!.onValueReceived.listen((
-      value,
-    ) async {
+    _streamDataSubscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) async {
       ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
       logConsole("Data Rx: $value");
       logConsole("Data Rx in hex: ${hex.encode(value)}");
@@ -411,26 +356,20 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         _progress = bdata.getUint8(1);
         _statusString = _getStatusMessage(_statusCode);
       });
-      
+
       if (_statusCode == 2) {
         // Calibration point complete
         _completeCurrentPoint();
       }
     });
-
-    // cleanup: cancel subscription when disconnected
-    deviceName.cancelWhenDisconnected(_streamDataSubscription);
   }
 
-  Future<void> sendStartCalibration(
-    BuildContext context,
-    BluetoothDevice deviceName,
-  ) async {
+  Future<void> sendStartCalibration(BuildContext context) async {
     logConsole("Send start calibration command initiated");
     if (startListeningFlag == true) {
-      _streamDataSubscription.cancel();
+      _streamDataSubscription?.cancel();
     }
-    await _startListeningData(deviceName);
+    await _startListeningData();
     await Future.delayed(Duration.zero, () async {
       List<int> commandPacket = [];
       String userInput1 = _systolicController.text;
@@ -458,7 +397,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       commandPacket.addAll(userCommandData1);
       commandPacket.addAll(calIndex);
 
-      await _sendCommand(commandPacket, deviceName);
+      await _sendCommand(commandPacket);
       logConsole(commandPacket.toString());
       setState(() {
         _currentState = CalibrationState.calibrating;
@@ -467,17 +406,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     });
   }
 
-  Future<void> sendEndCalibration(
-    BuildContext context,
-    BluetoothDevice deviceName,
-  ) async {
+  Future<void> sendEndCalibration(BuildContext context) async {
     logConsole("Send end calibration command initiated");
-    await Future.delayed(Duration.zero, () async {
-      List<int> commandPacket = [];
-      commandPacket.addAll(hPi4Global.EndBPTCal);
-      await _sendCommand(commandPacket, deviceName);
-      logConsole(commandPacket.toString());
-    });
+    List<int> commandPacket = [];
+    commandPacket.addAll(hPi4Global.EndBPTCal);
+    await _sendCommand(commandPacket);
+    logConsole(commandPacket.toString());
   }
 
   void showLoadingIndicator(String text, BuildContext context) {
@@ -499,40 +433,15 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     );
   }
 
-  Future<void> _sendCommand(
-    List<int> commandList,
-    BluetoothDevice deviceName,
-  ) async {
+  Future<void> _sendCommand(List<int> commandList) async {
     try {
-      // Check if device is still connected
-      if (_device == null || deviceName.isDisconnected) {
+      if (!_conn.isConnected) {
         logConsole("Device disconnected, skipping command");
         return;
       }
-
       logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
-
-      List<BluetoothService> services = await deviceName.discoverServices();
-
-      // Find a service and characteristic by UUID
-      for (BluetoothService service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-          commandService = service;
-          for (BluetoothCharacteristic characteristic
-              in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-              commandCharacteristic = characteristic;
-              break;
-            }
-          }
-        }
-      }
-
-      if (commandService != null && commandCharacteristic != null) {
-        // Write to the characteristic
-        await commandCharacteristic?.write(commandList, withoutResponse: true);
-        //logConsole('Data written: $commandList');
-      }
+      await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+          Uint8List.fromList(commandList));
     } catch (e) {
       logConsole("Error sending command: $e");
       // Silently handle error if device is disconnected
@@ -541,8 +450,8 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   Future onDisconnectPressed() async {
     try {
-      if (_device != null) {
-        await _device!.disconnectAndUpdateStream();
+      if (_conn.isConnected) {
+        await _conn.disconnect();
         Snackbar.show(ABC.c, "Disconnect: Success", success: true);
       }
     } catch (e, backtrace) {
@@ -579,7 +488,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     }
     
     // Show connected device info
-    if (_device != null) {
+    if (_conn.isConnected) {
       return Container(
         margin: const EdgeInsets.all(12),
         padding: const EdgeInsets.all(16),
@@ -918,9 +827,8 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           FocusScope.of(context).unfocus();
                           if (_formKey.currentState!.validate()) {
                             showLoadingIndicator("Starting calibration...", context);
-                            await subscribeToChar(connectedDevice);
                             Future.delayed(Duration.zero, () async {
-                              await sendStartCalibration(context, connectedDevice);
+                              await sendStartCalibration(context);
                             });
                           }
                         },
@@ -1061,7 +969,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                   if (mounted) {
                                     // Send end command before disconnecting
                                     try {
-                                      await sendEndCalibration(context, connectedDevice);
+                                      await sendEndCalibration(context);
                                     } catch (e) {
                                       logConsole("Error ending calibration: $e");
                                     }
@@ -1243,7 +1151,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                     child: OutlinedButton(
                       onPressed: () async {
                         try {
-                          await sendEndCalibration(context, connectedDevice);
+                          await sendEndCalibration(context);
                         } catch (e) {
                           logConsole("Error ending calibration: $e");
                         }
@@ -1355,7 +1263,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                     child: ElevatedButton(
                       onPressed: () async {
                         try {
-                          await sendEndCalibration(context, connectedDevice);
+                          await sendEndCalibration(context);
                         } catch (e) {
                           logConsole("Error ending calibration: $e");
                         }
