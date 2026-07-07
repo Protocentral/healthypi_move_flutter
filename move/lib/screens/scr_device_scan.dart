@@ -12,11 +12,11 @@ import '../utils/database_helper.dart';
 /// Purpose: scan for HealthyPi Move devices and pair them. Can optionally connect
 /// and trigger a callback (with the BLE **deviceId**) for downstream operations.
 ///
-/// Migrated from `flutter_blue_plus` to `universal_ble` (see
-/// docs/HEALTH_STORE_SYNC_DESIGN.md §2.0). `universal_ble`'s `deviceId` is the same
-/// platform identifier as FBP's `remoteId.str` (CoreBluetooth UUID on Apple, MAC on
-/// Android), so it is used unchanged as the stored MAC and lets not-yet-migrated FBP
-/// screens bridge via `BluetoothDevice.fromId(deviceId)`.
+/// Migrated to `universal_ble` (see docs/HEALTH_STORE_SYNC_DESIGN.md §2.0).
+/// `universal_ble`'s `deviceId` is the same platform identifier the old plugin
+/// exposed as `remoteId.str` (CoreBluetooth UUID on Apple, MAC on Android), so it is
+/// used unchanged as the stored MAC and lets not-yet-migrated screens bridge via
+/// `BluetoothDevice.fromId(deviceId)`.
 class ScrDeviceScan extends StatefulWidget {
   /// Fired with the connected device's **deviceId** (== FBP remoteId string).
   final Function(String deviceId)? onDeviceConnected;
