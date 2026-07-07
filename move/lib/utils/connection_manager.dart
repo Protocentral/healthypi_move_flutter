@@ -44,7 +44,9 @@ class ConnectionManager extends ChangeNotifier {
     _intentional = false;
     _setState(LinkState.connecting);
     try {
-      await _ble.connect(deviceId);
+      // Scan-assisted connect: on iOS a stored deviceId must be (re)discovered
+      // before connect resolves it.
+      await _ble.connectResolved(deviceId);
       // REQUIRED before any subscribe/write: CoreBluetooth (and Android GATT)
       // only expose characteristics after service discovery. Without this,
       // connect succeeds but notify/write silently fail.

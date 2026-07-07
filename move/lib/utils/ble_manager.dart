@@ -104,6 +104,50 @@ class BleManager {
           {Duration timeout = const Duration(seconds: 15)}) =>
       UniversalBle.connect(deviceId, timeout: timeout);
 
+  /// Connect to a device by id, **scanning to (re)discover it first**.
+  ///
+  /// On iOS, `UniversalBle.connect(id)` fails with `deviceNotFound` for a stored
+  /// id the plugin hasn't seen this session (its `retrievePeripherals` fallback
+  /// is unreliable). A brief scan puts the peripheral in the plugin's cache so
+  /// the connect resolves — this is how the app reconnects to a *paired* device
+  /// (Live View, sync, DFU, records) without the user re-scanning. If the scan
+  /// doesn't surface it (device off/not advertising) we still attempt a direct
+  /// connect as a last resort.
+  Future<void> connectResolved(
+    String deviceId, {
+    Duration timeout = const Duration(seconds: 15),
+    Duration scanTimeout = const Duration(seconds: 8),
+  }) async {
+    if (await isConnected(deviceId)) return;
+    await _discoverById(deviceId, scanTimeout);
+    await UniversalBle.connect(deviceId, timeout: timeout);
+  }
+
+  /// Scan until [deviceId] appears (so universal_ble caches the peripheral),
+  /// then stop. Returns true if seen within [timeout].
+  Future<bool> _discoverById(String deviceId, Duration timeout) async {
+    final completer = Completer<bool>();
+    StreamSubscription<BleDevice>? sub;
+    sub = UniversalBle.scanStream.listen((d) {
+      if (d.deviceId == deviceId && !completer.isCompleted) {
+        completer.complete(true);
+      }
+    });
+    try {
+      await UniversalBle.startScan();
+      return await completer.future
+          .timeout(timeout, onTimeout: () => false);
+    } catch (e) {
+      debugPrint('[BleManager] _discoverById scan error: $e');
+      return false;
+    } finally {
+      await sub.cancel();
+      try {
+        await UniversalBle.stopScan();
+      } catch (_) {}
+    }
+  }
+
   Future<void> disconnect(String deviceId) => UniversalBle.disconnect(deviceId);
 
   /// Connection-state changes for a device (`true` = connected). Subscribe only
