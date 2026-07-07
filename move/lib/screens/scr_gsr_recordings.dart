@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mcumgr_flutter/mcumgr_flutter.dart' as mcumgr;
+import '../mcumgr/fs_mgmt.dart';
+import '../smp/smp_ble_transport.dart';
+import '../smp/smp_client.dart';
+import '../utils/connection_manager.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -79,10 +81,10 @@ class ScrGSRRecordingsContent extends StatefulWidget {
 // NOTE: Public (no underscore) so it can be accessed via GlobalKey
 // from scr_recordings_hub.dart
 class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
-  BluetoothDevice? _device;
-  mcumgr.FsManager? _fsManager;
-  BluetoothCharacteristic? _commandCharacteristic;
-  BluetoothCharacteristic? _dataCharacteristic;
+  final ConnectionManager _conn = ConnectionManager.instance;
+  SmpBleTransport? _smpTransport;
+  SmpClient? _smpClient;
+  FsMgmt? _fs;
 
   List<GSRRecording> _recordings = [];
   bool _isLoading = true;
@@ -108,35 +110,15 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
 
   Future<void> _initialize() async {
     try {
-      _device = BluetoothDevice.fromId(widget.deviceMacAddress);
+      await _conn.connect(widget.deviceMacAddress);
+      await Future.delayed(const Duration(milliseconds: 500));
 
-      if (_device!.isDisconnected) {
-        await _device!.connect(
-            license: License.values.first,
-            timeout: const Duration(seconds: 15));
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      final services = await _device!.discoverServices();
-
-      for (var service in services) {
-        if (service.uuid == Guid(hPi4Global.UUID_SERVICE_CMD)) {
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD_DATA)) {
-              _dataCharacteristic = characteristic;
-            }
-            if (characteristic.uuid == Guid(hPi4Global.UUID_CHAR_CMD)) {
-              _commandCharacteristic = characteristic;
-            }
-          }
-        }
-      }
-
-      if (_commandCharacteristic == null || _dataCharacteristic == null) {
-        throw Exception('Required characteristics not found');
-      }
-
-      _fsManager = mcumgr.FsManager(_device!.remoteId.toString());
+      final transport =
+          SmpBleTransport(widget.deviceMacAddress, manageConnection: false);
+      await transport.connect();
+      _smpTransport = transport;
+      _smpClient = SmpClient(transport);
+      _fs = FsMgmt(_smpClient!, maxWriteLength: () => _smpTransport?.maxWriteLength);
 
       await _loadRecordingsList();
     } catch (e) {
@@ -198,8 +180,10 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
   Future<void> _fetchSessionCount() async {
     final completer = Completer<int>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       final bdata = Uint8List.fromList(value).buffer.asByteData();
       final pktType = bdata.getUint8(0);
 
@@ -215,13 +199,12 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     });
 
     _activeSubscriptions.add(subscription);
-    _device!.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     final commandPacket = <int>[];
     commandPacket.addAll(hPi4Global.ECGLogCount);
     commandPacket.addAll(hPi4Global.GSRRecord);
-    await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
+    await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+          Uint8List.fromList(commandPacket));
 
     await completer.future.timeout(
       const Duration(seconds: 10),
@@ -238,8 +221,10 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
 
     final completer = Completer<void>();
 
-    late StreamSubscription<List<int>> subscription;
-    subscription = _dataCharacteristic!.onValueReceived.listen((value) {
+    late StreamSubscription<Uint8List> subscription;
+    subscription = _conn
+        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
+        .listen((value) {
       final bdata = Uint8List.fromList(value).buffer.asByteData();
       final pktType = bdata.getUint8(0);
 
@@ -258,13 +243,12 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     });
 
     _activeSubscriptions.add(subscription);
-    _device!.cancelWhenDisconnected(subscription);
-    await _dataCharacteristic!.setNotifyValue(true);
 
     final commandPacket = <int>[];
     commandPacket.addAll(hPi4Global.ECGLogIndex);
     commandPacket.addAll(hPi4Global.GSRRecord);
-    await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
+    await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+          Uint8List.fromList(commandPacket));
 
     await completer.future.timeout(
       const Duration(seconds: 30),
@@ -278,13 +262,14 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
 
   /// Public method called from ScrRecordingsHub to wipe all GSR recordings
   Future<void> wipeAll() async {
-    if (_commandCharacteristic == null) return;
+    if (!_conn.isConnected) return;
 
     try {
       final commandPacket = <int>[];
       commandPacket.addAll(hPi4Global.ECGLogWipeAll); // <-- replace with your GSR wipe-all constant if different
       commandPacket.addAll(hPi4Global.GSRRecord);
-      await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
+      await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+          Uint8List.fromList(commandPacket));
       await Future.delayed(const Duration(milliseconds: 500));
       await _loadRecordingsList();
 
@@ -344,7 +329,8 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
       timestampBytes.setInt64(0, recording.timestampSec, Endian.little);
       commandPacket.addAll(timestampBytes.buffer.asUint8List());
 
-      await _commandCharacteristic?.write(commandPacket, withoutResponse: true);
+      await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
+          Uint8List.fromList(commandPacket));
       await Future.delayed(const Duration(milliseconds: 500));
       await _loadRecordingsList();
 
@@ -377,44 +363,14 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     });
 
     try {
-      final completer = Completer<List<int>>();
-
-      late StreamSubscription downloadSubscription;
-      downloadSubscription = _fsManager!.downloadCallbacks.listen((event) {
-        if (event.path == recording.filePath) {
-          if (event is mcumgr.OnDownloadCompleted) {
-            downloadSubscription.cancel();
-            _activeSubscriptions.remove(downloadSubscription);
-            completer.complete(event.data);
-          } else if (event is mcumgr.OnDownloadFailed) {
-            downloadSubscription.cancel();
-            _activeSubscriptions.remove(downloadSubscription);
-            completer.completeError(
-                Exception('Download failed: ${event.cause}'));
-          } else if (event is mcumgr.OnDownloadCancelled) {
-            downloadSubscription.cancel();
-            _activeSubscriptions.remove(downloadSubscription);
-            completer.completeError(Exception('Download cancelled'));
-          } else if (event is mcumgr.OnDownloadProgressChanged) {
-            if (mounted) {
-              setState(() {
-                recording.downloadProgress =
-                    (recording.downloadProgress + 0.05).clamp(0.0, 0.9);
-              });
-            }
+      final binaryData = await _fs!.download(
+        recording.filePath,
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(() {
+              recording.downloadProgress = total > 0 ? done / total : 0.0;
+            });
           }
-        }
-      });
-
-      _activeSubscriptions.add(downloadSubscription);
-      await _fsManager!.download(recording.filePath);
-
-      final binaryData = await completer.future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          downloadSubscription.cancel();
-          _activeSubscriptions.remove(downloadSubscription);
-          throw TimeoutException('Download timeout');
         },
       );
 
@@ -492,10 +448,12 @@ class ScrGSRRecordingsContentState extends State<ScrGSRRecordingsContent> {
     }
     _activeSubscriptions.clear();
 
-    if (_fsManager != null) {
-      _fsManager!.kill();
-      _fsManager = null;
-    }
+    _smpClient?.dispose();
+    _smpClient = null;
+    _smpTransport?.disconnect();
+    _smpTransport?.dispose();
+    _smpTransport = null;
+    _fs = null;
   }
 
   @override
