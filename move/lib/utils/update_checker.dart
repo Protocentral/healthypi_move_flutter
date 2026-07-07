@@ -1,7 +1,7 @@
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/firmware_release.dart';
+import 'ble_manager.dart';
 import 'firmware_update_service.dart';
 
 /// Background update checker for firmware updates
@@ -35,7 +35,7 @@ class UpdateChecker {
 
   /// Check for updates in background when device connects
   /// Returns true if update is available
-  static Future<bool> checkForUpdatesInBackground(BluetoothDevice device) async {
+  static Future<bool> checkForUpdatesInBackground(String deviceId) async {
     try {
       // Check if auto-check is enabled
       if (!await isAutoCheckEnabled()) {
@@ -52,7 +52,7 @@ class UpdateChecker {
       print('[UpdateChecker] Running background update check...');
 
       // Read current firmware version from device
-      final currentVersion = await _readFirmwareVersion(device);
+      final currentVersion = await _readFirmwareVersion(deviceId);
       if (currentVersion == null || currentVersion == 'Unknown') {
         print('[UpdateChecker] Could not read firmware version');
         return false;
@@ -120,29 +120,16 @@ class UpdateChecker {
     await _clearCache();
   }
 
-  /// Read firmware version from connected device
-  static Future<String?> _readFirmwareVersion(BluetoothDevice device) async {
+  /// Read firmware version from the connected device (Device Information
+  /// Service 0x180A → Firmware Revision String 0x2A26).
+  static Future<String?> _readFirmwareVersion(String deviceId) async {
     try {
-      if (device.isDisconnected) {
+      if (!await BleManager.instance.isConnected(deviceId)) {
         return null;
       }
-
-      final services = await device.discoverServices();
-
-      // Look for Device Information Service (0x180A)
-      for (var service in services) {
-        if (service.uuid == Guid("180a")) {
-          // Look for Firmware Revision String characteristic (0x2A26)
-          for (var characteristic in service.characteristics) {
-            if (characteristic.uuid == Guid("2a26")) {
-              final value = await characteristic.read();
-              return String.fromCharCodes(value).trim();
-            }
-          }
-        }
-      }
-
-      return null;
+      final value =
+          await BleManager.instance.read(deviceId, "180a", "2a26");
+      return String.fromCharCodes(value).trim();
     } catch (e) {
       print('[UpdateChecker] Error reading firmware version: $e');
       return null;

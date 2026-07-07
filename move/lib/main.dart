@@ -7,7 +7,6 @@ import 'screens/scr_device_scan.dart';
 import 'screens/scr_device_mgmt.dart';
 import 'screens/scr_device_settings.dart';
 import 'screens/scr_settings.dart';
-import 'screens/scr_dfu.dart';
 import 'screens/scr_bpt_calibration.dart';
 
 void main() async {
@@ -41,7 +40,6 @@ class HealthyPiApp extends StatelessWidget {
         '/trends/activity': (context) => const ScrTrends(initialMetric: 'activity'),
         '/device': (context) => const ScrDeviceMgmt(),
         '/device/settings': (context) => const ScrDeviceSettings(),
-        '/device/dfu': (context) => const ScrDFU(),
         '/device/bpt-calibration': (context) => const ScrBPTCalibration(),
         '/settings': (context) => ScrSettings(),
       },
