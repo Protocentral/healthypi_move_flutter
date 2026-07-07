@@ -9,6 +9,13 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # Vendored git submodule — analyzed & tested in its own repo
+    # (Protocentral/mcumgr_dart). App usage is still type-checked against its
+    # API via the path dependency; we just don't lint its internals/tests here.
+    - packages/mcumgr_dart/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

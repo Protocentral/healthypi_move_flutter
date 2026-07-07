@@ -77,6 +77,12 @@ dependencies:
   universal_ble: ^2.0.1
   cbor: ^6.5.1 # SMP/MCUmgr CBOR payloads
   crypto: ^3.0.7 # DFU image SHA-256
+  # Pure-Dart SMP/MCUmgr core (SmpClient + OS/Image/FS groups), extracted from
+  # this app. Vendored in-tree as a git submodule (packages/mcumgr_dart ->
+  # Protocentral/mcumgr_dart) so clones build anywhere; stays a path dep even
+  # after the package is on pub.dev. smp_ble_transport + hpi_hs remain app-side.
+  mcumgr_dart:
+    path: packages/mcumgr_dart
   equatable: ^2.0.5
   flutter_archive: ^6.0.0
   flutter_bloc: ^9.1.1

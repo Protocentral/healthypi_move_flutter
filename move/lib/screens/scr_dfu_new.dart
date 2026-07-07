@@ -5,10 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../globals.dart';
 import '../home.dart';
-import '../mcumgr/img_mgmt.dart';
+import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
-import '../smp/smp_client.dart';
 import '../utils/ble_manager.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';

@@ -2,13 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../mcumgr/fs_mgmt.dart';
+import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../mcumgr/hpi_hs.dart';
-import '../mcumgr/img_mgmt.dart';
-import '../mcumgr/os_mgmt.dart';
 import '../smp/smp_ble_transport.dart';
-import '../smp/smp_client.dart';
-import '../smp/smp_transport.dart';
 
 /// A single SMP session to a HealthyPi Move over the SMP GATT service, on
 /// `universal_ble`. This is the app-to-device backbone for the redesigned

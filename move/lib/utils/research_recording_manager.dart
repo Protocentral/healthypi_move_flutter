@@ -7,9 +7,8 @@ import 'package:csv/csv.dart';
 import 'package:archive/archive.dart';
 import '../globals.dart';
 import '../models/research_recording.dart';
-import '../mcumgr/fs_mgmt.dart';
+import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../smp/smp_ble_transport.dart';
-import '../smp/smp_client.dart';
 import 'connection_manager.dart';
 
 /// Manager for research recording operations.
