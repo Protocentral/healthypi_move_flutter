@@ -45,6 +45,10 @@ class ConnectionManager extends ChangeNotifier {
     _setState(LinkState.connecting);
     try {
       await _ble.connect(deviceId);
+      // REQUIRED before any subscribe/write: CoreBluetooth (and Android GATT)
+      // only expose characteristics after service discovery. Without this,
+      // connect succeeds but notify/write silently fail.
+      await _ble.discoverServices(deviceId);
       await _connSub?.cancel();
       _connSub = _ble.connectionStream(deviceId).listen((connected) {
         if (!connected && !_intentional && _state == LinkState.connected) {
