@@ -168,7 +168,8 @@ class BackgroundSyncManager {
       // ============================================================================
 
       // Check for firmware updates in background (non-blocking)
-      UpdateChecker.checkForUpdatesInBackground(device).then((updateAvailable) {
+      UpdateChecker.checkForUpdatesInBackground(device.remoteId.str)
+          .then((updateAvailable) {
         if (updateAvailable) {
           debugPrint('Background sync: Firmware update available');
         }
