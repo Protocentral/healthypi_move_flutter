@@ -15,6 +15,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/background_sync_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
 /// Redesigned Home (handoff 2a list + 1a grid, with the 4a tablet two-pane).
@@ -377,7 +378,7 @@ class _ScrHomeState extends State<ScrHome> {
     final t = _trendFor(key);
     final s = _styleFor(key);
 
-    // Unsupported metrics → honest zero-state row.
+    // Unsupported metrics → honest zero-state row that opens the explainer.
     if (t.availability == MetricAvailability.unsupported) {
       final measure = key == 'eda';
       return HpiListRow(
@@ -388,7 +389,8 @@ class _ScrHomeState extends State<ScrHome> {
             ? 'from HRV · continuous'
             : 'no spot check today',
         dim: true,
-        showChevron: false,
+        onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ScrStressEda())),
         trailing: measure
             ? const HpiPill(label: 'MEASURE ON WATCH', color: HpiColors.eda)
             : Text('—', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),

@@ -6,6 +6,7 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/adaptive/breakpoints.dart';
 import '../ui/components/hpi_components.dart';
+import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
 /// The Trends tab (handoff): a hub listing every metric that opens its trend
@@ -114,7 +115,8 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
         title: title,
         supporting: key == 'stress' ? 'from HRV · continuous' : 'spot check on watch',
         dim: true,
-        showChevron: false,
+        onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ScrStressEda())),
         trailing: Text('—',
             style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
       );
