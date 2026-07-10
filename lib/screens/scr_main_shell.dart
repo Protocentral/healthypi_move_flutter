@@ -7,7 +7,7 @@ import '../utils/device_manager.dart';
 import 'scr_home.dart';
 import 'scr_settings_new.dart';
 import 'scr_trends_hub.dart';
-import 'scr_device_mgmt.dart';
+import 'scr_device_new.dart';
 import 'scr_stream_selection.dart';
 
 /// The redesigned app shell: a 4-tab adaptive scaffold (Home · Trends · Live ·
@@ -42,7 +42,7 @@ class _ScrMainShellState extends State<ScrMainShell> {
       const ScrHome(),
       const ScrTrendsHub(),
       const _LiveTab(),
-      const ScrDeviceMgmt(),
+      const ScrDeviceNew(),
     ];
     return HpiAdaptiveScaffold(
       destinations: _destinations,
