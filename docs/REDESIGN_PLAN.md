@@ -107,6 +107,29 @@ switch at the end. Increments:
   data). The remaining screens (trend details, live, onboarding, device, settings,
   console, recordings, tablet variants) follow in subsequent passes.
 
+## Progress log
+
+Commits land on `main` (pushed to `origin`, the private staging repo). `flutter
+analyze` has held at **445 issues / 0 errors** the whole way.
+
+- **`d3d63dc`** — pass 1: foundation (theme, fonts, components, adaptive shell,
+  data layer v6 + `HealthRepository`) and Home **2a/1a** + the adaptive shell.
+- **`55a250f`** — trend charts (candlestick, bar+goal, line+baseline+dots,
+  lollipops), `TrendDetailView`, Trends hub; **finished tablet home 4a** (real
+  detail in the right pane); delivers trend details **3a/3b/3c/3d**.
+- **`832f2b7`** — Stress & EDA **1e/2b** (honest zero-state).
+- **`8fa640e`** — Settings + developer mode **1i** and BLE console **1j**.
+
+**Screens done:** 2a, 1a, 4a, Trends hub, 3a, 3b, 3c, 3d, 1e/2b, 1i, 1j.
+**Remaining:** 1h Device · 1f Live + 4b tablet dual-signal (needs an ECG sweep
+painter + streaming integration) · 1g Onboarding · 2c/2d Recordings. Those tabs
+still host the legacy screens until redesigned. Then the live
+`HealthStoreSyncManager` device wiring (needs hardware — roadmap Phase 2).
+
+Build note: `flutter build bundle` was confirmed compiling through `55a250f`; the
+two later commits are analyze-clean but the full bundle build was paused before
+re-running. Re-run it first thing next session.
+
 ## Relationship to ROADMAP.md
 
 A0 implements roadmap **Phase 2** (schema) + **Phase 3** (derivation) at the data
