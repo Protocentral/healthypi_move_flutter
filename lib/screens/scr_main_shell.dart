@@ -5,7 +5,7 @@ import '../theme/hpi_colors.dart';
 import '../ui/adaptive/adaptive_scaffold.dart';
 import '../utils/device_manager.dart';
 import 'scr_home.dart';
-import 'scr_settings.dart';
+import 'scr_settings_new.dart';
 import 'scr_trends_hub.dart';
 import 'scr_device_mgmt.dart';
 import 'scr_stream_selection.dart';
@@ -33,7 +33,7 @@ class _ScrMainShellState extends State<ScrMainShell> {
 
   void _openSettings() {
     Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ScrSettings()));
+        MaterialPageRoute(builder: (_) => const ScrSettingsNew()));
   }
 
   @override
