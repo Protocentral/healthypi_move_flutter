@@ -6,7 +6,7 @@ import '../ui/adaptive/adaptive_scaffold.dart';
 import '../utils/device_manager.dart';
 import 'scr_home.dart';
 import 'scr_settings.dart';
-import 'scr_trends.dart';
+import 'scr_trends_hub.dart';
 import 'scr_device_mgmt.dart';
 import 'scr_stream_selection.dart';
 
@@ -40,7 +40,7 @@ class _ScrMainShellState extends State<ScrMainShell> {
   Widget build(BuildContext context) {
     final tabs = [
       const ScrHome(),
-      const ScrTrends(),
+      const ScrTrendsHub(),
       const _LiveTab(),
       const ScrDeviceMgmt(),
     ];

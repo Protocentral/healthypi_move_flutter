@@ -58,6 +58,64 @@ class MetricTrend {
       MetricTrend(key: 'eda', availability: MetricAvailability.unsupported);
 }
 
+/// One aggregated point in a trend series (hour or day), in display units.
+class TrendPoint {
+  const TrendPoint(
+      {required this.t, required this.min, required this.max, required this.avg});
+  final DateTime t;
+  final double min;
+  final double max;
+  final double avg;
+}
+
+/// A named time range for the trend detail's segmented control.
+enum TrendRange { day, week, month, sixMonths }
+
+/// Everything a trend-detail screen (1d/3a–3d) needs for one metric: headline
+/// stats plus the day/week/month series, all in display units. [availability]
+/// tells the screen whether to render charts or an honest zero-state.
+class MetricDetail {
+  const MetricDetail({
+    required this.key,
+    required this.availability,
+    this.latest,
+    this.latestAt,
+    this.min,
+    this.max,
+    this.avg,
+    this.baseline,
+    this.daily = const [],
+    this.weekly = const [],
+    this.monthly = const [],
+  });
+
+  final String key;
+  final MetricAvailability availability;
+  final double? latest;
+  final DateTime? latestAt;
+  final double? min;
+  final double? max;
+  final double? avg;
+  final double? baseline;
+  final List<TrendPoint> daily; // today, hourly
+  final List<TrendPoint> weekly; // last 7 days
+  final List<TrendPoint> monthly; // current month, daily
+
+  bool get hasData => availability == MetricAvailability.available;
+
+  List<TrendPoint> series(TrendRange r) {
+    switch (r) {
+      case TrendRange.day:
+        return daily;
+      case TrendRange.week:
+        return weekly;
+      case TrendRange.month:
+      case TrendRange.sixMonths:
+        return monthly; // 30-day retention caps the real window at ~a month
+    }
+  }
+}
+
 /// Everything the home dashboard (2a / 1a) needs, in one aggregate so the screen
 /// makes a single call. Metrics with no producing code are reported as
 /// [MetricAvailability.unsupported] rather than omitted, so the layout is stable.
@@ -165,6 +223,68 @@ class HealthRepository {
       max: maxV,
       spark: spark,
       baseline: cumulative ? null : await _baseline(key),
+    );
+  }
+
+  /// Load the full trend detail for one supported metric. Unsupported metrics
+  /// (stress/eda) short-circuit to an unsupported detail so the screen renders a
+  /// zero-state. All values are in display units.
+  Future<MetricDetail> loadMetricDetail(String key) async {
+    if (key == 'stress' || key == 'eda' || key == 'hrv') {
+      return MetricDetail(key: key, availability: MetricAvailability.unsupported);
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final results = await Future.wait([
+      _db.getHourlyTrends(key, today),
+      _db.getWeeklyTrends(key, now.subtract(const Duration(days: 6))),
+      _db.getMonthlyTrends(key, now.year, now.month),
+    ]);
+
+    List<TrendPoint> map(List<Map<String, dynamic>> rows, String tsCol) => rows
+        .map((r) => TrendPoint(
+              t: DateTime.fromMillisecondsSinceEpoch(
+                  (r[tsCol] as int) * 1000,
+                  isUtc: false),
+              min: _display(key, r['min_value'] as num),
+              max: _display(key, r['max_value'] as num),
+              avg: _display(key, r['avg_value'] as num),
+            ))
+        .toList();
+
+    final daily = map(results[0], 'hour_start');
+    final weekly = map(results[1], 'day_start');
+    final monthly = map(results[2], 'day_start');
+
+    if (daily.isEmpty && weekly.isEmpty && monthly.isEmpty) {
+      return MetricDetail(key: key, availability: MetricAvailability.noData);
+    }
+
+    final cumulative = key == hPi4Global.PREFIX_ACTIVITY;
+    double? minV, maxV, avgV, latest;
+    DateTime? latestAt;
+    if (daily.isNotEmpty) {
+      minV = daily.map((p) => p.min).reduce((a, b) => a < b ? a : b);
+      maxV = daily.map((p) => p.max).reduce((a, b) => a > b ? a : b);
+      avgV = daily.map((p) => p.avg).reduce((a, b) => a + b) / daily.length;
+      latest = cumulative
+          ? daily.map((p) => p.max).reduce((a, b) => a + b)
+          : daily.last.avg;
+      latestAt = daily.last.t;
+    }
+
+    return MetricDetail(
+      key: key,
+      availability: MetricAvailability.available,
+      latest: latest,
+      latestAt: latestAt,
+      min: minV,
+      max: maxV,
+      avg: avgV,
+      baseline: cumulative ? null : await _baseline(key),
+      daily: daily,
+      weekly: weekly,
+      monthly: monthly,
     );
   }
 

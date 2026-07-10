@@ -15,6 +15,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/background_sync_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import 'scr_trend_detail.dart';
 
 /// Redesigned Home (handoff 2a list + 1a grid, with the 4a tablet two-pane).
 /// Reads [HealthRepository] and renders honest zero-states for metrics with no
@@ -222,12 +223,13 @@ class _ScrHomeState extends State<ScrHome> {
         ),
         const VerticalDivider(
             width: 1, thickness: 1, color: HpiColors.divider),
-        Expanded(child: _MetricDetailPane(
-          metricKey: _selectedMetric,
-          trend: _trendFor(_selectedMetric),
-          style: _styleFor(_selectedMetric),
-          format: _fmt,
-        )),
+        // 4a right pane: the real trend detail, rendered in place (no route).
+        Expanded(
+          child: TrendDetailView(
+            key: ValueKey(_selectedMetric),
+            metricKey: _selectedMetric,
+          ),
+        ),
       ],
     );
   }
@@ -553,12 +555,15 @@ class _ScrHomeState extends State<ScrHome> {
   // --- nav --------------------------------------------------------------
 
   void _openMetric(String key) {
-    final s = _styleFor(key);
     if (Breakpoints.isExpanded(context)) {
       setState(() => _selectedMetric = key);
       return;
     }
-    if (s.route != null) Navigator.of(context).pushNamed(s.route!);
+    // Compact: push the redesigned trend detail (real-data metrics only).
+    if (key == 'hr' || key == 'spo2' || key == 'temp' || key == 'activity') {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => TrendDetailScreen(metricKey: key)));
+    }
   }
 
   Widget _inlineNoData(_MetricStyle s) {
@@ -602,121 +607,4 @@ class _MetricStyle {
   final String title;
   final String unit;
   final String? route;
-}
-
-/// The tablet (4a) right pane: a compact detail preview for the selected metric.
-/// The full redesigned trend detail (1d/3a) lands in a later pass; this shows the
-/// hero value, sparkline, stat chips, and a link into the existing trend screen.
-class _MetricDetailPane extends StatelessWidget {
-  const _MetricDetailPane({
-    required this.metricKey,
-    required this.trend,
-    required this.style,
-    required this.format,
-  });
-
-  final String metricKey;
-  final MetricTrend trend;
-  final _MetricStyle style;
-  final String Function(String, double?) format;
-
-  @override
-  Widget build(BuildContext context) {
-    if (trend.availability == MetricAvailability.unsupported) {
-      return _centered(
-        'Not yet available',
-        metricKey == 'stress'
-            ? 'Stress runs continuously from HRV once your watch firmware reports it.'
-            : 'EDA is a spot check taken on the watch. Nothing to show here yet.',
-      );
-    }
-    if (!trend.hasData) {
-      return _centered('No ${style.title.toLowerCase()} yet',
-          'Sync your watch to populate this metric.');
-    }
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Icon(style.icon, size: 22, color: style.color),
-            const SizedBox(width: 8),
-            Text(style.title, style: HpiText.appBarTitle),
-          ]),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(format(metricKey, trend.latest),
-                  style: HpiText.heroNumber
-                      .copyWith(color: style.color, fontSize: 40)),
-              const SizedBox(width: 6),
-              if (style.unit.isNotEmpty)
-                Text(style.unit, style: HpiText.body.copyWith(fontSize: 14)),
-            ],
-          ),
-          const SizedBox(height: 16),
-          HpiCard(
-            child: SizedBox(
-              height: 150,
-              child: metricKey == 'activity'
-                  ? HpiSparkBars(values: trend.spark, color: style.color)
-                  : HpiSparkline(
-                      values: trend.spark, color: style.color, strokeWidth: 2.2),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(children: [
-            if (trend.min != null)
-              Expanded(
-                  child: HpiStatChip(
-                      value: format(metricKey, trend.min),
-                      label: 'Min',
-                      valueColor: style.color)),
-            const SizedBox(width: 10),
-            if (trend.max != null)
-              Expanded(
-                  child: HpiStatChip(
-                      value: format(metricKey, trend.max), label: 'Max')),
-            const SizedBox(width: 10),
-            if (trend.baseline != null)
-              Expanded(
-                  child: HpiStatChip(
-                      value: format(metricKey, trend.baseline),
-                      label: 'Baseline')),
-          ]),
-          const Spacer(),
-          if (style.route != null)
-            HpiTonalButton(
-              label: 'Open full history',
-              icon: Symbols.monitoring,
-              color: style.color,
-              onPressed: () => Navigator.of(context).pushNamed(style.route!),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _centered(String title, String body) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(style.icon, size: 40, color: HpiColors.disabled),
-            const SizedBox(height: 12),
-            Text(title, style: HpiText.appBarTitle),
-            const SizedBox(height: 6),
-            Text(body,
-                textAlign: TextAlign.center,
-                style: HpiText.body.copyWith(fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
 }
