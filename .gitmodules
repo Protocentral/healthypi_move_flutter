@@ -1,3 +1,0 @@
-[submodule "move/packages/mcumgr_dart"]
-	path = move/packages/mcumgr_dart
-	url = ../mcumgr_dart.git
