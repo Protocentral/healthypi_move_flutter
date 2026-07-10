@@ -22,7 +22,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 5, // Increment version for research_sessions tables
+      version: 6, // v6: Health Store raw sample store (hs_*) + value_median
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -46,12 +46,13 @@ class DatabaseHelper {
         value_max INTEGER,
         value_min INTEGER,
         value_avg INTEGER,
+        value_median INTEGER,
         value_latest INTEGER,
         synced_at INTEGER DEFAULT (strftime('%s', 'now')),
         UNIQUE(timestamp, trend_type, device_mac)
       )
     ''');
-    
+
     await db.execute('CREATE INDEX idx_timestamp ON health_trends(timestamp)');
     await db.execute('CREATE INDEX idx_trend_type ON health_trends(trend_type)');
     await db.execute('CREATE INDEX idx_device_mac ON health_trends(device_mac)');
@@ -122,7 +123,62 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_research_files_session ON research_files(session_timestamp)');
     await db.execute('CREATE INDEX idx_research_files_signal ON research_files(signal_type)');
 
+    await _createHealthStoreTables(db);
+
     print('DatabaseHelper: Tables created with indexes');
+  }
+
+  /// Health Store (HPI_HS) raw sample store — the system of record once a Move
+  /// running HPI_HS firmware syncs. `health_trends` becomes a derived cache
+  /// aggregated from `hs_samples`. Additive; see docs/HEALTH_STORE_SYNC_DESIGN.md
+  /// §5 and docs/REDESIGN_PLAN.md. Shared by _createDB (fresh) and _onUpgrade.
+  Future<void> _createHealthStoreTables(Database db) async {
+    // Raw samples — the source of truth. `seq` is device-monotonic and doubles
+    // as the sync cursor and the dedup key. `value` is fixed-point; the real
+    // value is value / hs_types.scale.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS hs_samples (
+        device   TEXT NOT NULL,
+        seq      INTEGER NOT NULL,
+        ts_utc   INTEGER NOT NULL,
+        type     INTEGER NOT NULL,
+        quality  INTEGER NOT NULL,
+        value    INTEGER NOT NULL,
+        PRIMARY KEY (device, seq)
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_hs_type_ts ON hs_samples(device, type, ts_utc)');
+
+    // Self-describing registry cached from the TYPES response.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS hs_types (
+        device  TEXT NOT NULL,
+        id      INTEGER NOT NULL,
+        key     TEXT,
+        unit    TEXT,
+        scale   INTEGER,
+        class   TEXT,
+        derived INTEGER,
+        hk      TEXT,
+        hc      TEXT,
+        PRIMARY KEY (device, id)
+      )
+    ''');
+
+    // Per-device sync state. `cursor` is the highest seq durably stored — the
+    // only value ever fed to an ACK. Never ack `head`; never ack an unpersisted
+    // cursor (both are destructive on the device). See CLAUDE.md.
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS hs_sync_state (
+        device         TEXT PRIMARY KEY,
+        cursor         INTEGER,
+        head           INTEGER,
+        schema         INTEGER,
+        last_sync_utc  INTEGER,
+        last_record_id INTEGER
+      )
+    ''');
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -212,6 +268,14 @@ class DatabaseHelper {
       await db.execute('CREATE INDEX IF NOT EXISTS idx_research_files_signal ON research_files(signal_type)');
 
       print('DatabaseHelper: Upgraded to version 5 - added research recording tables');
+    }
+
+    if (oldVersion < 6) {
+      // v6: Health Store raw sample store + a derived median column on trends.
+      // ADD COLUMN cannot use a non-constant default, so no default is given;
+      // existing rows get NULL median (legacy sync never computed one).
+      await db.execute('ALTER TABLE health_trends ADD COLUMN value_median INTEGER');
+      await _createHealthStoreTables(db);
     }
 
     // Migrate lastSynced from SharedPreferences to database (moved outside version check)
@@ -487,6 +551,33 @@ class DatabaseHelper {
       GROUP BY day_start
       ORDER BY day_start ASC
     ''', [trendType, monthStart, monthEnd, effectiveMac]);
+  }
+
+  /// Daily average values for [trendType] over the last [days] days, oldest
+  /// first, for computing rolling baselines/percentiles on the phone. Each entry
+  /// is `{day_start, avg, min, max}` in stored units. Empty if no data.
+  Future<List<Map<String, dynamic>>> getDailyAveragesSince(
+    String trendType, {
+    int days = 30,
+    String? deviceMac,
+  }) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    final sinceTs = DateTime.now()
+            .subtract(Duration(days: days))
+            .millisecondsSinceEpoch ~/
+        1000;
+    return await db.rawQuery('''
+      SELECT
+        (timestamp / 86400) * 86400 as day_start,
+        AVG(value_avg) as avg,
+        MIN(value_min) as min,
+        MAX(value_max) as max
+      FROM health_trends
+      WHERE trend_type = ? AND timestamp >= ? AND device_mac = ?
+      GROUP BY day_start
+      ORDER BY day_start ASC
+    ''', [trendType, sinceTs, effectiveMac]);
   }
 
   /// Clean up old data (older than specified retention days)
@@ -1047,6 +1138,199 @@ class DatabaseHelper {
   /// Helper: Read 16-bit little-endian integer
   int _readInt16LE(List<int> bytes, int offset) {
     return bytes[offset] | (bytes[offset + 1] << 8);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Health Store (HPI_HS) raw sample store — see docs/HEALTH_STORE_SYNC_DESIGN.md
+  // §5. `health_trends` remains a derived cache aggregated from `hs_samples`.
+  // These are the seams the (not-yet-wired) HealthStoreSyncManager writes to and
+  // HealthRepository reads from; safe to call today, they simply stay empty until
+  // a Move running HPI_HS firmware syncs.
+  // ---------------------------------------------------------------------------
+
+  /// Highest `seq` durably stored for [device], or -1 if none. This is the value
+  /// to resume `sync(since:)` from — and the only value safe to ACK.
+  Future<int> getSyncCursor(String device) async {
+    final db = await database;
+    final rows = await db.query('hs_sync_state',
+        columns: ['cursor'], where: 'device = ?', whereArgs: [device], limit: 1);
+    if (rows.isEmpty || rows.first['cursor'] == null) return -1;
+    return rows.first['cursor'] as int;
+  }
+
+  /// Insert a page of raw samples and advance the persisted cursor atomically.
+  /// Returns the new cursor (max seq stored). Idempotent: re-inserting the same
+  /// seqs is a no-op via the (device, seq) primary key, so a re-run after an
+  /// interrupted sync cannot double-count. The caller must only ACK the returned
+  /// cursor *after* this future completes.
+  Future<int> insertSamplesPage(
+    String device,
+    List<Map<String, Object?>> samples, {
+    int? head,
+    int? schema,
+  }) async {
+    final db = await database;
+    int cursor = await getSyncCursor(device);
+    await db.transaction((txn) async {
+      for (final s in samples) {
+        final seq = s['seq'] as int;
+        await txn.insert(
+          'hs_samples',
+          {
+            'device': device,
+            'seq': seq,
+            'ts_utc': s['ts_utc'],
+            'type': s['type'],
+            'quality': s['quality'] ?? 0,
+            'value': s['value'],
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore,
+        );
+        if (seq > cursor) cursor = seq;
+      }
+      final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      await txn.insert(
+        'hs_sync_state',
+        {
+          'device': device,
+          'cursor': cursor,
+          'head': head,
+          'schema': schema,
+          'last_sync_utc': nowUtc,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    });
+    return cursor;
+  }
+
+  /// Cache the self-describing TYPES registry for [device].
+  Future<void> upsertTypes(String device, List<Map<String, Object?>> types) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      for (final t in types) {
+        await txn.insert(
+          'hs_types',
+          {
+            'device': device,
+            'id': t['id'],
+            'key': t['key'],
+            'unit': t['unit'],
+            'scale': t['scale'],
+            'class': t['class'],
+            'derived': t['derived'],
+            'hk': t['hk'],
+            'hc': t['hc'],
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+    });
+  }
+
+  /// TYPES registry for [device], keyed by type id.
+  Future<Map<int, Map<String, Object?>>> getTypes(String device) async {
+    final db = await database;
+    final rows =
+        await db.query('hs_types', where: 'device = ?', whereArgs: [device]);
+    return {for (final r in rows) r['id'] as int: r};
+  }
+
+  /// Derive `health_trends` hourly rows from `hs_samples` for the given UTC time
+  /// window, so the existing TrendsDataManager / trend screens keep working. One
+  /// derived row per (type-key, hour): min/avg/**median**/max, plus latest.
+  ///
+  /// Fixed-point: values are divided by each type's `scale` and then converted
+  /// into `health_trends`' existing per-metric integer convention (e.g. skin
+  /// temp is stored in centi-degrees — DECISIONS §3). Runs incrementally over
+  /// only the touched hours; safe to re-run (idempotent upsert on the trends
+  /// UNIQUE key). Returns the number of derived rows written.
+  Future<int> deriveTrends(
+    String device, {
+    required int sinceUtc,
+    String? deviceMac,
+  }) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    final types = await getTypes(device);
+    if (types.isEmpty) return 0;
+
+    // type id -> (trend_type, toStored) using the design doc's key mapping.
+    final rows = await db.query('hs_samples',
+        where: 'device = ? AND ts_utc >= ?',
+        whereArgs: [device, sinceUtc],
+        orderBy: 'ts_utc ASC');
+    if (rows.isEmpty) return 0;
+
+    // Bucket: hourStart -> trendType -> list of stored-unit values.
+    final buckets = <int, Map<String, List<num>>>{};
+    for (final r in rows) {
+      final t = types[r['type'] as int];
+      if (t == null) continue;
+      final trendType = _trendTypeForKey(t['key'] as String?);
+      if (trendType == null) continue;
+      final scale = (t['scale'] as int?) ?? 1;
+      final stored = _toStoredUnits(trendType, (r['value'] as int) / (scale == 0 ? 1 : scale));
+      final hourStart = ((r['ts_utc'] as int) ~/ 3600) * 3600;
+      (buckets[hourStart] ??= {}).putIfAbsent(trendType, () => []).add(stored);
+    }
+
+    int written = 0;
+    await db.transaction((txn) async {
+      buckets.forEach((hourStart, byType) {
+        byType.forEach((trendType, values) {
+          values.sort();
+          final minV = values.first;
+          final maxV = values.last;
+          final avgV = values.reduce((a, b) => a + b) / values.length;
+          final medV = values[values.length ~/ 2];
+          txn.insert(
+            'health_trends',
+            {
+              'timestamp': hourStart,
+              'trend_type': trendType,
+              'session_id': 0, // synthetic: derived rows have no device session
+              'device_mac': effectiveMac,
+              'value_max': maxV.round(),
+              'value_min': minV.round(),
+              'value_avg': avgV.round(),
+              'value_median': medV.round(),
+              'value_latest': values.last.round(),
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+          written++;
+        });
+      });
+    });
+    return written;
+  }
+
+  /// Map an HPI_HS TYPES `key` to the legacy `health_trends.trend_type`, or null
+  /// if this metric has no trend screen (kept raw in hs_samples only).
+  String? _trendTypeForKey(String? key) {
+    switch (key) {
+      case 'hr':
+        return hPi4Global.PREFIX_HR;
+      case 'spo2':
+        return hPi4Global.PREFIX_SPO2;
+      case 'skin_temp':
+      case 'temp':
+        return hPi4Global.PREFIX_TEMP;
+      case 'steps':
+      case 'activity':
+        return hPi4Global.PREFIX_ACTIVITY;
+      default:
+        return null;
+    }
+  }
+
+  /// Convert a real-world value into `health_trends`' stored integer convention.
+  /// Temp is stored in centi-degrees (read side divides by 100, see
+  /// scr_skin_temp.dart); HR / SpO₂ / steps are stored raw.
+  num _toStoredUnits(String trendType, num real) {
+    if (trendType == hPi4Global.PREFIX_TEMP) return real * 100;
+    return real;
   }
 
   /// Close database

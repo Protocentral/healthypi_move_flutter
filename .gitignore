@@ -57,6 +57,8 @@ keystore.base64
 x
 /temp_docs
 CLAUDE.md
+# Design handoff zip is redundant with the extracted docs/design_handoff_* dir.
+docs/*.zip
 
 # Library packages resolve fresh; only apps pin a lockfile.
 packages/*/pubspec.lock

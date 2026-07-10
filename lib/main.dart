@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
 
 import 'home.dart';
+import 'screens/scr_main_shell.dart';
 import 'screens/scr_trends.dart';
 import 'screens/scr_device_scan.dart';
 import 'screens/scr_device_mgmt.dart';
 import 'screens/scr_device_settings.dart';
 import 'screens/scr_settings.dart';
 import 'screens/scr_bpt_calibration.dart';
+import 'theme/hpi_theme.dart';
 import 'utils/ble_manager.dart';
 
 void main() async {
@@ -28,15 +30,17 @@ class HealthyPiApp extends StatelessWidget {
     return MaterialApp(
       title: 'HealthyPi Move',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.purple,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        elevatedButtonTheme: ElevatedButtonThemeData(style: ButtonStyle()),
-      ),
+      // Redesign theme (dark-only, M3, per-metric identity colors).
+      theme: HpiTheme.dark(),
+      darkTheme: HpiTheme.dark(),
+      themeMode: ThemeMode.dark,
       // Named routes for major screens
       initialRoute: '/',
       routes: {
-        '/': (context) => UpgradeAlert(child: HomePage()),
+        // The redesigned 4-tab shell is the app entry; the pre-redesign home
+        // stays reachable at /home_legacy for quick rollback during migration.
+        '/': (context) => UpgradeAlert(child: const ScrMainShell()),
+        '/home_legacy': (context) => UpgradeAlert(child: HomePage()),
         '/scan': (context) => const ScrDeviceScan(),
         '/trends': (context) => const ScrTrends(),
         '/trends/hr': (context) => const ScrTrends(initialMetric: 'hr'),
