@@ -130,59 +130,117 @@ class HpiHs {
     return out;
   }
 
-  /// Candidate CBOR keys for the SYNC page-size argument.
+  /// Candidate CBOR keys for the SYNC request arguments.
   ///
-  /// The *response* names the record count `n`, but the request's count key was
-  /// never pinned (design doc §10). If the firmware doesn't recognise the key we
-  /// send, the count defaults to 0 and it politely returns an empty page — a
-  /// silent no-op. So we probe: send each candidate until one yields records,
-  /// then remember it for the rest of the session.
+  /// The request shape was never pinned (design doc §10). If the firmware
+  /// doesn't recognise a key, the argument defaults to 0 and it politely returns
+  /// an empty page — a silent no-op that looks exactly like "no data". So the
+  /// shape is *discovered* against the live device rather than assumed.
+  static const List<String> _cursorKeys = [
+    'since', 'from', 'start', 'seq', 'after', 'cursor'
+  ];
   static const List<String> _countKeys = ['max', 'n', 'count', 'limit'];
 
-  /// The count key this device actually honours, learned on first success.
+  /// The request keys this device actually honours, learned by [discoverShape].
+  String? _cursorKey;
   String? _countKey;
 
-  /// `SYNC` — the workhorse. Pull one page of samples from [since].
-  Future<HsSyncPage> sync({required int since, int max = 256}) async {
-    // Once learned, stop probing.
-    final candidates = _countKey != null ? [_countKey!] : _countKeys;
+  bool get shapeKnown => _cursorKey != null && _countKey != null;
+  String get shape => '${_cursorKey ?? "?"}/${_countKey ?? "?"}';
 
-    HsSyncPage? empty;
-    for (final key in candidates) {
-      final rsp = _check(await client.send(
-        op: SmpOp.readReq,
-        group: group,
-        id: cmdSync,
-        payload: {'since': since, key: max},
-      ));
-
-      final bytes = _extractRecs(rsp.payload);
-      final samples = HsSample.listFromBytes(bytes);
-      final page = HsSyncPage(
-        samples: samples,
-        next: (rsp.payload['next'] as num?)?.toInt() ?? since,
-        more: (rsp.payload['more'] as bool?) ?? false,
-      );
-
-      if (samples.isNotEmpty) {
-        if (_countKey == null) {
-          _countKey = key;
-          _logMsg('[HPI_HS] SYNC page-size key = "$key"');
-        }
-        return page;
-      }
-
-      _logMsg('[HPI_HS] SYNC(since=$since, $key=$max) -> 0 samples. '
-          'n=${rsp.payload['n']} next=${rsp.payload['next']} '
-          'more=${rsp.payload['more']} bytes=${bytes.length} '
-          'keys=${rsp.payload.keys.toList()}');
-      empty ??= page;
+  /// One raw SYNC round-trip with explicit key names.
+  Future<HsSyncPage> _syncRaw({
+    required String cursorKey,
+    required String countKey,
+    required int since,
+    required int max,
+    bool log = false,
+  }) async {
+    final rsp = _check(await client.send(
+      op: SmpOp.readReq,
+      group: group,
+      id: cmdSync,
+      payload: {cursorKey: since, countKey: max},
+    ));
+    final bytes = _extractRecs(rsp.payload);
+    final samples = HsSample.listFromBytes(bytes);
+    if (log) {
+      _logMsg('[HPI_HS] probe $cursorKey=$since $countKey=$max -> '
+          'samples=${samples.length} n=${rsp.payload['n']} '
+          'next=${rsp.payload['next']} more=${rsp.payload['more']} '
+          'bytes=${bytes.length}');
     }
+    return HsSyncPage(
+      samples: samples,
+      next: (rsp.payload['next'] as num?)?.toInt() ?? since,
+      more: (rsp.payload['more'] as bool?) ?? false,
+    );
+  }
 
-    // Every candidate came back empty: either the store really has nothing new,
-    // or the record layout differs. The caller compares against `head` to tell
-    // those apart.
-    return empty!;
+  /// Find the request-key pair this firmware honours, by asking for a page near
+  /// [head] — a position that must hold records if anything is retained at all.
+  ///
+  /// Probing near the head (rather than at 0) is deliberate: a device whose
+  /// oldest samples have aged out legitimately has nothing at seq 0, so a probe
+  /// there can't distinguish "wrong key" from "nothing there".
+  ///
+  /// Returns true once a combination yields records. Read-only — no acks.
+  Future<bool> discoverShape({required int head}) async {
+    if (shapeKnown) return true;
+    final probeAt = head > 64 ? head - 64 : 0;
+    for (final ck in _cursorKeys) {
+      for (final nk in _countKeys) {
+        final page = await _syncRaw(
+            cursorKey: ck, countKey: nk, since: probeAt, max: 32, log: true);
+        if (page.samples.isNotEmpty) {
+          _cursorKey = ck;
+          _countKey = nk;
+          _logMsg('[HPI_HS] SYNC request shape = {$ck: <seq>, $nk: <count>}');
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Smallest cursor value that still returns records — i.e. the start of the
+  /// device's retained window. Older samples age out of the store, so a fresh
+  /// client cannot simply begin at 0.
+  ///
+  /// Binary-searches the false→true boundary between 0 and a known-good probe
+  /// point. ~17 round-trips, run once when a client has no cursor yet.
+  Future<int> findOldestCursor({required int head}) async {
+    if (!shapeKnown) throw StateError('call discoverShape() first');
+    var lo = 0; // known: returns nothing
+    var hi = head > 64 ? head - 64 : 0; // known: returns records
+    if (hi == 0) return 0;
+
+    while (lo + 1 < hi) {
+      final mid = lo + (hi - lo) ~/ 2;
+      final page = await _syncRaw(
+          cursorKey: _cursorKey!, countKey: _countKey!, since: mid, max: 1);
+      if (page.samples.isNotEmpty) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+    _logMsg('[HPI_HS] oldest retained cursor = $hi (head=$head)');
+    return hi;
+  }
+
+  /// `SYNC` — the workhorse. Pull one page of samples from [since].
+  ///
+  /// Uses the discovered request shape; falls back to the documented
+  /// `since`/`max` when [discoverShape] hasn't run.
+  Future<HsSyncPage> sync({required int since, int max = 256}) async {
+    return _syncRaw(
+      cursorKey: _cursorKey ?? 'since',
+      countKey: _countKey ?? 'max',
+      since: since,
+      max: max,
+      log: !shapeKnown,
+    );
   }
 
   /// Pull the packed record blob out of a SYNC response. `recs` is the

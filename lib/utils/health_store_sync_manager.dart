@@ -167,6 +167,33 @@ class HealthStoreSyncManager {
     debugPrint('[HS-Sync] dev=$device cursor=$cursor head=$head '
         'types=${types.length}');
 
+    // The SYNC request shape isn't pinned across firmware (design doc §10), and
+    // an unrecognised key silently yields an empty page. Discover it against the
+    // live device before trusting an empty result.
+    if (!hs.shapeKnown && head > 0) {
+      onStatus('Probing sync shape…');
+      final found = await hs.discoverShape(head: head);
+      if (!found) {
+        return SyncResult(
+          success: false,
+          message: 'Device holds samples up to seq $head, but no SYNC request '
+              'shape returned records. The record layout may differ — see the '
+              '[HPI_HS] probe lines.',
+          recordCounts: const {},
+          duration: DateTime.now().difference(started),
+        );
+      }
+    }
+
+    // A fresh client can't start at 0: the device's oldest samples age out of
+    // the store, so seq 0 has no anchor and returns nothing. Find where the
+    // retained window actually begins.
+    if (cursor < 0 && head > 0) {
+      onStatus('Locating oldest data…');
+      cursor = await hs.findOldestCursor(head: head);
+      debugPrint('[HS-Sync] starting from oldest retained cursor $cursor');
+    }
+
     var totalStored = 0;
     int? earliestTs;
     var pages = 0;
