@@ -68,10 +68,14 @@ class HealthStoreSyncManager {
 
   /// Sync [deviceMacAddress] (the platform device id). Routes to the Health
   /// Store when the device supports it, otherwise to the legacy path.
+  /// [budget] caps one sync's wall-clock time. The default keeps "Sync now"
+  /// snappy; a deliberate "catch up history" run passes a longer one. Either way
+  /// the sync is resumable and cancellable, so a long budget can't strand the UI.
   Future<SyncResult> syncData({
     required String deviceMacAddress,
     required Function(String metric, double progress) onProgress,
     required Function(String message) onStatus,
+    Duration? budget,
   }) async {
     if (_isSyncing) {
       return SyncResult(
@@ -84,7 +88,7 @@ class HealthStoreSyncManager {
     _isSyncing = true;
     _cancelled = false;
     final started = DateTime.now();
-    final deadline = started.add(_budget);
+    final deadline = started.add(budget ?? _budget);
 
     var totalStored = 0;
     String? lastError;
@@ -364,9 +368,17 @@ class HealthStoreSyncManager {
     // It's also the cheap request for the device: a cursor near `head` is served
     // from the RAM ring instead of a flash scan, when the ring is warm.
     if (head > _recentWindow && cursor < head - _recentWindow) {
-      onStatus('Fetching recent data…');
-      final recent = await _fetchRecent(hs, db, device, head, hello.schema);
-      if (recent > 0) stored += recent;
+      // …but only if we don't already have that window. Re-fetching it on every
+      // tap would burn budget that belongs to the backlog. New samples arrive
+      // between syncs, so `head` moves and this re-runs when it should.
+      final have = await db.countSamplesAbove(device, head - _recentWindow);
+      if (have < _recentWindow) {
+        onStatus('Fetching recent data…');
+        final recent = await _fetchRecent(hs, db, device, head, hello.schema);
+        if (recent > 0) stored += recent;
+      } else {
+        debugPrint('[HS-Sync] recent window already stored ($have) — skipping');
+      }
     }
 
     onStatus('Syncing history…');

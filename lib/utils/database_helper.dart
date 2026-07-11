@@ -1279,6 +1279,18 @@ class DatabaseHelper {
     });
   }
 
+  /// How many samples we already hold for [device] with `seq > [seq]`.
+  /// Used to skip a redundant newest-first fetch when that window is already on
+  /// the phone.
+  Future<int> countSamplesAbove(String device, int seq) async {
+    final db = await database;
+    return Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM hs_samples WHERE device = ? AND seq > ?',
+          [device, seq],
+        )) ??
+        0;
+  }
+
   /// TYPES registry for [device], keyed by type id.
   Future<Map<int, Map<String, Object?>>> getTypes(String device) async {
     final db = await database;

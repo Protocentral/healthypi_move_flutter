@@ -31,6 +31,7 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
   DateTime? _lastSync;
   int _trendBins = 0;
   bool _syncing = false;
+  String _syncStatus = '';
   StreamSubscription? _syncSub;
 
   @override
@@ -69,18 +70,32 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     });
   }
 
+  /// The Device screen is the deliberate place to catch up a long history, so it
+  /// gets a much larger budget than Home's quick "Sync now". Still cancellable
+  /// and resumable, so a long run can't strand the UI.
   Future<void> _sync() async {
     final device = _device;
     if (device == null || _syncing) return;
     setState(() => _syncing = true);
+    _syncSub = HealthStoreSyncManager.instance.progressStream.listen((p) {
+      if (mounted && p.metric == 'all') {
+        setState(() => _syncStatus = p.message ?? '');
+      }
+    });
     try {
-      await HealthStoreSyncManager.instance.syncData(
+      final result = await HealthStoreSyncManager.instance.syncData(
         deviceMacAddress: device.macAddress,
         onProgress: (metric, progress) {},
         onStatus: (status) {},
+        budget: const Duration(minutes: 5),
       );
-      await DatabaseHelper.instance.updateLastSyncTime();
       await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(result.message),
+            backgroundColor:
+                result.success ? HpiColors.steps : HpiColors.error));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -88,7 +103,14 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
                 backgroundColor: HpiColors.error));
       }
     } finally {
-      if (mounted) setState(() => _syncing = false);
+      await _syncSub?.cancel();
+      _syncSub = null;
+      if (mounted) {
+        setState(() {
+          _syncing = false;
+          _syncStatus = '';
+        });
+      }
     }
   }
 
@@ -266,7 +288,10 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(last, style: HpiText.cardTitle),
+                    Text(_syncing && _syncStatus.isNotEmpty ? _syncStatus : last,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: HpiText.cardTitle),
                     const SizedBox(height: 2),
                     Text('$_trendBins trend bins stored', style: HpiText.supporting),
                   ],
@@ -274,10 +299,15 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
               ),
               SizedBox(
                 width: 108,
+                // A long history catch-up must always be interruptible;
+                // everything already synced is kept.
                 child: HpiTonalButton(
-                  label: _syncing ? 'Syncing…' : 'Sync now',
-                  icon: Symbols.sync,
-                  onPressed: _syncing ? null : _sync,
+                  label: _syncing ? 'Stop' : 'Sync now',
+                  icon: _syncing ? Symbols.stop : Symbols.sync,
+                  color: _syncing ? HpiColors.error : HpiColors.hr,
+                  onPressed: _syncing
+                      ? () => HealthStoreSyncManager.instance.cancel()
+                      : _sync,
                 ),
               ),
             ],
