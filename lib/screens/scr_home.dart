@@ -12,7 +12,6 @@ import '../ui/charts/hpi_ring_gauge.dart';
 import '../ui/charts/hpi_spark_bars.dart';
 import '../ui/charts/hpi_sparkline.dart';
 import '../ui/components/hpi_components.dart';
-import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../utils/health_store_sync_manager.dart';
 import 'scr_stress_eda.dart';
@@ -39,6 +38,7 @@ class _ScrHomeState extends State<ScrHome> {
 
   bool _syncing = false;
   double _syncProgress = 0;
+  String _syncMessage = '';
   StreamSubscription? _syncSub;
 
   static const _layoutPrefKey = 'home_layout_grid';
@@ -83,10 +83,14 @@ class _ScrHomeState extends State<ScrHome> {
     setState(() {
       _syncing = true;
       _syncProgress = 0;
+      _syncMessage = '';
     });
     _syncSub = HealthStoreSyncManager.instance.progressStream.listen((p) {
       if (mounted && p.metric == 'all') {
-        setState(() => _syncProgress = p.progress);
+        setState(() {
+          _syncProgress = p.progress;
+          _syncMessage = p.message ?? '';
+        });
       }
     });
     try {
@@ -95,11 +99,13 @@ class _ScrHomeState extends State<ScrHome> {
         onProgress: (metric, progress) {},
         onStatus: (status) {},
       );
-      if (result.success) {
-        await DatabaseHelper.instance.updateLastSyncTime();
-        await _load();
-      } else if (mounted) {
-        _snack('Sync failed: ${result.message}', HpiColors.error);
+      // Reload either way: a partial sync still stored real samples, and the
+      // recent-first pass means the screens have current data even when the
+      // history backlog didn't finish.
+      await _load();
+      if (mounted) {
+        _snack(result.message,
+            result.success ? HpiColors.steps : HpiColors.error);
       }
     } catch (e) {
       if (mounted) _snack('Sync error: $e', HpiColors.error);
@@ -110,6 +116,7 @@ class _ScrHomeState extends State<ScrHome> {
         setState(() {
           _syncing = false;
           _syncProgress = 0;
+          _syncMessage = '';
         });
       }
     }
@@ -531,6 +538,11 @@ class _ScrHomeState extends State<ScrHome> {
   Widget _footer() {
     final sync = _dash!.lastSync;
     final label = sync == null ? 'Never synced' : 'Synced ${_relativeTime(sync)}';
+    // While syncing, show what it's actually doing (and where it's up to) rather
+    // than a bare percentage — a long history drain otherwise looks frozen.
+    final status = _syncMessage.isNotEmpty
+        ? '${(_syncProgress * 100).round()}% · $_syncMessage'
+        : 'Syncing… ${(_syncProgress * 100).round()}%';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
@@ -538,14 +550,17 @@ class _ScrHomeState extends State<ScrHome> {
           const Icon(Symbols.watch, size: 15, color: HpiColors.muted),
           const SizedBox(width: 6),
           Expanded(
-              child: Text(
-                  _syncing
-                      ? 'Syncing… ${(_syncProgress * 100).round()}%'
-                      : label,
+              child: Text(_syncing ? status : label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: HpiText.supporting)),
           GestureDetector(
-            onTap: _syncing ? null : _sync,
-            child: Text('Sync now',
+            // A big backlog can't drain in one pass, so the sync must always be
+            // interruptible — everything already stored is kept.
+            onTap: _syncing
+                ? () => HealthStoreSyncManager.instance.cancel()
+                : _sync,
+            child: Text(_syncing ? 'Stop' : 'Sync now',
                 style: HpiText.cardTitle
                     .copyWith(color: HpiColors.hr, fontSize: 12)),
           ),

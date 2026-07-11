@@ -1163,14 +1163,21 @@ class DatabaseHelper {
   /// seqs is a no-op via the (device, seq) primary key, so a re-run after an
   /// interrupted sync cannot double-count. The caller must only ACK the returned
   /// cursor *after* this future completes.
+  /// [advanceCursor] false stores the rows **without** moving the persisted sync
+  /// cursor. That's for an out-of-order "newest first" pass: we want today's
+  /// samples on the phone immediately, but the cursor must stay behind so the
+  /// older backlog is still drained. (Re-fetching those seqs later is a no-op
+  /// thanks to the primary key.)
   Future<int> insertSamplesPage(
     String device,
     List<Map<String, Object?>> samples, {
     int? head,
     int? schema,
+    bool advanceCursor = true,
   }) async {
     final db = await database;
-    int cursor = await getSyncCursor(device);
+    final persisted = await getSyncCursor(device);
+    int maxSeq = persisted;
     await db.transaction((txn) async {
       for (final s in samples) {
         final seq = s['seq'] as int;
@@ -1186,14 +1193,15 @@ class DatabaseHelper {
           },
           conflictAlgorithm: ConflictAlgorithm.ignore,
         );
-        if (seq > cursor) cursor = seq;
+        if (seq > maxSeq) maxSeq = seq;
       }
+      if (!advanceCursor) return;
       final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
       await txn.insert(
         'hs_sync_state',
         {
           'device': device,
-          'cursor': cursor,
+          'cursor': maxSeq,
           'head': head,
           'schema': schema,
           'last_sync_utc': nowUtc,
@@ -1201,7 +1209,7 @@ class DatabaseHelper {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
-    return cursor;
+    return advanceCursor ? maxSeq : persisted;
   }
 
   /// Cache the self-describing TYPES registry for [device].
