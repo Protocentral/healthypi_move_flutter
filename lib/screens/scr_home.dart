@@ -12,9 +12,9 @@ import '../ui/charts/hpi_ring_gauge.dart';
 import '../ui/charts/hpi_spark_bars.dart';
 import '../ui/charts/hpi_sparkline.dart';
 import '../ui/components/hpi_components.dart';
-import '../utils/background_sync_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/health_store_sync_manager.dart';
 import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
@@ -84,13 +84,13 @@ class _ScrHomeState extends State<ScrHome> {
       _syncing = true;
       _syncProgress = 0;
     });
-    _syncSub = BackgroundSyncManager.instance.progressStream.listen((p) {
+    _syncSub = HealthStoreSyncManager.instance.progressStream.listen((p) {
       if (mounted && p.metric == 'all') {
         setState(() => _syncProgress = p.progress);
       }
     });
     try {
-      final result = await BackgroundSyncManager.instance.syncData(
+      final result = await HealthStoreSyncManager.instance.syncData(
         deviceMacAddress: device.macAddress,
         onProgress: (metric, progress) {},
         onStatus: (status) {},

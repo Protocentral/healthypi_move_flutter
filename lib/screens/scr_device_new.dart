@@ -6,10 +6,10 @@ import '../models/device_info.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
-import '../utils/background_sync_manager.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/health_store_sync_manager.dart';
 import 'scr_dfu_new.dart';
 import 'scr_recordings.dart';
 import 'scr_settings_new.dart';
@@ -74,7 +74,7 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     if (device == null || _syncing) return;
     setState(() => _syncing = true);
     try {
-      await BackgroundSyncManager.instance.syncData(
+      await HealthStoreSyncManager.instance.syncData(
         deviceMacAddress: device.macAddress,
         onProgress: (metric, progress) {},
         onStatus: (status) {},
