@@ -119,16 +119,37 @@ analyze` has held at **445 issues / 0 errors** the whole way.
   detail in the right pane); delivers trend details **3a/3b/3c/3d**.
 - **`832f2b7`** — Stress & EDA **1e/2b** (honest zero-state).
 - **`8fa640e`** — Settings + developer mode **1i** and BLE console **1j**.
+- **`320b637`** — Device page **1h**.
+- **`53ad6bc`** — Live signals **1f** + tablet dual-signal **4b**, on a new
+  `SweepBuffer`/`HpiSweepWaveform` monitor-style sweep painter.
+- **`03d0f1a`** — Onboarding scan & pair **1g**. Restyled `ScrDeviceScan`'s
+  presentation *in place*, leaving its scan/permission/connect/pair logic
+  untouched — that flow is what every other screen depends on.
+- **`a00d3bb`** — Recordings library **2c** + preview/CSV export **2d**.
 
-**Screens done:** 2a, 1a, 4a, Trends hub, 3a, 3b, 3c, 3d, 1e/2b, 1i, 1j.
-**Remaining:** 1h Device · 1f Live + 4b tablet dual-signal (needs an ECG sweep
-painter + streaming integration) · 1g Onboarding · 2c/2d Recordings. Those tabs
-still host the legacy screens until redesigned. Then the live
-`HealthStoreSyncManager` device wiring (needs hardware — roadmap Phase 2).
+## Status: all 18 approved screens are built
 
-Build note: `flutter build bundle` was confirmed compiling through `55a250f`; the
-two later commits are analyze-clean but the full bundle build was paused before
-re-running. Re-run it first thing next session.
+Every tab of the shell now hosts a redesigned screen, and the pushed routes
+(settings, console, recordings, preview, trend detail, stress/EDA) are all
+redesigned. `flutter analyze` sits at **444 / 0 errors** (one *below* the 445
+baseline — the replaced scan tile carried a deprecated `withOpacity`), and
+`flutter build bundle` compiles.
+
+**Honest gaps that remain, by design:**
+- **Nothing has been exercised on real hardware.** Streaming (1f/4b), scan/pair
+  (1g), and recording download/export (2c/2d) are wired to the existing, proven
+  primitives but have not been driven against a Move.
+- **HRV / stress / EDA stay zero-states.** There is still no producing code for
+  RR intervals, the stress index, or EDA spot checks, so 3a's HRV card and
+  1e/2b render explanatory zero-states rather than invented numbers. Live BPM and
+  RR-interval read "—" for the same reason.
+- **The live `HealthStoreSyncManager` is still not wired** (roadmap Phase 2 —
+  needs hardware to pin the `TYPES`/`SUMMARY`/`RECORDS` wire shapes). The v6
+  schema, derivation, and repository are ready to receive samples.
+- Legacy screens (`home.dart`, `scr_trends.dart`, `scr_device_mgmt.dart`,
+  `scr_stream_selection.dart`, `scr_settings.dart`, `scr_recordings_hub.dart`)
+  are still in the tree and reachable (`/home_legacy`, named routes) as a
+  rollback path. They can be deleted once the redesign is validated on device.
 
 ## Relationship to ROADMAP.md
 
