@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HealthyPi Move — Health-Store Sync Redesign (HS-2)</title>
+<style>
+  :root{
+    --bg:#0e1113; --panel:#161a1d; --panel2:#1d2226; --line:#2b3237;
+    --text:#e7ecef; --muted:#98a1a5; --dim:#6b7478;
+    --accent:#f59e0b; --blue:#6fb3cc; --green:#16a34a; --red:#dc2626;
+    --teal:#2fbda8; --indigo:#8b84f0;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:light){
+    :root{ --bg:#f7f8f9; --panel:#fff; --panel2:#f0f2f4; --line:#dfe3e6;
+           --text:#12171a; --muted:#5b666c; --dim:#8b9498; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 24px 96px}
+  header{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:40px}
+  h1{font-size:30px;margin:0 0 8px;letter-spacing:-.3px}
+  .sub{color:var(--muted);font-size:15px}
+  .tag{display:inline-block;font:600 11px/1 var(--mono);letter-spacing:.08em;
+    text-transform:uppercase;padding:5px 9px;border-radius:5px;margin-right:6px}
+  .tag.plan{background:rgba(245,158,11,.14);color:var(--accent)}
+  .tag.date{background:rgba(111,179,204,.14);color:var(--blue)}
+  h2{font-size:21px;margin:52px 0 6px;letter-spacing:-.2px}
+  h2 .n{color:var(--dim);font:600 14px/1 var(--mono);margin-right:10px}
+  h3{font-size:16px;margin:30px 0 10px;color:var(--text)}
+  p{margin:12px 0}
+  .lead{color:var(--muted)}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel2);
+    padding:2px 5px;border-radius:4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:20px 22px;margin:18px 0}
+  .card.warn{border-left:3px solid var(--red)}
+  .card.good{border-left:3px solid var(--green)}
+  .card.note{border-left:3px solid var(--blue)}
+  .card h4{margin:0 0 8px;font-size:15px}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14.5px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12.5px;letter-spacing:.04em;
+    text-transform:uppercase;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-family:var(--mono);white-space:nowrap}
+  .bad{color:var(--red);font-weight:600}
+  .ok{color:var(--green);font-weight:600}
+  .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:22px 0}
+  .kpi div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .kpi .v{font:700 24px/1.2 var(--mono);letter-spacing:-.5px}
+  .kpi .k{color:var(--muted);font-size:12px;margin-top:5px}
+  .kpi .d{font-size:12px;margin-top:6px;color:var(--dim)}
+  pre{background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+    padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.6;margin:14px 0}
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:10px;margin:20px 0}
+  .step{flex:1;min-width:130px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:13px 14px}
+  .step .t{font:600 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--dim);margin-bottom:7px}
+  .step .b{font-size:13.5px;line-height:1.5}
+  .step.hot{border-color:rgba(220,38,38,.45);background:rgba(220,38,38,.06)}
+  .step.new{border-color:rgba(22,163,74,.45);background:rgba(22,163,74,.06)}
+  .arrow{align-self:center;color:var(--dim);font-size:18px;padding:0 2px}
+  .seg{display:flex;gap:3px;flex-wrap:wrap;margin:14px 0}
+  .seg span{flex:0 0 auto;width:26px;height:34px;border-radius:4px;
+    background:var(--panel2);border:1px solid var(--line);
+    font:600 9px/34px var(--mono);text-align:center;color:var(--dim)}
+  .seg span.hit{background:rgba(111,179,204,.22);border-color:var(--blue);color:var(--blue)}
+  .seg span.wasted{background:rgba(220,38,38,.14);border-color:rgba(220,38,38,.4);color:var(--red)}
+  ul{margin:12px 0;padding-left:22px}
+  li{margin:6px 0}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:10px 0 0}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;
+    vertical-align:-1px;border:1px solid var(--line)}
+  .phase{display:flex;gap:14px;align-items:flex-start;padding:15px 0;border-bottom:1px solid var(--line)}
+  .phase:last-child{border-bottom:none}
+  .phase .id{flex:0 0 46px;font:700 14px/1 var(--mono);color:var(--accent);padding-top:3px}
+  .phase .body{flex:1}
+  .phase .h{font-weight:600;margin-bottom:3px}
+  .phase .m{color:var(--muted);font-size:14px}
+  .pills{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
+  .pill{font:600 10.5px/1 var(--mono);letter-spacing:.05em;text-transform:uppercase;
+    padding:4px 7px;border-radius:4px;background:var(--panel2);color:var(--dim)}
+  .pill.fw{background:rgba(245,158,11,.14);color:var(--accent)}
+  .pill.app{background:rgba(139,132,240,.16);color:var(--indigo)}
+  .pill.safe{background:rgba(22,163,74,.14);color:var(--green)}
+  .pill.brk{background:rgba(220,38,38,.14);color:var(--red)}
+  footer{margin-top:60px;padding-top:22px;border-top:1px solid var(--line);
+    color:var(--dim);font-size:13px}
+  a{color:var(--blue)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div style="margin-bottom:12px">
+    <span class="tag plan">Plan — not yet built</span>
+    <span class="tag date">2026-07-11</span>
+  </div>
+  <h1>Health-Store Sync Redesign (HS-2)</h1>
+  <p class="sub">Why the app sync takes ~0.7&nbsp;MB and minutes of flash thrashing to move
+  half a megabyte — and how to make it 8× smaller, O(1) to read, and gain continuous HRV
+  along the way. Detail: <code>docs/HS_SYNC_REDESIGN_PLAN.md</code></p>
+</header>
+
+<h2><span class="n">01</span>The headline</h2>
+<p class="lead">Three independent problems, plus one large missed opportunity. Only one of
+them is the read path everybody was looking at.</p>
+
+<div class="kpi">
+  <div><div class="v bad">46,000</div><div class="k">samples stored / day</div><div class="d">should be ~6,000</div></div>
+  <div><div class="v bad">277 MB</div><div class="k">flash read per sync</div><div class="d">to move 630 KB — 440×</div></div>
+  <div><div class="v bad">~34,000</div><div class="k">file opens per sync</div><div class="d">for 78 files on disk</div></div>
+  <div><div class="v bad">1.2 days</div><div class="k">retention</div><div class="d">miss a sync → data lost</div></div>
+</div>
+
+<div class="card warn">
+  <h4>The one that matters most is not a performance bug</h4>
+  <p style="margin-bottom:0">Retention is <strong>~1.2 days</strong> because we store 46,000
+  samples/day. If the user doesn't open the app for two days, <strong>that data is gone
+  forever</strong>. This is a correctness bug hiding behind a performance bug — and it's
+  happening while we use <strong>0.9%</strong> of a 112&nbsp;MiB flash volume.</p>
+</div>
+
+<h2><span class="n">02</span>Root cause: we store the wrong things, far too often</h2>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Signal</th><th>Where</th><th>Cadence</th><th>Per day</th><th>Actually needed</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Heart rate</strong></td><td><code>data_module.c:880</code></td><td class="num">every ~3 s</td><td class="num bad">28,800</td><td class="num ok">4,320 (mean+min+max, 1/min)</td></tr>
+    <tr><td><strong>Skin temp</strong></td><td><code>hw_module.c:1338</code></td><td class="num">every 5 s</td><td class="num bad">17,280</td><td class="num ok">576 (mean+count, 1/5min)</td></tr>
+    <tr><td>Steps</td><td><code>hw_module.c:1327</code></td><td class="num">on change</td><td class="num">2–5k</td><td class="num ok">~500 (cumulative, ≤1/min)</td></tr>
+    <tr><td>Events (ECG-HR, BP, SpO₂, EDA…)</td><td>spot checks</td><td class="num">on demand</td><td class="num">~50</td><td class="num ok">~50 (keep raw)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>Skin temperature is sampled every 5 seconds.</strong> Skin temp moves over
+<em>minutes</em> — that's roughly 300× oversampled for the physiology. Heart rate every
+3 seconds is similarly beyond anything a trend consumer uses. Garmin-class devices bucket the
+day into <strong>15-minute epochs</strong>; Apple stores HR about every 5 minutes at rest.
+<strong>Nobody ships 3-second HR to the phone as the durable record.</strong></p>
+
+<div class="card note">
+  <h4>Nothing actually consumes it</h4>
+  <p style="margin-bottom:0">The live HR tile reads <strong>zbus, not the store</strong>. Beat-level
+  fidelity, where it genuinely matters, already lives in the separate <strong>Record tier</strong>
+  (ECG strips, R-R). The 3-second HR samples exist only to be written to flash and shipped
+  over BLE.</p>
+</div>
+
+<h2><span class="n">03</span>Root cause: every page rescans the log from the start</h2>
+
+<p><code>hpi_hs_read_since()</code> has <strong>no seq→position map and no <code>fs_seek</code></strong>.
+To serve <em>any</em> page it opens the oldest segment, reads <em>every</em> record, throws away
+everything at or below the cursor, and stops once it has collected 40.</p>
+
+<p style="margin-bottom:6px"><strong>Serving one 40-sample page at <code>since = 31,000</code>:</strong></p>
+<div class="seg">
+  <span class="wasted">0</span><span class="wasted">1</span><span class="wasted">2</span><span class="wasted">3</span><span class="wasted">4</span><span class="wasted">5</span><span class="wasted">6</span><span class="wasted">7</span><span class="wasted">8</span><span class="wasted">9</span><span class="wasted">10</span><span class="wasted">…</span><span class="wasted">60</span><span class="wasted">61</span><span class="wasted">62</span><span class="wasted">63</span><span class="wasted">64</span><span class="wasted">65</span><span class="wasted">66</span><span class="wasted">67</span><span class="hit">68</span>
+</div>
+<div class="legend">
+  <span><i style="background:rgba(220,38,38,.14);border-color:rgba(220,38,38,.4)"></i>opened, fully read, entirely discarded</span>
+  <span><i style="background:rgba(111,179,204,.22);border-color:var(--blue)"></i>the segment we actually wanted</span>
+</div>
+<p><strong>69 files opened and read to return 720 bytes.</strong> And all ~80 files sit in one
+flat directory, so every <code>fs_open</code> is <em>also</em> a linear metadata walk.</p>
+
+<pre>pages       = 35,088 / 40                 = 877
+record reads = Σ i·40  for i = 1..877      ≈ 15,400,000
+flash read   = 15.4M × 18 B                ≈ 277 MB   ← to move 630 KB
+file opens   ≈ 34,000                      ← for 78 files</pre>
+
+<p>The information needed to jump straight to the right byte is <em>already implicit</em> in the
+layout — <code>seq</code> is monotonic, segments are contiguous and near-fixed-size. It's simply
+never recorded or exploited.</p>
+
+<h2><span class="n">04</span>Root cause: two background jobs churn flash forever</h2>
+<p class="lead">Neither has anything to do with sync. They burn power whether or not anyone
+ever opens the app.</p>
+
+<div class="card warn">
+  <h4><code>meta</code> is rewritten every 10 seconds</h4>
+  <p style="margin-bottom:0"><code>hs_persist_meta()</code> → <code>hs_overwrite()</code> does
+  <strong>unlink + create + write</strong> on every flush that wrote data. At a 10-second flush
+  cadence that's <strong>~8,640 file rewrites per day</strong>, forever. LittleFS wear and QSPI
+  power, for a handful of bytes of cursor state.</p>
+</div>
+
+<div class="card warn">
+  <h4><code>SUMMARY</code> rescans the entire log ~8× every 5 minutes</h4>
+  <p style="margin-bottom:0"><code>hpi_hs_summary()</code> calls <code>hs_durable_scan()</code>
+  about eight times (HR today, SpO₂, temp today, temp 7-day baseline, HRV today, HRV baseline,
+  HR histogram…). Each is a <em>full</em> scan of every segment. That's roughly
+  <strong>5 MB of flash reads every 5 minutes</strong>.</p>
+</div>
+
+<h2><span class="n">05</span>The missed opportunity: we already have R-R intervals</h2>
+
+<div class="card good">
+  <h4>The MAX32664C emits R-R intervals — and nothing reads them</h4>
+  <p>The wrist hub computes <code>rtor</code> and <code>rtor_confidence</code> in its algo FIFO.
+  The driver <strong>already parses them</strong>
+  (<code>max32664c_async.c:335-340</code>). They're <strong>already in the struct</strong>
+  (<code>hpi_ppg_wr_data_t.rtor</code>). Then they are dropped on the floor.</p>
+  <p style="margin-bottom:0">Today HRV only comes from <code>ecg_sensor_sample.rtor</code>, gated on
+  <code>is_hrv_eval_active</code> — <strong>ECG only, and only when the user manually sits down and
+  takes a reading.</strong></p>
+</div>
+
+<p><strong>The PPG is already running. We're already paying its power bill</strong> to produce that
+3-second HR. R-R falls out of the same FIFO for free. We are keeping the sensor's <em>least</em>
+valuable output and discarding its <em>most</em> valuable one.</p>
+
+<h3>What R-R unlocks</h3>
+<ul>
+  <li><strong>Continuous / overnight HRV</strong> — the metric users actually care about. Whoop, Oura
+      and Garmin all derive it from PPG, not ECG.</li>
+  <li><strong>Stress</strong> — ours is EDA-only today. HRV + EDA together is substantially stronger.</li>
+  <li><strong>Recovery / readiness</strong> — impossible today.</li>
+  <li><strong>Better resting HR</strong> — R-R gives a cleaner estimate than sampled HR.</li>
+</ul>
+
+<h3>How to store it — <em>not</em> as raw samples</h3>
+<p>Raw R-R at 60 bpm is <strong>86,400 intervals/day</strong> — that would be <em>worse</em> than what
+we have now. Instead:</p>
+
+<div class="flow">
+  <div class="step">
+    <div class="t">1 · Gate hard</div>
+    <div class="b">Accept an interval only when confidence is high, <strong>on-skin</strong>, <strong>still</strong>
+    (<code>scd_state</code> + <code>activity_class</code>, both already decoded), and 300–1500 ms.
+    Motion destroys PRV.</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step">
+    <div class="t">2 · 5-min windows</div>
+    <div class="b">Compute <strong>RMSSD</strong>, <strong>SDNN</strong>, <strong>mean RR</strong> and
+    <strong>coverage %</strong> on-device. RMSSD is the robust short-window standard and the best fit
+    for PPG.</div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="step new">
+    <div class="t">3 · Store epochs</div>
+    <div class="b">~<strong>300–800 records/day</strong>, only during valid windows. Raw R-R goes to the
+    <strong>Record tier</strong> nightly if wanted (~57 KB/night).</div>
+  </div>
+</div>
+
+<div class="card note">
+  <h4>Coverage % is not optional</h4>
+  <p style="margin-bottom:0">Without it the app cannot distinguish a clean 5-minute window from a
+  noisy one, and will happily plot motion artefacts as a physiological trend. This is the difference
+  between a trustworthy HRV chart and a garbage one.</p>
+</div>
+
+<h2><span class="n">06</span>Target architecture</h2>
+<p class="lead">Three tiers, each storing what it's actually good for. Two already exist.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Tier</th><th>Holds</th><th>Rate</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Samples</strong><br><span style="color:var(--muted);font-size:13px">exists — retuned</span></td>
+        <td>epoch aggregates + sparse events</td><td class="num">~3,800/day</td><td>trends, summary, app sync</td></tr>
+    <tr><td><strong>Records</strong><br><span style="color:var(--muted);font-size:13px">exists — H-REC</span></td>
+        <td>raw waveform sessions (ECG, BioZ, <strong>R-R</strong>)</td><td class="num">episodic</td><td>research, ECG strips</td></tr>
+    <tr><td><strong>Summary</strong><br><span style="color:var(--muted);font-size:13px">exists</span></td>
+        <td>derived at-a-glance metrics</td><td class="num">on demand</td><td>UI cards, fast first paint</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>What the Samples tier stores after the change</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>Type</th><th>Epoch</th><th>Records/day</th></tr></thead>
+  <tbody>
+    <tr><td><code>HR</code> — <strong>mean + min + max</strong></td><td class="num">1 min</td><td class="num">4,320</td></tr>
+    <tr><td><code>SKIN_TEMP</code> — <strong>mean + count</strong></td><td class="num">5 min</td><td class="num">576</td></tr>
+    <tr><td><code>STEPS</code> — <strong>still cumulative</strong>, rate-limited</td><td class="num">≤1 / min</td><td class="num">~500</td></tr>
+    <tr><td><code>HRV_RMSSD</code> / <code>SDNN</code> / <code>COVERAGE</code> <span class="pill safe">new</span></td><td class="num">5 min, valid only</td><td class="num">~500</td></tr>
+    <tr><td>Events (ECG-HR, BP, SpO₂, EDA, stress)</td><td class="num">on demand</td><td class="num">~50</td></tr>
+    <tr><td style="font-weight:600">Total</td><td></td><td class="num ok">~6,000/day ≈ 108 KB</td></tr>
+  </tbody>
+</table>
+</div>
+<p>We emit <strong>min and max alongside the mean</strong>, not the mean alone. That costs 3
+records/minute for HR instead of 1 — <strong>8× instead of 12×</strong> — and it is worth every
+byte. A 10-second spike to 150&nbsp;bpm reads as <code>150</code> today; as a minute-<em>mean</em> it
+would collapse to ~110. <strong>Systematically under-reporting peak heart rate on a health device is
+not an acceptable trade.</strong></p>
+
+<h3>Pick the right statistic per signal — <em>don't</em> apply mean/min/max uniformly</h3>
+<p>Symmetry is the wrong instinct. Blanket-applying HR's mean/min/max to steps or skin temp would be
+redundant at best and <strong>meaningless at worst</strong>.</p>
+
+<div class="card note">
+  <h4>The governing rule</h4>
+  <p style="margin-bottom:0">You only need within-epoch <strong>min/max</strong> when the signal
+  varies significantly <strong><em>inside</em></strong> the epoch.</p>
+</div>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Signal kind</th><th>Example</th><th>Right statistic</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Spiky</strong> — peaks are real</td><td><code>HR</code></td>
+      <td class="ok">mean + min + max</td>
+      <td>Can go 70→150→70 <em>inside one minute</em>. The mean destroys the peak.</td>
+    </tr>
+    <tr>
+      <td><strong>Cumulative counter</strong></td><td><code>STEPS</code>, <code>ENERGY</code></td>
+      <td class="ok">last value in window</td>
+      <td>Monotonic within a day, so max ≡ last and min ≡ first (both redundant), and the
+      <strong>mean of a monotonic ramp is meaningless</strong> — it's the midpoint of the ramp, not
+      "average steps".</td>
+    </tr>
+    <tr>
+      <td><strong>Slow continuous</strong> — the <em>level</em> matters</td><td><code>SKIN_TEMP</code></td>
+      <td class="ok">mean + count</td>
+      <td>Moves over <em>minutes</em>, so within a 5-min window the spread is a fraction of a degree:
+      <strong>the mean faithfully represents the whole window.</strong> A nightly min or daily max is
+      recoverable from the <em>series of means</em> — within-epoch extremes aren't needed.</td>
+    </tr>
+    <tr>
+      <td><strong>Sparse event</strong></td><td><code>BP</code>, SpO₂ spot</td>
+      <td class="ok">keep raw — no epoch</td>
+      <td>Already only tens per day.</td>
+    </tr>
+    <tr>
+      <td><strong>Variability metric</strong></td><td><code>HRV_*</code></td>
+      <td class="ok">window + coverage</td>
+      <td>The window <em>is</em> the measurement.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<div class="card warn">
+  <h4>Skin temp gets no min/max — and it's not just redundancy, it would be harmful</h4>
+  <p>A within-epoch temp <em>max</em> would preferentially capture <strong>artifacts</strong> —
+  contact pressure, sun, the watch coming off — not physiology. Nobody asks "what was my highest skin
+  temperature today?", and if they did, the honest answer would be noise.</p>
+  <p style="margin-bottom:0">The product uses <strong>deviation from baseline</strong>, which wants a
+  <em>robust central estimate</em>, not an extreme. Shipping a <code>TEMP_MAX</code> that <em>looks</em>
+  meaningful but is artifact-dominated is worse than not shipping one. Cost isn't the objection (576
+  extra records/day is nothing) — <strong>meaning</strong> is.</p>
+</div>
+
+<div class="card warn">
+  <h4>⚠️ The midnight step reset must force-flush the epoch</h4>
+  <p><code>STEPS</code> is cumulative and <strong>resets to 0 at local midnight</strong>. Today every
+  <em>change</em> is recorded, so the reset appears as <code>8000</code> → <code>0</code> and the day's
+  final total survives.</p>
+  <p><strong>Naively rate-limiting to 1/min would silently lose it.</strong> If the reset falls inside a
+  window and we emit only the last value, we emit <code>0</code> — and the day's final step count is
+  <strong>gone forever</strong>.</p>
+  <p style="margin-bottom:0">The aggregator must <strong>force-flush on any decrease</strong>, emitting
+  the pre-reset peak before the counter rolls. This is a bug we would be <em>introducing</em>, and it
+  exists only because we are rate-limiting.</p>
+</div>
+
+<div class="card note">
+  <h4>Validate the epoch lengths — don't trust the reasoning above</h4>
+  <p style="margin-bottom:0">1 min for HR and 5 min for temp rest on an <em>assumption</em> about how
+  much each signal moves within a window. <strong>Measure it:</strong> instrument the aggregator to log
+  within-epoch spread (max − min) over a day of real wear. If within-minute HR spread is routinely
+  small, HR could go to a 5-minute epoch and save another 5×. If within-5-minute <em>temp</em> spread
+  turns out large, my "temp is slow" assumption is wrong and temp needs min/max after all. Cheap
+  experiment; it either confirms the design or catches a lossy one.</p>
+</div>
+
+<h2><span class="n">07</span>Fixing the read path: arithmetic, not search</h2>
+
+<p>Roll segments at a <strong>fixed record count</strong> instead of "≥ 8192 bytes after a
+variable-size batch". Then position is pure arithmetic — <strong>no index file, no RAM index,
+nothing to persist or rebuild</strong>:</p>
+
+<pre>seg_idx = (seq - 1) / HS_SEG_RECORDS;                    // which file
+offset  = ((seq - 1) % HS_SEG_RECORDS) * 18;             // where in it</pre>
+
+<p style="margin-bottom:6px"><strong>The same page at <code>since = 31,000</code>, after the fix:</strong></p>
+<div class="seg">
+  <span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>…</span><span>60</span><span>61</span><span>62</span><span>63</span><span>64</span><span>65</span><span>66</span><span>67</span><span class="hit">68</span>
+</div>
+<p>One <code>fs_open</code>, one <code>fs_seek</code>, one <code>fs_read</code>.
+<strong>277 MB → the payload size. 34,000 opens → one per page.</strong></p>
+
+<div class="card note">
+  <h4>Subtle trap worth writing down</h4>
+  <p style="margin-bottom:0"><code>hs_flush()</code> calls <code>hpi_hs_read_since()</code> as its
+  <em>own</em> source of unflushed samples. Any change to the read path must not let the flusher
+  re-read and re-append what it already wrote. It can't — the scan only yields
+  <code>seq &gt; since_seq</code>, and segments only ever hold <code>&lt;= s_flushed_seq</code> — but the
+  invariant is non-obvious and must stay commented. This nearly bit the cold-ring fix.</p>
+</div>
+
+<h2><span class="n">08</span>Transfer: whole segments, not scattered pages</h2>
+
+<p>A rolled segment is <strong>immutable, fixed-size, and self-decodable</strong> (just packed
+records). It's already the right unit of transfer — it just isn't addressable as one.</p>
+
+<div class="flow">
+  <div class="step">
+    <div class="t">Live tail</div>
+    <div class="b"><code>SYNC</code> — small pages from the <strong>RAM ring</strong>. Hot, no flash
+    I/O at all. Unchanged.</div>
+  </div>
+  <div class="arrow">+</div>
+  <div class="step new">
+    <div class="t">Backlog</div>
+    <div class="b"><code>SEGS {idx, off, len}</code> — fetch whole segments. One <code>fs_open</code>
+    per segment, sequential reads, handle cached across chunks.</div>
+  </div>
+  <div class="arrow">=</div>
+  <div class="step">
+    <div class="t">Client</div>
+    <div class="b">Caches by <strong>segment index</strong>. A rolled segment never changes, so
+    "already have it? skip" is safe <em>forever</em>.</div>
+  </div>
+</div>
+
+<p>This is the old per-day-file model — <em>"send the whole file, skip the ones you already have"</em>
+— but keyed on <strong>segment index instead of date</strong>. Same benefit, without needing
+RTC-aligned day boundaries or breaking the seq cursor. And the app <strong>already has this exact
+code path</strong>: it's how <code>RECORDS get</code> works.</p>
+<p><strong>Full-sync file opens: ~34,000 → ~10.</strong></p>
+
+<h2><span class="n">09</span>The plan</h2>
+<p class="lead">Ordered by value ÷ risk. <strong>P2, P5 and P6 are firmware-only.</strong> P1 is
+wire-compatible but needs a small app change to stay <em>correct</em> — see §11.</p>
+
+<div class="card" style="padding:8px 22px">
+  <div class="phase">
+    <div class="id">P1</div>
+    <div class="body">
+      <div class="h">Ingest epoch aggregation</div>
+      <div class="m">Accumulate between the zbus listeners and <code>hpi_hs_record()</code>; emit
+      <strong>the right statistic per signal</strong> (§6) — not a blanket mean/min/max. Existing type
+      ids keep carrying the mean, so the app's charts keep rendering. <strong>Steps stay cumulative</strong>,
+      with a force-flush on the midnight reset. Wire-compatible — but <em>not</em> semantically
+      transparent: see §11.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill app">small app change</span><span class="pill safe">no schema bump</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P2</div>
+    <div class="body">
+      <div class="h">O(1) seek — fixed-count segments</div>
+      <div class="m">Cap each flush write at the segment boundary. Position becomes arithmetic.
+      Kills the O(n²) rescan outright.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill safe">no app change</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P5</div>
+    <div class="body">
+      <div class="h">Kill the background churn</div>
+      <div class="m">Persist <code>meta</code> on segment roll + a slow timer, not every 10 s. Make
+      <code>SUMMARY</code> incremental instead of 8 full-log scans every 5 minutes.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill safe">no app change</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P3</div>
+    <div class="body">
+      <div class="h">Continuous R-R → HRV epochs</div>
+      <div class="m">Plumb the wrist hub's <code>rtor</code>, gate on confidence/contact/stillness,
+      compute RMSSD + SDNN + coverage in 5-minute windows. Feed HRV into stress alongside EDA.
+      New product capability.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill app">app: new type ids</span><span class="pill safe">additive — non-breaking</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P6</div>
+    <div class="body">
+      <div class="h">Retention bump</div>
+      <div class="m">Free once the data is 12× smaller. A year is ~22 MB against a 112 MiB volume.
+      Removes "missed a sync = data lost" entirely.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill safe">no app change</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P4</div>
+    <div class="body">
+      <div class="h">Bulk whole-segment fetch (<code>SEGS</code>)</div>
+      <div class="m">New command mirroring <code>RECORDS get</code>. Client caches immutable segments
+      by index. Do it when the app team has capacity.</div>
+      <div class="pills"><span class="pill fw">firmware</span><span class="pill app">app work</span></div>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="id">P7</div>
+    <div class="body">
+      <div class="h">Wire compression — <em>held in reserve</em></div>
+      <div class="m">Gorilla-style delta-of-delta timestamps, drop the derivable <code>seq</code>,
+      varint values → 18 B/sample down to ~6. <strong>Probably never needed</strong>: after P1 the data
+      is already 12× smaller and this is the only phase that breaks the wire.</div>
+      <div class="pills"><span class="pill brk">breaks schema</span></div>
+    </div>
+  </div>
+</div>
+
+<h2><span class="n">10</span>Before / after</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Metric</th><th>Today</th><th>P1 + P2</th><th>+ P4</th></tr></thead>
+  <tbody>
+    <tr><td>Samples / day</td><td class="num bad">46,000</td><td class="num ok">6,000</td><td class="num ok">6,000</td></tr>
+    <tr><td>Daily sync payload</td><td class="num bad">830 KB</td><td class="num ok">~108 KB</td><td class="num ok">~108 KB</td></tr>
+    <tr><td>Flash read, full sync</td><td class="num bad">277 MB</td><td class="num ok">~108 KB</td><td class="num ok">~108 KB</td></tr>
+    <tr><td>File opens, full sync</td><td class="num bad">~34,000</td><td class="num ok">~140</td><td class="num ok">~13</td></tr>
+    <tr><td>Round trips, daily sync</td><td class="num">877</td><td class="num ok">~140</td><td class="num ok">~140</td></tr>
+    <tr><td>Retention</td><td class="num bad">1.2 days</td><td class="num ok">~10 days</td><td class="num ok">months (P6)</td></tr>
+    <tr><td>Background writes / day</td><td class="num bad">~8,640</td><td class="num ok">~300</td><td class="num ok">~300</td></tr>
+    <tr><td><code>SUMMARY</code> cost</td><td class="num bad">5 MB / 5 min</td><td class="num ok">O(1) (P5)</td><td class="num ok">O(1)</td></tr>
+    <tr><td>HRV / stress</td><td class="num bad">manual ECG only</td><td class="num">—</td><td class="num ok">continuous (P3)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2><span class="n">11</span>Type registry &amp; wire fields (as-built)</h2>
+<p class="lead">The 18-byte record is unchanged. What changed is which types are emitted, how often,
+and what a sample <em>means</em>. New ids are additive — old clients skip them.</p>
+
+<h3>Wire record — 18 bytes, packed little-endian</h3>
+<pre>struct.unpack('&lt;IqBBi', rec)     # seq, ts_utc, type, quality, value
+
+seq      uint32   4 B   monotonic per-device sequence — the sync cursor
+ts_utc   int64    8 B   Unix seconds (UTC). On an EPOCH record: END of the window
+type     uint8    1 B   metric type id (below)
+quality  uint8    1 B   quality/context bitmask (below)
+value    int32    4 B   fixed-point — real value = value / scale</pre>
+
+<h3>Types — <code>total</code> is now <strong>19</strong> (was 16); <code>TYPES</code> pages 5 per call</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>id</th><th>key</th><th>unit</th><th>scale</th><th>class</th><th>epoch</th><th>meaning</th></tr></thead>
+  <tbody>
+    <tr><td class="num">0x01</td><td><code>hr</code></td><td>bpm</td><td class="num">1</td><td>D</td><td class="num bad">1 min</td><td><strong>MEAN HR over the window</strong> — was instantaneous</td></tr>
+    <tr><td class="num">0x02</td><td><code>resting_hr</code></td><td>bpm</td><td class="num">1</td><td>D</td><td class="num">—</td><td>derived</td></tr>
+    <tr><td class="num">0x03</td><td><code>ecg_hr</code></td><td>bpm</td><td class="num">1</td><td>E</td><td class="num">—</td><td>ECG spot check (raw, unchanged)</td></tr>
+    <tr><td class="num">0x04</td><td><code>hr_min</code> <span class="pill safe">new</span></td><td>bpm</td><td class="num">1</td><td>D</td><td class="num">1 min</td><td><strong>min HR in window</strong> — use for daily lows</td></tr>
+    <tr><td class="num">0x05</td><td><code>hr_max</code> <span class="pill safe">new</span></td><td>bpm</td><td class="num">1</td><td>D</td><td class="num">1 min</td><td><strong>max HR in window</strong> — use for daily PEAKS</td></tr>
+    <tr><td class="num">0x10</td><td><code>spo2</code></td><td>%</td><td class="num">1</td><td>D</td><td class="num">—</td><td>raw, unchanged</td></tr>
+    <tr><td class="num">0x20</td><td><code>skin_temp</code></td><td>degC</td><td class="num">100</td><td>D</td><td class="num bad">5 min</td><td><strong>MEAN skin temp over the window</strong></td></tr>
+    <tr><td class="num">0x21</td><td><code>skin_temp_dev</code></td><td>degC</td><td class="num">100</td><td>D</td><td class="num">—</td><td>deviation vs baseline (derived)</td></tr>
+    <tr><td class="num">0x22</td><td><code>skin_temp_cnt</code> <span class="pill safe">new</span></td><td>count</td><td class="num">1</td><td>D</td><td class="num">5 min</td><td><strong>samples backing the mean</strong> — reject sparse windows</td></tr>
+    <tr><td class="num">0x30</td><td><code>bp_sys</code></td><td>mmHg</td><td class="num">1</td><td>E</td><td class="num">—</td><td>raw, unchanged</td></tr>
+    <tr><td class="num">0x31</td><td><code>bp_dia</code></td><td>mmHg</td><td class="num">1</td><td>E</td><td class="num">—</td><td>raw, unchanged</td></tr>
+    <tr><td class="num">0x40</td><td><code>steps</code></td><td>count</td><td class="num">1</td><td>C</td><td class="num">≤1/min</td><td class="ok"><strong>CUMULATIVE — semantics UNCHANGED</strong></td></tr>
+    <tr><td class="num">0x41</td><td><code>active_energy</code></td><td>kcal</td><td class="num">1</td><td>C</td><td class="num">≤1/min</td><td>cumulative (no producer yet)</td></tr>
+    <tr><td class="num">0x50</td><td><code>hrv_sdnn</code></td><td>ms</td><td class="num">10</td><td>D</td><td class="num">—</td><td>today: ECG spot check only</td></tr>
+    <tr><td class="num">0x51</td><td><code>hrv_rmssd</code></td><td>ms</td><td class="num">10</td><td>D</td><td class="num">—</td><td>reserved — continuous HRV lands in P3</td></tr>
+    <tr><td class="num">0x52</td><td><code>hrv_lfhf</code></td><td>ratio</td><td class="num">100</td><td>D</td><td class="num">—</td><td>derived</td></tr>
+    <tr><td class="num">0x60</td><td><code>eda_scl</code></td><td>uS</td><td class="num">100</td><td>D</td><td class="num">—</td><td>raw, unchanged</td></tr>
+    <tr><td class="num">0x61</td><td><code>eda_scr_rate</code></td><td>/min</td><td class="num">1</td><td>D</td><td class="num">—</td><td>raw, unchanged</td></tr>
+    <tr><td class="num">0x62</td><td><code>stress</code></td><td>index</td><td class="num">1</td><td>D</td><td class="num">—</td><td>derived</td></tr>
+  </tbody>
+</table>
+</div>
+<p style="color:var(--muted);font-size:13.5px">class: <strong>D</strong> discrete · <strong>C</strong> cumulative · <strong>E</strong> event. Real value = <code>value / scale</code>.</p>
+
+<h3><code>quality</code> bitmask</h3>
+<div class="scroll">
+<table>
+  <thead><tr><th>bit</th><th>flag</th><th>meaning</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1&lt;&lt;0</td><td><code>VALID</code></td><td>timestamp valid (RTC synced) + in range. <strong>Always set</strong> — the store drops anything else.</td></tr>
+    <tr><td class="num">1&lt;&lt;1</td><td><code>ON_SKIN</code></td><td>sensor reported skin contact</td></tr>
+    <tr><td class="num">1&lt;&lt;2</td><td><code>LOW_MOTION</code></td><td>IMU below the motion threshold</td></tr>
+    <tr><td class="num">1&lt;&lt;3</td><td><code>HIGH_CONF</code></td><td>sensor/algo confidence high</td></tr>
+    <tr><td class="num">1&lt;&lt;4</td><td><code>DURING_SLEEP</code></td><td>captured in a detected sleep window</td></tr>
+    <tr><td class="num">1&lt;&lt;5</td><td><code>MANUAL</code></td><td>user-initiated spot check</td></tr>
+  </tbody>
+</table>
+</div>
+<div class="card note">
+  <h4>Quality on an epoch record is the AND of the window</h4>
+  <p style="margin-bottom:0">Conservative by design: <code>ON_SKIN</code> set means the watch was on-skin
+  for the <em>whole</em> window, not just part of it.</p>
+</div>
+
+<h3><code>HELLO</code> fields</h3>
+<pre>{ schema, group, dev, uid, head, oldest, types }
+
+uid      per-unit id (hex of the SoC device id) — KEY YOUR STORE ON THIS,
+         not on `dev`, which is the same class string on every watch
+oldest   oldest seq still retrievable. oldest &gt; head  =&gt;  store is empty.
+         cursor &lt; oldest-1  =&gt;  you missed samples; resume at oldest-1
+head     newest seq the store holds</pre>
+
+<h3><code>SUMMARY</code> fields — shape unchanged, <code>hr_min</code>/<code>hr_max</code> now exact</h3>
+<pre>day_start_ts
+hr_resting + hr_resting_valid
+hr_min / hr_avg / hr_max          &lt;- computed from the TRUE epoch extremes
+spo2_avg / spo2_min + spo2_valid
+temp_dev_x100 + temp_dev_valid + temp_baseline_nights
+hrv_sdnn_x10 / hrv_sdnn_base_x10 + hrv_valid
+steps_today, energy_today_kcal
+stress_last + stress_valid</pre>
+
+<h2><span class="n">12</span>What P1 actually breaks</h2>
+<p class="lead">An earlier draft of this plan claimed P1 needed <em>no app change</em>. That was
+wrong. The distinction matters, because this is the kind of error that surfaces as a user-visible
+regression months later.</p>
+
+<div class="scroll">
+<table>
+  <thead><tr><th>Claim</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>Wire format unchanged — 18 B, same fields, same commands, same cursor</td><td class="ok">✅ true</td></tr>
+    <tr><td>App keeps working unmodified — parses, syncs, dedups, doesn't crash</td><td class="ok">✅ true</td></tr>
+    <tr><td>No schema bump (new type ids are additive)</td><td class="ok">✅ true</td></tr>
+    <tr><td><strong>App stays <em>correct</em> unmodified</strong></td><td class="bad">❌ FALSE</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="card warn">
+  <h4>Peak heart rate would silently regress</h4>
+  <p>An <code>HR</code> sample changes meaning: from <em>"reading at this instant"</em> to <em>"mean
+  over the minute ending here"</em>. Anything the app derives <strong>from the raw series</strong> —
+  daily max, percentiles, HR zones — shifts <strong>downward and systematically</strong>. A
+  10-second spike to 150&nbsp;bpm is <code>150</code> today and ~110 as a minute-mean.</p>
+  <p style="margin-bottom:0">"Nothing breaks" is not the same as "nothing changes". The app keeps
+  <em>running</em>; it stops being <em>right</em>.</p>
+</div>
+
+<div class="card good">
+  <h4>The fix — pick one</h4>
+  <ul style="margin-bottom:0">
+    <li><strong>(a) Read HR min/max from <code>SUMMARY</code></strong> — <code>hr_min</code> /
+    <code>hr_avg</code> / <code>hr_max</code> already exist in <code>struct hpi_hs_summary</code> and are
+    computed on-device from the min/max epochs, so they stay <em>exact</em>. If the app already uses
+    <code>SUMMARY</code> for its cards this may be <strong>zero work</strong> — as long as it does not
+    recompute peaks from the mean series.</li>
+    <li><strong>(b) Adopt the new <code>HR_MIN</code> / <code>HR_MAX</code> type ids</strong> — additive,
+    harmlessly skipped by old builds, and lets the app draw a proper band around the mean.</li>
+  </ul>
+</div>
+
+<h3>Also changing under P1</h3>
+<ul>
+  <li><strong>Density drops ~20×</strong> (3 s → 60 s). Any "no sample in 30 s ⇒ stale/disconnected"
+  logic will misfire.</li>
+  <li><strong><code>ts_utc</code> on an epoch = <em>end</em> of the window</strong>, not an instant of
+  measurement.</li>
+  <li><strong><code>STEPS</code> is unchanged — still cumulative.</strong> An earlier draft proposed
+  per-minute deltas; that is a hard semantic break (the app would plot deltas as a running total) and
+  has been dropped. We simply rate-limit recording to ≤1/min.</li>
+</ul>
+
+<div class="card note">
+  <h4>Still open: does anything consume 3-second HR?</h4>
+  <p style="margin-bottom:0">As far as I can trace, <strong>no</strong> — the live tile reads zbus, not
+  the store, and beat-level data already lives in the Record tier. But this needs a
+  <strong>yes/no from the app team before P1 lands</strong>. If they have built on raw density, P1 keeps
+  a high-resolution window for the last N hours and epochs everything older.</p>
+</div>
+
+<footer>
+  <p><strong>Sources.</strong>
+  <a href="https://www.fitrockr.com/research/">Fitrockr — 15-minute epoch model</a> ·
+  <a href="https://hubble.com/community/guides/how-wearable-devices-use-ble-what-firmware-engineers-can-learn-from-fitness-trackers/">Hubble — BLE in wearables, PPG duty-cycling</a> ·
+  <a href="https://dl.acm.org/doi/10.14778/2824032.2824078">Gorilla (VLDB 2015) — delta-of-delta + XOR</a> ·
+  <a href="https://www.tigerdata.com/blog/time-series-compression-algorithms-explained">Time-series compression, explained</a></p>
+  <p>HealthyPi Move firmware · plan document, nothing built yet · see
+  <code>docs/HS_SYNC_REDESIGN_PLAN.md</code> for the full work breakdown.</p>
+</footer>
+
+</div>
+</body>
+</html>
