@@ -130,49 +130,80 @@ class HpiHs {
     return out;
   }
 
+  /// Candidate CBOR keys for the SYNC page-size argument.
+  ///
+  /// The *response* names the record count `n`, but the request's count key was
+  /// never pinned (design doc §10). If the firmware doesn't recognise the key we
+  /// send, the count defaults to 0 and it politely returns an empty page — a
+  /// silent no-op. So we probe: send each candidate until one yields records,
+  /// then remember it for the rest of the session.
+  static const List<String> _countKeys = ['max', 'n', 'count', 'limit'];
+
+  /// The count key this device actually honours, learned on first success.
+  String? _countKey;
+
   /// `SYNC` — the workhorse. Pull one page of samples from [since].
   Future<HsSyncPage> sync({required int since, int max = 256}) async {
-    final rsp = _check(await client.send(
-      op: SmpOp.readReq,
-      group: group,
-      id: cmdSync,
-      payload: {'since': since, 'max': max},
-    ));
-    // The blob key is not fully pinned across firmware revisions (design doc
-    // §10). Accept the documented `recs` plus the observed aliases, and fall
-    // back to the first byte-blob value in the map, so a renamed key degrades
-    // to "works" rather than to a silent empty page.
-    Object? recs = rsp.payload['recs'];
-    recs ??= rsp.payload['samples'] ?? rsp.payload['data'] ?? rsp.payload['recs_b'];
+    // Once learned, stop probing.
+    final candidates = _countKey != null ? [_countKey!] : _countKeys;
+
+    HsSyncPage? empty;
+    for (final key in candidates) {
+      final rsp = _check(await client.send(
+        op: SmpOp.readReq,
+        group: group,
+        id: cmdSync,
+        payload: {'since': since, key: max},
+      ));
+
+      final bytes = _extractRecs(rsp.payload);
+      final samples = HsSample.listFromBytes(bytes);
+      final page = HsSyncPage(
+        samples: samples,
+        next: (rsp.payload['next'] as num?)?.toInt() ?? since,
+        more: (rsp.payload['more'] as bool?) ?? false,
+      );
+
+      if (samples.isNotEmpty) {
+        if (_countKey == null) {
+          _countKey = key;
+          _logMsg('[HPI_HS] SYNC page-size key = "$key"');
+        }
+        return page;
+      }
+
+      _logMsg('[HPI_HS] SYNC(since=$since, $key=$max) -> 0 samples. '
+          'n=${rsp.payload['n']} next=${rsp.payload['next']} '
+          'more=${rsp.payload['more']} bytes=${bytes.length} '
+          'keys=${rsp.payload.keys.toList()}');
+      empty ??= page;
+    }
+
+    // Every candidate came back empty: either the store really has nothing new,
+    // or the record layout differs. The caller compares against `head` to tell
+    // those apart.
+    return empty!;
+  }
+
+  /// Pull the packed record blob out of a SYNC response. `recs` is the
+  /// documented key; the aliases and the byte-blob fallback keep a renamed key
+  /// from degrading into a silent empty page. Note the CBOR decoder hands back a
+  /// `Uint8Buffer` (a `List<int>`), not a `Uint8List`.
+  Uint8List _extractRecs(Map<String, Object?> payload) {
+    Object? recs = payload['recs'] ??
+        payload['samples'] ??
+        payload['data'] ??
+        payload['recs_b'];
     if (recs == null) {
-      for (final v in rsp.payload.values) {
+      for (final v in payload.values) {
         if (v is Uint8List || v is List<int>) {
           recs = v;
           break;
         }
       }
     }
-
-    final bytes = recs is Uint8List
-        ? recs
-        : Uint8List.fromList(((recs as List?) ?? const []).cast<int>());
-
-    final samples = HsSample.listFromBytes(bytes);
-    if (samples.isEmpty) {
-      // Empty page while the caller believes there is data is almost always a
-      // wire-shape mismatch, not an empty store — dump the shape so it can be
-      // pinned instead of silently syncing nothing.
-      _logMsg('[HPI_HS] SYNC(since=$since,max=$max) returned no samples. '
-          'payload keys=${rsp.payload.keys.toList()} '
-          'types=${rsp.payload.map((k, v) => MapEntry(k, v.runtimeType))} '
-          'bytes=${bytes.length}');
-    }
-
-    return HsSyncPage(
-      samples: samples,
-      next: (rsp.payload['next'] as num?)?.toInt() ?? since,
-      more: (rsp.payload['more'] as bool?) ?? false,
-    );
+    if (recs is Uint8List) return recs;
+    return Uint8List.fromList(((recs as List?) ?? const []).cast<int>());
   }
 
   /// Convenience: fully drain from [since] to head, page by page.
