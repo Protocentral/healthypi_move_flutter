@@ -172,11 +172,18 @@ class HealthStoreSyncManager {
     var pages = 0;
 
     onStatus('Syncing samples…');
+    var emptyPage = false;
     while (true) {
       final since = cursor < 0 ? 0 : cursor;
       final page = await hs.sync(since: since, max: _pageSize);
 
-      if (page.samples.isEmpty) break;
+      if (page.samples.isEmpty) {
+        // Distinguish "nothing new" from "the device has data but we decoded
+        // none" — the latter is a wire-shape mismatch and must not be reported
+        // as a successful, up-to-date sync.
+        emptyPage = cursor < head;
+        break;
+      }
 
       // Commit the page AND advance the persisted cursor in one transaction.
       // Re-inserting a seq is a no-op (PRIMARY KEY (device, seq)), so a retried
@@ -230,6 +237,23 @@ class HealthStoreSyncManager {
       _emit(0.95, SyncState.parsing, 'Deriving trends…');
       final rows = await db.deriveTrends(device, sinceUtc: earliestTs);
       debugPrint('[HS-Sync] derived $rows trend rows');
+    }
+
+    // The device says it holds samples up to `head`, we hold up to `cursor`, and
+    // yet SYNC handed back nothing decodable. That is a wire-shape mismatch, not
+    // an up-to-date store — say so instead of reporting a green success.
+    if (totalStored == 0 && emptyPage) {
+      final msg = 'Device reports samples up to seq $head but SYNC returned '
+          'none we could decode (stored up to $cursor). Wire shape mismatch — '
+          'see the [HPI_HS] SYNC log line for the payload keys.';
+      debugPrint('[HS-Sync] $msg');
+      _emit(0, SyncState.error, 'Sync returned no samples');
+      return SyncResult(
+        success: false,
+        message: msg,
+        recordCounts: const {},
+        duration: DateTime.now().difference(started),
+      );
     }
 
     await db.updateLastSyncTime();

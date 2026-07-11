@@ -138,12 +138,38 @@ class HpiHs {
       id: cmdSync,
       payload: {'since': since, 'max': max},
     ));
-    final recs = rsp.payload['recs'];
+    // The blob key is not fully pinned across firmware revisions (design doc
+    // §10). Accept the documented `recs` plus the observed aliases, and fall
+    // back to the first byte-blob value in the map, so a renamed key degrades
+    // to "works" rather than to a silent empty page.
+    Object? recs = rsp.payload['recs'];
+    recs ??= rsp.payload['samples'] ?? rsp.payload['data'] ?? rsp.payload['recs_b'];
+    if (recs == null) {
+      for (final v in rsp.payload.values) {
+        if (v is Uint8List || v is List<int>) {
+          recs = v;
+          break;
+        }
+      }
+    }
+
     final bytes = recs is Uint8List
         ? recs
         : Uint8List.fromList(((recs as List?) ?? const []).cast<int>());
+
+    final samples = HsSample.listFromBytes(bytes);
+    if (samples.isEmpty) {
+      // Empty page while the caller believes there is data is almost always a
+      // wire-shape mismatch, not an empty store — dump the shape so it can be
+      // pinned instead of silently syncing nothing.
+      _logMsg('[HPI_HS] SYNC(since=$since,max=$max) returned no samples. '
+          'payload keys=${rsp.payload.keys.toList()} '
+          'types=${rsp.payload.map((k, v) => MapEntry(k, v.runtimeType))} '
+          'bytes=${bytes.length}');
+    }
+
     return HsSyncPage(
-      samples: HsSample.listFromBytes(bytes),
+      samples: samples,
       next: (rsp.payload['next'] as num?)?.toInt() ?? since,
       more: (rsp.payload['more'] as bool?) ?? false,
     );
