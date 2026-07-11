@@ -11,6 +11,7 @@ import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import 'scr_dfu_new.dart';
+import 'scr_recordings.dart';
 import 'scr_settings_new.dart';
 
 /// Device page (handoff 1h). Reads the paired device, live connection status,
@@ -291,6 +292,14 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
         supporting: 'Current ${device.firmwareVersion ?? "unknown"}',
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => ScrDFUNew(deviceMacAddress: device.macAddress))),
+      ),
+      HpiListRow(
+        icon: Symbols.receipt_long,
+        iconColor: HpiColors.steps,
+        title: 'Recordings',
+        supporting: 'Long PPG · GSR · IMU sessions',
+        onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ScrRecordings())),
       ),
       HpiListRow(
         icon: Symbols.schedule,
