@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/device_info.dart';
@@ -11,18 +12,29 @@ class DeviceManager {
   static const String _legacyPairedStatusKey = 'pairedStatus';
   static const String _legacyDeviceNameKey = 'paired_device_name';
   static const String _legacyMacFileName = 'paired_device_mac.txt';
-  
+
+  /// Bumped whenever the paired device changes (pair, update, unpair).
+  ///
+  /// Pairing state is read once in `initState` by long-lived screens (the shell
+  /// keeps its tabs alive in an IndexedStack), so without this they'd keep
+  /// showing "No watch paired" after a pair completed on another screen. Screens
+  /// listen and re-read; the value itself is just a revision counter.
+  static final ValueNotifier<int> pairingRevision = ValueNotifier<int>(0);
+
+  static void _notifyPairingChanged() => pairingRevision.value++;
+
   /// Save paired device information
   static Future<void> savePairedDevice(DeviceInfo deviceInfo) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = jsonEncode(deviceInfo.toJson());
     await prefs.setString(_deviceInfoKey, jsonString);
-    
+
     // Also maintain legacy format for backward compatibility during transition
     await prefs.setString(_legacyPairedStatusKey, 'paired');
     await prefs.setString(_legacyDeviceNameKey, deviceInfo.deviceName);
-    
+
     print('DeviceManager: Saved device info for ${deviceInfo.displayName}');
+    _notifyPairingChanged();
   }
   
   /// Get paired device information
@@ -153,6 +165,7 @@ class DeviceManager {
     }
     
     print('DeviceManager: Device unpaired successfully');
+    _notifyPairingChanged();
   }
   
   /// Check if a device is currently paired

@@ -37,12 +37,16 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
   void initState() {
     super.initState();
     _cm.addListener(_onLink);
+    // The shell keeps this tab alive in an IndexedStack, so initState runs once
+    // — before any pairing. Re-read whenever the paired device changes.
+    DeviceManager.pairingRevision.addListener(_load);
     _load();
   }
 
   @override
   void dispose() {
     _cm.removeListener(_onLink);
+    DeviceManager.pairingRevision.removeListener(_load);
     _syncSub?.cancel();
     super.dispose();
   }

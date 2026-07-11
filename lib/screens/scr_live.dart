@@ -98,12 +98,15 @@ class _ScrLiveState extends State<ScrLive> {
   void initState() {
     super.initState();
     _cm.addListener(_onLink);
+    // Kept alive in the shell's IndexedStack — re-resolve when pairing changes.
+    DeviceManager.pairingRevision.addListener(_init);
     _init();
   }
 
   @override
   void dispose() {
     _cm.removeListener(_onLink);
+    DeviceManager.pairingRevision.removeListener(_init);
     for (final s in _subs.values) {
       s.cancel();
     }
