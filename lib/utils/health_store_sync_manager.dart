@@ -21,15 +21,20 @@ import 'health_store_client.dart';
 /// Keeps the [SyncProgress] / [SyncResult] / [progressStream] surface of the
 /// legacy manager, so the Home and Device screens are unchanged.
 ///
-/// ## The destructive part
+/// ## ACK
 ///
-/// `ackDurablyStored(seq)` tells the device it may **drop** everything up to
-/// `seq`. The loop below therefore only ever acks a cursor that
-/// [DatabaseHelper.insertSamplesPage] has already committed to SQLite — that
-/// method writes the rows and advances the persisted cursor in one transaction
-/// and returns the highest seq it actually stored. We never ack `hello.head`,
-/// and we never use `syncAll()` (it buffers pages in memory, so its cursor is
-/// not durable).
+/// **On current firmware `hpi_hs_ack()` is a no-op** — it does *not* free flash.
+/// Retention is size-based only (H4, as designed). So do not expect ACK to
+/// reclaim space, and do not treat a successful ACK as "the device dropped it".
+///
+/// We still ack strictly *after* the data is durable, and we keep that
+/// discipline deliberately: the API contract says an ack may drop data, and a
+/// future firmware could start honouring it. The loop only ever acks a cursor
+/// that [DatabaseHelper.insertSamplesPage] has already committed to SQLite —
+/// that method writes the rows and advances the persisted cursor in one
+/// transaction and returns the highest seq it actually stored. We never ack
+/// `hello.head`, and we never use `syncAll()` (it buffers pages in memory, so
+/// its cursor is not durable).
 class HealthStoreSyncManager {
   HealthStoreSyncManager._();
   static final HealthStoreSyncManager instance = HealthStoreSyncManager._();
@@ -135,9 +140,17 @@ class HealthStoreSyncManager {
     final hs = client.hs!;
     final hello = client.hello!;
 
-    // The device serial is the key for the raw store — stable across OSes,
-    // unlike the BLE id (a CoreBluetooth UUID on Apple, a MAC on Android).
-    final device = hello.dev;
+    // Key the raw store on HELLO.uid — the per-unit device id. `dev` is only a
+    // model string ("healthypi-move"), identical on every watch, so keying on it
+    // would collide two devices onto one (device, seq) space. Stable across
+    // OSes, unlike the BLE id (a CoreBluetooth UUID on Apple, a MAC on Android).
+    final device = hello.storeKey;
+
+    // Re-key anything stored under the old model-string key (pre-uid builds).
+    // No-op once done, and a no-op on a store that never synced.
+    if (hello.uid.isNotEmpty && hello.dev.isNotEmpty && hello.dev != device) {
+      await db.rekeyHealthStoreDevice(hello.dev, device);
+    }
 
     onStatus('Reading registry…');
     _emit(0.06, SyncState.downloading, 'Reading registry…');
@@ -211,7 +224,8 @@ class HealthStoreSyncManager {
       totalStored += page.samples.length;
       pages++;
 
-      // ── Only now is it safe to let the device drop this data. ──
+      // Ack only what is already durable. (A no-op on current firmware — it
+      // does not free flash — but the ordering is the contract, so keep it.)
       if (newCursor > cursor) {
         await hs.ackDurablyStored(newCursor);
         cursor = newCursor;

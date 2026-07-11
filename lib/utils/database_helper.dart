@@ -1228,6 +1228,49 @@ class DatabaseHelper {
     });
   }
 
+  /// Re-key the Health Store tables from [oldKey] to [newKey].
+  ///
+  /// Early builds keyed the raw store on `HELLO.dev`, which turned out to be a
+  /// model string (`"healthypi-move"`) that is identical on every watch — two
+  /// devices would collide on `(device, seq)`. The store is now keyed on the
+  /// per-unit `HELLO.uid`. This moves any rows written under the old key.
+  ///
+  /// Idempotent, and a no-op when nothing was ever stored under [oldKey].
+  /// Conflicts are ignored rather than overwritten: if a row already exists
+  /// under [newKey] for a seq, the already-correct row wins.
+  Future<void> rekeyHealthStoreDevice(String oldKey, String newKey) async {
+    if (oldKey.isEmpty || newKey.isEmpty || oldKey == newKey) return;
+    final db = await database;
+    await db.transaction((txn) async {
+      final stale = Sqflite.firstIntValue(await txn.rawQuery(
+            'SELECT COUNT(*) FROM hs_samples WHERE device = ?',
+            [oldKey],
+          )) ??
+          0;
+      final staleState = Sqflite.firstIntValue(await txn.rawQuery(
+            'SELECT COUNT(*) FROM hs_sync_state WHERE device = ?',
+            [oldKey],
+          )) ??
+          0;
+      if (stale == 0 && staleState == 0) return;
+
+      await txn.rawUpdate(
+          'UPDATE OR IGNORE hs_samples SET device = ? WHERE device = ?',
+          [newKey, oldKey]);
+      await txn.rawUpdate(
+          'UPDATE OR IGNORE hs_types SET device = ? WHERE device = ?',
+          [newKey, oldKey]);
+      await txn.rawUpdate(
+          'UPDATE OR IGNORE hs_sync_state SET device = ? WHERE device = ?',
+          [newKey, oldKey]);
+      // Anything that lost the UPDATE race to an existing row is a duplicate.
+      await txn.delete('hs_samples', where: 'device = ?', whereArgs: [oldKey]);
+      await txn.delete('hs_types', where: 'device = ?', whereArgs: [oldKey]);
+      await txn
+          .delete('hs_sync_state', where: 'device = ?', whereArgs: [oldKey]);
+    });
+  }
+
   /// TYPES registry for [device], keyed by type id.
   Future<Map<int, Map<String, Object?>>> getTypes(String device) async {
     final db = await database;

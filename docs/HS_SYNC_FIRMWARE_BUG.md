@@ -167,15 +167,24 @@ Worth covering both, since they fail differently:
      `max` is clamped device-side to `HS_SYNC_MAX_BATCH` (40).
    - `TYPES` emits `class` as a **uint** and `derived` as a **bool**
      (the design doc had these as unpinned; app parses both).
-   - `HELLO.dev` is the literal `"healthypi-move"` — i.e. a **model string, not a
-     per-unit serial**. The app keys its raw sample store on this. If two watches
-     are ever paired to one phone their samples would collide on
-     `PRIMARY KEY (device, seq)`. A per-unit id here would be safer.
 
 3. **Retention vs. `head`.** `HELLO` exposes `head` but no *oldest retained seq*
    and no record count, so a client can't tell "store is empty" from "my cursor
    is stale" without probing. An `oldest` (or `count`) field in `HELLO` would
    make the client's first sync deterministic instead of exploratory.
+
+## Resolved by firmware (app side updated — no action needed)
+
+- **`HELLO.uid`.** Confirmed: `dev` is retained but will always be
+  `"healthypi-move"`. The app now keys its raw sample store on **`HELLO.uid`**,
+  with a one-shot migration (`DatabaseHelper.rekeyHealthStoreDevice`) that moves
+  any rows written under the old model-string key. `uid` is parsed defensively
+  (string / byte-string / int all normalise to a stable text key).
+- **`ACK` does not free flash.** Confirmed: `hpi_hs_ack()` is a no-op and
+  retention is size-based only (H4, as designed). The app no longer expects ACK
+  to reclaim space. It still acks strictly *after* the page is durable, on
+  purpose — the API contract says an ack may drop data and a future firmware
+  could honour it, so the ordering is kept as cheap insurance.
 
 ## App-side context
 

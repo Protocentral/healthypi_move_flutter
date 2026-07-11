@@ -14,6 +14,7 @@ class HsProbeResult {
     this.schema,
     this.group,
     this.dev,
+    this.uid,
     this.head,
     this.typeCount,
     this.types = const {},
@@ -28,7 +29,13 @@ class HsProbeResult {
   /// HELLO fields.
   final int? schema;
   final int? group;
-  final String? dev; // device serial — stable across OS, unlike the BLE id
+
+  /// Model string — always "healthypi-move", identical on every unit.
+  final String? dev;
+
+  /// Per-unit device id; the key the local sample store is written under.
+  final String? uid;
+
   final int? head; // newest seq available on device (NEVER ack this)
   final int? typeCount;
 
@@ -105,6 +112,7 @@ class HealthStoreProbe {
         schema: hello.schema,
         group: hello.group,
         dev: hello.dev,
+        uid: hello.uid,
         head: hello.head,
         typeCount: hello.types,
         types: types,

@@ -217,7 +217,9 @@ class _ScrBleConsoleState extends State<ScrBleConsole> {
           else ...[
             _kv('schema', '${p.schema}'),
             _kv('group', '${p.group}'),
-            _kv('dev (serial)', p.dev ?? '—'),
+            _kv('dev (model)', p.dev ?? '—'),
+            _kv('uid (store key)', (p.uid?.isNotEmpty ?? false) ? p.uid! : '—',
+                warn: !(p.uid?.isNotEmpty ?? false)),
             _kv('head (newest seq)', '${p.head}'),
             _kv('types', '${p.typeCount} declared / ${p.types.length} parsed'),
             _kv('max write', '${p.maxWriteLength}',

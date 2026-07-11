@@ -129,9 +129,9 @@ parameter `mcumgr_dart`'s `SmpClient` already exposes.
 
 ## 8. `ack` renamed to `ackDurablyStored`
 
-`HpiHs.ack(seq)` is **destructive**: the device may drop every sample at or below
-the acked sequence number, with no error if you never stored them. The name
-implied a harmless acknowledgement.
+`HpiHs.ack(seq)` is **contractually destructive**: the device may drop every
+sample at or below the acked sequence number, with no error if you never stored
+them. The name implied a harmless acknowledgement.
 
 `ackDurablyStored(seq)` is now the primary name, documented with its
 precondition. `ack` remains as a `@Deprecated` alias so OpenView keeps compiling
@@ -140,6 +140,18 @@ and gets a warning pointing at the fix, rather than a hard break.
 This is not hypothetical: OpenView calls `hs.ack(head)` — acking the `head`
 cursor straight from `HELLO` rather than a durably-stored one — at
 `device_manager_screen.dart:1273`.
+
+**Update (firmware, 2026-07-11).** On current firmware `hpi_hs_ack()` is a
+**no-op** — it does *not* free flash. Retention is **size-based only** (H4, as
+designed). Two consequences, and they point in opposite directions:
+
+- **Don't depend on `ACK` reclaiming space.** It won't. Flash is reclaimed by
+  size-based retention regardless of what the app acks.
+- **Keep the commit-before-ack discipline anyway.** The API contract still says
+  an ack may drop data, and a future firmware could start honouring it. The
+  ordering costs nothing, so `HealthStoreSyncManager` still only acks a cursor
+  already committed to SQLite. Getting this wrong is unrecoverable; getting it
+  needlessly right is free.
 
 ## 9. Package naming (decided, **not yet applied**)
 

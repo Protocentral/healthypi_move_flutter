@@ -290,8 +290,12 @@ Keep `sqflite`. Add a **raw sample store** as the source of truth; keep
 
 ```sql
 -- NEW: raw samples (system of record)
+-- NOTE (2026-07-11): `device` is keyed on **HELLO.uid** (per-unit id), NOT
+-- HELLO.dev. `dev` turned out to be a model string ("healthypi-move"), identical
+-- on every watch — keying on it would collide two devices into one (device, seq)
+-- space. See DatabaseHelper.rekeyHealthStoreDevice for the migration.
 CREATE TABLE hs_samples (
-  device   TEXT NOT NULL,          -- HELLO dev serial (not MAC — stable across OS)
+  device   TEXT NOT NULL,          -- HELLO **uid** (not MAC — stable across OS)
   seq      INTEGER NOT NULL,       -- device-monotonic; cursor + dedup key
   ts_utc   INTEGER NOT NULL,       -- UTC seconds
   type     INTEGER NOT NULL,       -- TYPES id

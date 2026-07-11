@@ -17,15 +17,29 @@ class HsHello {
     required this.schema,
     required this.group,
     required this.dev,
+    required this.uid,
     required this.head,
     required this.types,
   });
 
   final int schema; // HPI_HS_SCHEMA_VERSION
   final int group; // HPI_HS_GROUP_VERSION
-  final String dev; // device serial
+
+  /// Model string — always `"healthypi-move"`. **Not** unique per unit, so it
+  /// must not key a local store (two watches on one phone would collide on
+  /// seq). Kept for display and diagnostics.
+  final String dev;
+
+  /// Per-unit device id. This is the stable key for a local sample store.
+  /// Empty on firmware that predates the field.
+  final String uid;
+
   final int head; // newest seq available
   final int types; // number of registry entries
+
+  /// Key to store samples under: the per-unit [uid] when the firmware provides
+  /// one, else the model string (single-device installs only).
+  String get storeKey => uid.isNotEmpty ? uid : dev;
 }
 
 /// One page of a `SYNC` pull.
@@ -93,10 +107,22 @@ class HpiHs {
       id: cmdHello,
     ));
     final p = rsp.payload;
+    // `uid` may arrive as a string or as a byte string / int on some builds —
+    // normalise to a stable hex/text key rather than assuming one encoding.
+    final rawUid = p['uid'];
+    final uid = switch (rawUid) {
+      null => '',
+      String s => s,
+      List<int> b =>
+        b.map((x) => x.toRadixString(16).padLeft(2, '0')).join(),
+      num n => n.toInt().toRadixString(16),
+      _ => rawUid.toString(),
+    };
     return HsHello(
       schema: (p['schema'] as num?)?.toInt() ?? 0,
       group: (p['group'] as num?)?.toInt() ?? 0,
       dev: p['dev'] as String? ?? '',
+      uid: uid,
       head: (p['head'] as num?)?.toInt() ?? 0,
       types: (p['types'] as num?)?.toInt() ?? 0,
     );
