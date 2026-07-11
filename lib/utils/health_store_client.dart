@@ -29,11 +29,21 @@ import 'connection_manager.dart';
 /// `lib/models/hs_*`) is ported verbatim from the hardware-verified OpenView 3
 /// client and is transport-agnostic; only [SmpBleTransport] is BLE-specific.
 class HealthStoreClient {
-  HealthStoreClient(this.deviceId, {this.name, this.manageConnection = false});
+  HealthStoreClient(
+    this.deviceId, {
+    this.name,
+    this.manageConnection = false,
+    this.requestTimeout,
+  });
 
   /// BLE device id (universal_ble deviceId — the platform address/UUID).
   final String deviceId;
   final String? name;
+
+  /// Per-request SMP timeout. The default (10 s) is fine for HELLO/TYPES, but a
+  /// catch-up SYNC page makes the device scan its flash segments, which can take
+  /// far longer than that on a device with a long backlog.
+  final Duration? requestTimeout;
 
   /// When false (default) this session rides the [ConnectionManager] link and
   /// [disconnect] leaves that link up. When true it owns its own BLE link.
@@ -90,6 +100,7 @@ class HealthStoreClient {
 
       await transport.connect(); // throws SmpTransportException if no SMP service
       final client = SmpClient(transport);
+      if (requestTimeout != null) client.timeout = requestTimeout!;
       _client = client;
       os = OsMgmt(client);
       img = ImgMgmt(client, maxWriteLength: () => _transport?.maxWriteLength);

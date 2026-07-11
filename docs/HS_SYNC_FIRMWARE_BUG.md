@@ -173,6 +173,84 @@ Worth covering both, since they fail differently:
    is stale" without probing. An `oldest` (or `count`) field in `HELLO` would
    make the client's first sync deterministic instead of exploratory.
 
+---
+
+# Issue 2 (new): the catch-up segment scan is O(since) per request
+
+**Status:** the cold-ring fix above works — the app now drains real samples
+(`cursor` reached 6960). But the drain then **times out and dies**, and it gets
+slower the further it gets.
+
+## Symptom
+
+```
+[HS-Sync] dev=5e54caf66ab8689a cursor=6960 head=35088 types=5
+[HS-Sync] failed: SmpException(SMP request timed out, grp:0x1000 id:2 seq:94)
+[ConnectionManager] link lost; force-releasing SMP lock
+```
+
+Early pages are fast; by ~seq 7 000 the requests exceed a 10 s SMP timeout and
+the link drops. Raising the app's timeout to 40 s pushes the wall further out but
+does not remove it — the cost grows without bound.
+
+## Root cause
+
+`hpi_hs_read_since()`, segment branch: for **every** request it reopens the
+segments and re-reads from the *start*, discarding records until it passes
+`since`:
+
+```c
+for (uint32_t idx = first; idx <= s_seg_index && a.n < cap; idx++) {
+    ...
+    while (a.n < cap && (rd = fs_read(&f, rbuf, sizeof(rbuf))) > 0) {
+        for (int i = 0; i < nrec && a.n < cap; i++) {
+            ...
+            if (s.seq > since_seq) {   /* everything below `since` is read, then thrown away */
+```
+
+So one page costs **O(since)** flash reads, and a full drain is **O(n²/batch)**.
+With `head = 35 088` and `HS_SYNC_MAX_BATCH = 40` that's ~877 requests whose scan
+cost climbs from ~0 to ~35 000 records — roughly **15 million record reads**
+(~270 MB of flash I/O) to move 630 KB of samples. Each individual request
+eventually exceeds any reasonable SMP timeout.
+
+## Suggested fix
+
+Records are **fixed-size (18 B) and ascending within a segment**, so the scan can
+be replaced with arithmetic:
+
+1. **Skip whole segments.** Keep each segment's `first_seq`/`last_seq` (or derive
+   from its first/last record). If `last_seq <= since_seq`, `fs_close()` and move
+   on without reading the body.
+2. **Seek within the target segment.** Once the right segment is found, the
+   offset of the first record with `seq > since` is
+   `(since_seq - first_seq + 1) * HPI_HS_SAMPLE_WIRE_SIZE` — a single
+   `fs_seek()`, no scanning.
+
+That makes each page O(batch) instead of O(since), and the whole drain linear.
+
+A cheaper stopgap, if the above is too invasive: raise `HS_SYNC_MAX_BATCH` (the
+netbuf allows ~40×18 B = 720 B today; a larger MTU/netbuf would allow more) to
+cut the number of round-trips. It reduces the constant but not the quadratic.
+
+## App-side mitigation already shipped
+
+The app no longer depends on a single uninterrupted drain:
+
+- SMP timeout for sync raised to **40 s**.
+- The drain is **resumable**: every page is committed and the cursor persisted
+  before the ack, so a timeout or link drop loses no work. The app reconnects and
+  continues from the persisted cursor (up to 6 attempts), and reports a partial
+  sync honestly if it still can't reach `head`.
+- Trends are derived from whatever was stored, so a partial drain still surfaces
+  real data in the UI.
+
+This makes the sync *survivable*, not *fast* — with the quadratic scan a full
+35 k-sample backlog will still take a very long time and many reconnects. The
+firmware fix is what makes it actually usable.
+
+---
+
 ## Resolved by firmware (app side updated — no action needed)
 
 - **`HELLO.uid`.** Confirmed: `dev` is retained but will always be

@@ -77,6 +77,84 @@ class HealthStoreSyncManager {
     _isSyncing = true;
     final started = DateTime.now();
 
+    var totalStored = 0;
+    String? lastError;
+
+    try {
+      // A catch-up drain is long and the link can drop mid-way. The cursor is
+      // persisted after every page, so a dropped session is not lost work — we
+      // reconnect and carry on from where we got to. Keep going as long as each
+      // attempt makes progress; stop when an attempt stores nothing new.
+      for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+        final outcome = await _runSession(
+            deviceMacAddress, started, onProgress, onStatus);
+
+        if (outcome.legacy != null) return outcome.legacy!;
+
+        totalStored += outcome.stored;
+        lastError = outcome.error;
+
+        if (outcome.done) {
+          await DatabaseHelper.instance.updateLastSyncTime();
+          _emit(1.0, SyncState.completed, 'Synced $totalStored samples');
+          return SyncResult(
+            success: true,
+            message: totalStored > 0
+                ? 'Synced $totalStored samples'
+                : 'Already up to date',
+            recordCounts: {'samples': totalStored},
+            duration: DateTime.now().difference(started),
+          );
+        }
+
+        if (outcome.stored == 0) break; // no forward progress — stop retrying
+
+        debugPrint('[HS-Sync] session ended early after ${outcome.stored} '
+            'samples (attempt $attempt/$_maxAttempts) — resuming');
+        onStatus('Reconnecting to resume…');
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+      }
+
+      // Partial: we stored real data and the cursor advanced, but didn't reach
+      // head. Report it honestly — the next sync resumes from the cursor.
+      if (totalStored > 0) {
+        await DatabaseHelper.instance.updateLastSyncTime();
+        _emit(1.0, SyncState.completed, 'Synced $totalStored samples (partial)');
+        return SyncResult(
+          success: true,
+          message: 'Synced $totalStored samples (partial — sync again to '
+              'continue)${lastError != null ? ": $lastError" : ""}',
+          recordCounts: {'samples': totalStored},
+          duration: DateTime.now().difference(started),
+        );
+      }
+
+      _emit(0, SyncState.error, lastError ?? 'Sync failed');
+      return SyncResult(
+        success: false,
+        message: lastError ?? 'Sync failed',
+        recordCounts: const {},
+        duration: DateTime.now().difference(started),
+      );
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
+  /// How many times to reconnect and resume a drain that dies mid-way.
+  static const int _maxAttempts = 6;
+
+  /// SMP per-request timeout for sync. A catch-up SYNC page makes the device
+  /// scan its flash segments, which is far slower than the 10 s default.
+  static const Duration _syncTimeout = Duration(seconds: 40);
+
+  /// One connect → drain → disconnect cycle.
+  Future<_SessionOutcome> _runSession(
+    String deviceMacAddress,
+    DateTime started,
+    Function(String metric, double progress) onProgress,
+    Function(String message) onStatus,
+  ) async {
     final conn = ConnectionManager.instance;
     HealthStoreClient? client;
 
@@ -88,7 +166,8 @@ class HealthStoreSyncManager {
       }
 
       // Claims the SMP wire (acquireSmp), settles the MTU, probes HELLO.
-      client = HealthStoreClient(deviceMacAddress);
+      client = HealthStoreClient(deviceMacAddress,
+          requestTimeout: _syncTimeout);
       await client.connect();
 
       if (!client.hasHealthStore) {
@@ -96,43 +175,36 @@ class HealthStoreSyncManager {
         // first — the legacy manager opens its own.
         await client.disconnect();
         client = null;
-        _isSyncing = false;
         onStatus('Using legacy sync…');
         final legacySub = BackgroundSyncManager.instance.progressStream
             .listen(_progressController.add);
         try {
-          return await BackgroundSyncManager.instance.syncData(
+          final r = await BackgroundSyncManager.instance.syncData(
             deviceMacAddress: deviceMacAddress,
             onProgress: onProgress,
             onStatus: onStatus,
           );
+          return _SessionOutcome(legacy: r);
         } finally {
           await legacySub.cancel();
         }
       }
 
-      final result = await _syncHealthStore(
-          client, started, onProgress, onStatus);
-      return result;
+      return await _drain(client, onProgress, onStatus);
     } catch (e) {
-      debugPrint('[HS-Sync] failed: $e');
-      _emit(0, SyncState.error, '$e');
-      return SyncResult(
-        success: false,
-        message: '$e',
-        recordCounts: const {},
-        duration: DateTime.now().difference(started),
-      );
+      debugPrint('[HS-Sync] session failed: $e');
+      return _SessionOutcome(error: '$e');
     } finally {
       // Always release the SMP wire, even on an early return or throw.
       await client?.disconnect();
-      _isSyncing = false;
     }
   }
 
-  Future<SyncResult> _syncHealthStore(
+  /// Drain pages within one live session. Returns what it managed to store and
+  /// whether it reached `head`; a mid-drain failure is reported, not thrown,
+  /// because the cursor is already persisted and the caller can resume.
+  Future<_SessionOutcome> _drain(
     HealthStoreClient client,
-    DateTime started,
     Function(String metric, double progress) onProgress,
     Function(String message) onStatus,
   ) async {
@@ -147,7 +219,6 @@ class HealthStoreSyncManager {
     final device = hello.storeKey;
 
     // Re-key anything stored under the old model-string key (pre-uid builds).
-    // No-op once done, and a no-op on a store that never synced.
     if (hello.uid.isNotEmpty && hello.dev.isNotEmpty && hello.dev != device) {
       await db.rekeyHealthStoreDevice(hello.dev, device);
     }
@@ -155,8 +226,8 @@ class HealthStoreSyncManager {
     onStatus('Reading registry…');
     _emit(0.06, SyncState.downloading, 'Reading registry…');
 
-    // TYPES: the self-describing registry. Cache it — deriveTrends needs each
-    // type's key (hr/spo2/skin_temp/steps) and scale to convert fixed-point.
+    // TYPES: the self-describing registry. deriveTrends needs each type's key
+    // (hr/spo2/skin_temp/steps) and scale to convert the fixed-point values.
     final types = await hs.types();
     if (types.isNotEmpty) {
       await db.upsertTypes(device, [
@@ -180,107 +251,114 @@ class HealthStoreSyncManager {
     debugPrint('[HS-Sync] dev=$device cursor=$cursor head=$head '
         'types=${types.length}');
 
-
-    var totalStored = 0;
+    var stored = 0;
     int? earliestTs;
-    var pages = 0;
+    String? error;
+    var done = false;
 
     onStatus('Syncing samples…');
-    var emptyPage = false;
-    while (true) {
-      final since = cursor < 0 ? 0 : cursor;
-      final page = await hs.sync(since: since, max: _pageSize);
+    try {
+      while (true) {
+        final since = cursor < 0 ? 0 : cursor;
+        final page = await hs.sync(since: since, max: _pageSize);
 
-      if (page.samples.isEmpty) {
-        // Distinguish "nothing new" from "the device has data but we decoded
-        // none" — the latter is a wire-shape mismatch and must not be reported
-        // as a successful, up-to-date sync.
-        emptyPage = cursor < head;
-        break;
+        if (page.samples.isEmpty) {
+          // Nothing decodable. If we're already at head this is simply
+          // "caught up"; if not, the device has data we failed to read and that
+          // must not be reported as a clean, up-to-date sync.
+          if (cursor >= head) {
+            done = true;
+          } else {
+            error = 'Device holds samples up to seq $head but SYNC returned '
+                'none we could decode (stored up to $cursor).';
+            debugPrint('[HS-Sync] $error');
+          }
+          break;
+        }
+
+        // Commit the page AND advance the persisted cursor in one transaction.
+        // Re-inserting a seq is a no-op (PRIMARY KEY (device, seq)), so a
+        // retried page after a dropped link can never double-count.
+        final newCursor = await db.insertSamplesPage(
+          device,
+          [
+            for (final s in page.samples)
+              {
+                'seq': s.seq,
+                'ts_utc': s.tsUtc,
+                'type': s.type,
+                'quality': s.quality,
+                'value': s.value,
+              }
+          ],
+          head: head,
+          schema: hello.schema,
+        );
+
+        for (final s in page.samples) {
+          if (earliestTs == null || s.tsUtc < earliestTs) earliestTs = s.tsUtc;
+        }
+        stored += page.samples.length;
+
+        // Ack only what is already durable. (A no-op on current firmware — it
+        // does not free flash — but the ordering is the contract, so keep it.)
+        if (newCursor > cursor) {
+          await hs.ackDurablyStored(newCursor);
+          cursor = newCursor;
+        } else {
+          debugPrint('[HS-Sync] cursor did not advance ($cursor) — stopping');
+          done = true;
+          break;
+        }
+
+        final progress =
+            (head > 0) ? (cursor / head).clamp(0.05, 0.9).toDouble() : 0.5;
+        onProgress('all', progress);
+        _emit(progress, SyncState.downloading, 'Synced $stored samples…');
+
+        if (!page.more || cursor >= head) {
+          done = true;
+          break;
+        }
       }
-
-      // Commit the page AND advance the persisted cursor in one transaction.
-      // Re-inserting a seq is a no-op (PRIMARY KEY (device, seq)), so a retried
-      // page can never double-count.
-      final newCursor = await db.insertSamplesPage(
-        device,
-        [
-          for (final s in page.samples)
-            {
-              'seq': s.seq,
-              'ts_utc': s.tsUtc,
-              'type': s.type,
-              'quality': s.quality,
-              'value': s.value,
-            }
-        ],
-        head: head,
-        schema: hello.schema,
-      );
-
-      for (final s in page.samples) {
-        if (earliestTs == null || s.tsUtc < earliestTs) earliestTs = s.tsUtc;
-      }
-      totalStored += page.samples.length;
-      pages++;
-
-      // Ack only what is already durable. (A no-op on current firmware — it
-      // does not free flash — but the ordering is the contract, so keep it.)
-      if (newCursor > cursor) {
-        await hs.ackDurablyStored(newCursor);
-        cursor = newCursor;
-      } else {
-        // No forward progress: stop rather than spin.
-        debugPrint('[HS-Sync] cursor did not advance ($cursor) — stopping');
-        break;
-      }
-
-      final progress = (head > 0)
-          ? (cursor / head).clamp(0.05, 0.9).toDouble()
-          : 0.5;
-      onProgress('all', progress);
-      _emit(progress, SyncState.downloading,
-          'Synced $totalStored samples…');
-
-      if (!page.more) break;
+    } catch (e) {
+      // A timeout or link drop mid-drain. Everything acked so far is durable,
+      // so this is partial progress, not a failure — the caller reconnects and
+      // resumes from the persisted cursor.
+      error = '$e';
+      debugPrint('[HS-Sync] drain interrupted after $stored samples: $e');
     }
 
-    // Aggregate the raw samples into the derived health_trends cache the trend
-    // screens read. Incremental: only the hours we just touched.
-    if (totalStored > 0 && earliestTs != null) {
+    // Aggregate whatever we got into the derived health_trends cache the trend
+    // screens read — even on a partial drain, so the UI shows real data now.
+    if (stored > 0 && earliestTs != null) {
       onStatus('Deriving trends…');
       _emit(0.95, SyncState.parsing, 'Deriving trends…');
       final rows = await db.deriveTrends(device, sinceUtc: earliestTs);
       debugPrint('[HS-Sync] derived $rows trend rows');
     }
 
-    // The device says it holds samples up to `head`, we hold up to `cursor`, and
-    // yet SYNC handed back nothing decodable. That is a wire-shape mismatch, not
-    // an up-to-date store — say so instead of reporting a green success.
-    if (totalStored == 0 && emptyPage) {
-      final msg = 'Device reports samples up to seq $head but SYNC returned '
-          'none we could decode (stored up to $cursor). Wire shape mismatch — '
-          'see the [HPI_HS] SYNC log line for the payload keys.';
-      debugPrint('[HS-Sync] $msg');
-      _emit(0, SyncState.error, 'Sync returned no samples');
-      return SyncResult(
-        success: false,
-        message: msg,
-        recordCounts: const {},
-        duration: DateTime.now().difference(started),
-      );
-    }
-
-    await db.updateLastSyncTime();
-    _emit(1.0, SyncState.completed, 'Synced $totalStored samples');
-
-    return SyncResult(
-      success: true,
-      message: totalStored > 0
-          ? 'Synced $totalStored samples in $pages page${pages == 1 ? "" : "s"}'
-          : 'Already up to date',
-      recordCounts: {'samples': totalStored},
-      duration: DateTime.now().difference(started),
-    );
+    return _SessionOutcome(stored: stored, done: done, error: error);
   }
+}
+
+/// Result of one connect → drain → disconnect cycle.
+class _SessionOutcome {
+  const _SessionOutcome({
+    this.stored = 0,
+    this.done = false,
+    this.error,
+    this.legacy,
+  });
+
+  /// Samples durably stored in this session.
+  final int stored;
+
+  /// True when the drain reached `head` (nothing left to fetch).
+  final bool done;
+
+  final String? error;
+
+  /// Set when the device predates HPI_HS and the legacy path ran instead.
+  final SyncResult? legacy;
 }
