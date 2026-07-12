@@ -99,14 +99,28 @@
 
 <header>
   <div style="margin-bottom:12px">
-    <span class="tag plan">Plan — not yet built</span>
-    <span class="tag date">2026-07-11</span>
+    <span class="tag plan" style="background:rgba(22,163,74,.16);color:var(--green)">P1 + P2 shipped &amp; validated</span>
+    <span class="tag date">2026-07-12</span>
   </div>
   <h1>Health-Store Sync Redesign (HS-2)</h1>
   <p class="sub">Why the app sync takes ~0.7&nbsp;MB and minutes of flash thrashing to move
   half a megabyte — and how to make it 8× smaller, O(1) to read, and gain continuous HRV
   along the way. Detail: <code>docs/HS_SYNC_REDESIGN_PLAN.md</code></p>
 </header>
+
+<div class="card good">
+  <h4>Status — P1 and P2 are shipped and validated (2026-07-12)</h4>
+  <p><strong>P2 migration ran on hardware exactly as designed:</strong> seq 35088 → 35392
+  (segment 79), <code>layout=2</code>; seq moved <em>forward</em> and was never rewound, so the
+  app's <code>(device, seq)</code> dedup stayed safe.</p>
+  <p><strong>P1 measured on a 7-day synthetic dataset:</strong> ~48,000 samples/day fed →
+  ~5,500 records/day stored — the promised <strong>~8× reduction</strong>. The app pulled the
+  full ~38,900-record backlog end-to-end.</p>
+  <p style="margin-bottom:0"><strong>And the peak survives:</strong> a minute whose true max was
+  <strong>164 bpm</strong> has a mean of <strong>136</strong>. That 28 bpm gap is exactly what a
+  mean-only epoch would have silently discarded — the whole argument for taking 8× instead of
+  12×, now demonstrated rather than asserted.</p>
+</div>
 
 <h2><span class="n">01</span>The headline</h2>
 <p class="lead">Three independent problems, plus one large missed opportunity. Only one of
