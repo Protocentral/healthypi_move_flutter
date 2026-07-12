@@ -471,26 +471,8 @@ class DatabaseHelper {
         .millisecondsSinceEpoch ~/ 1000;
     int dayEnd = dayStart + 86400;
     
-    print('DatabaseHelper.getHourlyTrends: trendType=$trendType, day=$day, device=$effectiveMac');
-    print('  Query range: $dayStart to $dayEnd');
-    print('  Date range: ${DateTime.fromMillisecondsSinceEpoch(dayStart * 1000, isUtc: false)} to ${DateTime.fromMillisecondsSinceEpoch(dayEnd * 1000, isUtc: false)}');
-    
-    // First, let's see what data exists for this trend type
-    final allData = await db.query(
-      'health_trends',
-      where: 'trend_type = ? AND device_mac = ?',
-      whereArgs: [trendType, effectiveMac],
-      orderBy: 'timestamp DESC',
-      limit: 10,
-    );
-    print('  All data for $trendType (last 10 records):');
-    for (var row in allData) {
-      print('    Timestamp: ${row['timestamp']} (${DateTime.fromMillisecondsSinceEpoch((row['timestamp'] as int) * 1000, isUtc: false)}), '
-            'Max: ${row['value_max']}, Min: ${row['value_min']}, Avg: ${row['value_avg']}');
-    }
-    
-    final results = await db.rawQuery('''
-      SELECT 
+    return await db.rawQuery('''
+      SELECT
         (timestamp / 3600) * 3600 as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
@@ -501,14 +483,6 @@ class DatabaseHelper {
       GROUP BY hour_start
       ORDER BY hour_start ASC
     ''', [trendType, dayStart, dayEnd, effectiveMac]);
-    
-    print('  Found ${results.length} hourly groups');
-    for (var row in results) {
-      print('    Hour: ${DateTime.fromMillisecondsSinceEpoch((row['hour_start'] as int) * 1000, isUtc: false)}, '
-            'Max: ${row['max_value']}, Min: ${row['min_value']}, Avg: ${row['avg_value']}, Points: ${row['data_points']}');
-    }
-    
-    return results;
   }
 
   /// Hourly buckets over a rolling window ending now, rather than a calendar day.
