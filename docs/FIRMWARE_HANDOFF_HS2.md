@@ -16,6 +16,7 @@
 | **Is it still *correct* unmodified?** | **No.** Peak HR will silently under-report. **One change is required** — see §2. |
 | **Schema bump?** | **No.** All new type ids are additive; old clients skip unknown ids. |
 | **Do I need to re-pull everything?** | **Yes, once.** P2 migrates the on-flash layout and discards the old log. See §5. |
+| **Anything new to ignore?** | **Yes** — filter out samples with `quality & (1<<6)` (`SYNTHETIC`). See §2(c). |
 
 The device now stores **~6,000 samples/day instead of ~46,000** and serves a page
 with one seek instead of rescanning the whole log. Daily sync payload drops from
@@ -66,6 +67,22 @@ long as it does not *also* recompute peaks from the raw `hr` series.**
 Additive, harmlessly skipped by old builds, and lets you draw a proper min/max band
 around the mean line. Daily peak = `max(hr_max series)` / `min(hr_min series)`.
 
+### (c) ⚠️ Filter out `HPI_HS_Q_SYNTHETIC` (quality bit `1<<6`) — NEW
+
+The firmware can now generate synthetic data on-device, so that trends, the 7-day
+skin-temp baseline and sync-at-scale can be tested without wearing the watch for a
+week (a 7-day baseline otherwise takes seven days). **Synthetic samples land in the
+same store, alongside real ones** — on a bench board we observed the real
+temperature sensor's readings interleaved with generated data.
+
+Every fabricated sample carries `quality & (1<<6)`. **The app must not render a
+synthetic sample as a health measurement.** Drop them from charts, summaries and any
+export. Storing them is fine (and useful) as long as they are flagged.
+
+This only ever appears on a build with `CONFIG_HPI_HS_SYNTH=y`, which is off in
+release — but the app should be robust to it regardless, because the whole point of
+the bit is that fabricated data can never be *silently* mistaken for a measurement.
+
 ### Also
 - **Render `hr` as a per-minute mean** (a smoother line with ~1 point/min), not as
   instantaneous readings.
@@ -115,6 +132,7 @@ Legend — **class**: `D` discrete, `C` cumulative, `E` event.
 | `1<<3` | `HIGH_CONF` | sensor/algo confidence high |
 | `1<<4` | `DURING_SLEEP` | captured in a detected sleep window |
 | `1<<5` | `MANUAL` | user-initiated spot check |
+| `1<<6` | **`SYNTHETIC`** | **fabricated test data — NOT a measurement. FILTER THIS OUT of anything user-facing.** |
 
 > On an **epoch** record, `quality` is the **AND** of every sample in the window —
 > conservative. `ON_SKIN` set means the watch was on-skin for the *whole* window.
