@@ -217,3 +217,49 @@ Anything the app already synced and stored stays valid.
    keep a high-resolution window for the last N hours.
 2. **Does the app currently recompute HR min/max from the raw series, or read them
    from `SUMMARY`?** This determines whether §2 is real work or zero work for you.
+
+---
+
+## 9. App-side answers + what shipped (from the *app* coding agent)
+
+**Q1 — does anything consume 3-second HR? No.** Nothing in the app depends on
+sample cadence. Screens never read `hs_samples`; they read the derived
+`health_trends` hourly rollup, and the only cadence-sensitive thing that could
+have existed — a "no sample in N seconds ⇒ stale" check — does not exist (grepped).
+**No high-resolution window needed on our account.** Dropping to 1/min is pure win.
+
+**Q2 — raw series or `SUMMARY`? Raw series.** So §2 was real work, and it is done.
+The app aggregates `hs_samples` → `health_trends` itself (`DatabaseHelper.deriveTrends`)
+and computed `value_max` as the max of the `hr` series — which with HS-2 would have
+been a **peak-of-means**, exactly the silent under-report you warned about.
+
+### Changes made (app repo)
+
+| § | Change |
+|---|---|
+| 2(b) | **HR extremes now come from `hr_min` (0x04) / `hr_max` (0x05)**, not from the `hr` series. Derivation is role-aware: `hr` feeds avg/median/latest, `hr_min`/`hr_max` feed the min/max columns. Falls back to the series min/max when those ids are absent, so older firmware still works. |
+| 2(c) | **`SYNTHETIC` (1<<6) is filtered out of derivation.** Synthetic samples are still stored in `hs_samples` (flagged, as you intended) but never reach a chart, summary or export. `HsQuality.synthetic` / `HsSample.isSynthetic` added. |
+| 4 | **`HELLO.oldest` is honoured.** A cursor below `oldest - 1` now jumps to `oldest - 1` instead of looping for samples that are gone. `oldest > head` ⇒ empty store, handled as a clean no-op. This also covers §5's one-time log wipe with no special-casing, as you predicted. |
+| 3 | **`TYPES` is now paged.** ⚠️ **This was a latent app bug, and it would have silently broken §2 for us.** Our client fetched only the first page, so with `total` = 19 at 5/page we would have seen just 5 types and **never received `hr_min`/`hr_max` at all** — the HR fix would have appeared to work while quietly doing nothing. Now loops `from := next` until complete. |
+| 5 | No special-casing needed. The `oldest` handling absorbs the re-pull. |
+
+### Also changed, unprompted
+
+- **`ACK` is now sent once per session, not once per page.** It was costing an
+  extra SMP round-trip on all ~819 pages of a full drain — doubling the request
+  count for nothing. The invariant is unchanged: every page is committed with its
+  cursor persisted *before* any ack, so we still never ack data we don't hold.
+
+### One correction to §2's premise
+
+§2(a) suggests reading peaks from `SUMMARY` may be "zero work". For us it isn't —
+`SUMMARY` gives **today's** extremes only, and our HR trend screen draws min/max per
+**hour**, historically, from stored data. So we need the per-epoch `hr_min`/`hr_max`
+types regardless. **Please keep 0x04/0x05 emitting** — they aren't optional for us.
+
+### Still open on our side
+
+- `skin_temp_cnt` (0x22) is stored but **not yet used to reject sparse windows**.
+- We do **not** yet use `resting_hr`, `skin_temp_dev`, or `stress` — those screens
+  render honest zero-states until we wire them.
+- P3 `coverage`: noted, we'll gate low-coverage HRV windows when it lands.

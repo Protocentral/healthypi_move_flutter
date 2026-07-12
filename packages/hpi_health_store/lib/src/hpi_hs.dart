@@ -19,6 +19,7 @@ class HsHello {
     required this.dev,
     required this.uid,
     required this.head,
+    required this.oldest,
     required this.types,
   });
 
@@ -35,11 +36,27 @@ class HsHello {
   final String uid;
 
   final int head; // newest seq available
+
+  /// Oldest seq still retrievable. Samples below this have aged out of the
+  /// device's retention window and are **gone** — a cursor below `oldest - 1`
+  /// must jump forward rather than loop asking for data that no longer exists.
+  /// 0 on firmware that predates the field (permissive: nothing aged out).
+  final int oldest;
+
   final int types; // number of registry entries
 
   /// Key to store samples under: the per-unit [uid] when the firmware provides
   /// one, else the model string (single-device installs only).
   String get storeKey => uid.isNotEmpty ? uid : dev;
+
+  /// `oldest > head` means the store holds nothing.
+  bool get isEmpty => oldest > head;
+
+  /// The cursor to resume from, given what we already hold. Clamps a stale
+  /// cursor up to the start of the retention window — the samples in between are
+  /// gone, and asking for them forever would spin.
+  int resumeCursor(int stored) =>
+      (oldest > 0 && stored < oldest - 1) ? oldest - 1 : stored;
 }
 
 /// One page of a `SYNC` pull.
@@ -124,12 +141,43 @@ class HpiHs {
       dev: p['dev'] as String? ?? '',
       uid: uid,
       head: (p['head'] as num?)?.toInt() ?? 0,
+      // Oldest seq still retrievable. Absent on older firmware → 0, which is
+      // the permissive default (nothing has aged out).
+      oldest: (p['oldest'] as num?)?.toInt() ?? 0,
       types: (p['types'] as num?)?.toInt() ?? 0,
     );
   }
 
-  /// `TYPES` — fetch the registry once and cache by id. Never hard-code it.
+  /// `TYPES` — fetch the whole registry and cache by id. Never hard-code it.
+  ///
+  /// **Paged, 5 entries per call.** The registry is 19 entries, so a single call
+  /// returns only the first page — loop `from := next` until `next == total` or
+  /// the page comes back empty, or ids like `hr_min`/`hr_max` are never seen.
   Future<Map<int, HsType>> types({int from = 0}) async {
+    final out = <int, HsType>{};
+    var cursor = from;
+    var guard = 0;
+
+    while (true) {
+      final page = await _typesPage(cursor, out);
+      final next = page.next;
+      final total = page.total;
+
+      // Stop on: no forward progress, page empty, or the registry is complete.
+      if (page.count == 0 || next <= cursor) break;
+      cursor = next;
+      if (total > 0 && cursor >= total) break;
+      if (++guard > 20) break; // registry is 19 entries; never loop forever
+    }
+
+    _logMsg('[HPI_HS] TYPES: ${out.length} entries '
+        '(${out.values.map((t) => t.key).join(", ")})');
+    return out;
+  }
+
+  /// Fetch one TYPES page into [out]; returns its paging fields.
+  Future<({int next, int total, int count})> _typesPage(
+      int from, Map<int, HsType> out) async {
     final rsp = _check(await client.send(
       op: SmpOp.readReq,
       group: group,
@@ -137,12 +185,11 @@ class HpiHs {
       payload: {'from': from},
     ));
     final arr = (rsp.payload['types'] as List?) ?? const [];
-    if (arr.isNotEmpty) {
+    if (from == 0 && arr.isNotEmpty) {
       // One-time diagnostic: dump the raw shape of the first entry so wire-key
       // / value-type surprises are visible in the console.
       _logMsg('[HPI_HS] TYPES[0] raw = ${arr.first}');
     }
-    final out = <int, HsType>{};
     for (final e in arr) {
       if (e is Map) {
         try {
@@ -153,7 +200,11 @@ class HpiHs {
         }
       }
     }
-    return out;
+    return (
+      next: (rsp.payload['next'] as num?)?.toInt() ?? from,
+      total: (rsp.payload['total'] as num?)?.toInt() ?? 0,
+      count: arr.length,
+    );
   }
 
   /// `SYNC` — the workhorse. Pull one page of samples from [since].
@@ -162,8 +213,8 @@ class HpiHs {
   /// (`hpi_hs_mgmt.c: hs_h_sync`): `{since, max} -> {recs: bstr(n*18), n, next,
   /// more}`. `max` is clamped device-side to a 40-sample batch.
   ///
-  /// Note `more` is computed by the firmware as `next < head` — it does **not**
-  /// indicate that records were returned, so never treat it as proof of data.
+  /// `more` is now `n > 0 && next < head` (HS-2), so it is never true on an empty
+  /// page and is safe to loop on. Older firmware set it to just `next < head`.
   Future<HsSyncPage> sync({required int since, int max = 256}) async {
     final rsp = _check(await client.send(
       op: SmpOp.readReq,

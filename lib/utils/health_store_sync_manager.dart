@@ -347,15 +347,34 @@ class HealthStoreSyncManager {
     }
 
     // Resume from the highest seq we have durably stored.
-    var cursor = await db.getSyncCursor(device);
+    final storedCursor = await db.getSyncCursor(device);
     final head = hello.head;
+
+    // `oldest` is the start of the device's retention window. A cursor below it
+    // points at samples that have aged out and are gone — asking for them
+    // forever would spin, so jump forward. This is also exactly the path the
+    // HS-2 one-time flash migration takes (it discards the old log and rounds
+    // seq up to a segment boundary, so `oldest` leaps ahead).
+    var cursor = hello.resumeCursor(storedCursor);
+    if (cursor != storedCursor) {
+      debugPrint('[HS-Sync] cursor $storedCursor is below oldest=${hello.oldest}'
+          ' — those samples are gone; resuming from $cursor');
+    }
+
     debugPrint('[HS-Sync] dev=$device cursor=$cursor head=$head '
-        'types=${types.length}');
+        'oldest=${hello.oldest} types=${types.length}');
 
     var stored = 0;
     int? earliestTs;
     String? error;
     var done = false;
+
+    // `oldest > head` means the store is empty (HS-2 §4) — nothing to do, and
+    // not an error.
+    if (hello.isEmpty) {
+      debugPrint('[HS-Sync] device store is empty (oldest > head)');
+      return const _SessionOutcome(stored: 0, done: true);
+    }
 
     // ── Newest-first pass ───────────────────────────────────────────────────
     // SYNC only walks forward from a cursor, so a device with a long backlog
@@ -434,10 +453,7 @@ class HealthStoreSyncManager {
         }
         stored += page.samples.length;
 
-        // Ack only what is already durable. (A no-op on current firmware — it
-        // does not free flash — but the ordering is the contract, so keep it.)
         if (newCursor > cursor) {
-          await hs.ackDurablyStored(newCursor);
           cursor = newCursor;
         } else {
           debugPrint('[HS-Sync] cursor did not advance ($cursor) — stopping');
@@ -457,11 +473,29 @@ class HealthStoreSyncManager {
         }
       }
     } catch (e) {
-      // A timeout or link drop mid-drain. Everything acked so far is durable,
-      // so this is partial progress, not a failure — the caller reconnects and
-      // resumes from the persisted cursor.
+      // A timeout or link drop mid-drain. Everything committed so far is
+      // durable, so this is partial progress, not a failure — the caller
+      // reconnects and resumes from the persisted cursor.
       error = '$e';
       debugPrint('[HS-Sync] drain interrupted after $stored samples: $e');
+    }
+
+    // ACK once per session, not once per page.
+    //
+    // Every page is already committed with its cursor persisted, so the invariant
+    // that matters — never ack data we haven't durably stored — holds either way.
+    // Acking per page cost an extra SMP round-trip for all 819 pages of a full
+    // drain, doubling the request count for no benefit. Acking the final cursor
+    // once says exactly the same thing. If the drain died mid-way we simply ack
+    // less; the next session re-acks from its own persisted cursor.
+    if (stored > 0 && cursor > storedCursor) {
+      try {
+        await hs.ackDurablyStored(cursor);
+      } catch (e) {
+        // Non-fatal: ACK frees nothing on current firmware, and the cursor is
+        // already durable on our side.
+        debugPrint('[HS-Sync] ack($cursor) failed (non-fatal): $e');
+      }
     }
 
     // Aggregate whatever we got into the derived health_trends cache the trend

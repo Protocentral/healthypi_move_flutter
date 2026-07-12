@@ -1,8 +1,22 @@
+import 'package:hpi_health_store/hpi_health_store.dart' show HsQuality;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../globals.dart';
 import 'device_manager.dart';
+
+/// What a TYPES key contributes to its trend row. Since HS-2, `hr` carries the
+/// per-minute *mean* while `hr_min` / `hr_max` carry the true epoch extremes, so
+/// they feed different columns of the same derived row.
+enum _Role { value, min, max }
+
+/// Accumulator for one (hour, trend_type) while deriving.
+class _TrendBin {
+  final List<num> values = []; // the central series (means / raw readings)
+  final List<num> mins = []; // true extremes, when the device reports them
+  final List<num> maxs = [];
+  num? latest; // chronologically last value (rows are read ts ASC)
+}
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -1318,47 +1332,81 @@ class DatabaseHelper {
     final types = await getTypes(device);
     if (types.isEmpty) return 0;
 
-    // type id -> (trend_type, toStored) using the design doc's key mapping.
     final rows = await db.query('hs_samples',
         where: 'device = ? AND ts_utc >= ?',
         whereArgs: [device, sinceUtc],
         orderBy: 'ts_utc ASC');
     if (rows.isEmpty) return 0;
 
-    // Bucket: hourStart -> trendType -> list of stored-unit values.
-    final buckets = <int, Map<String, List<num>>>{};
+    // hourStart -> trendType -> bin
+    final buckets = <int, Map<String, _TrendBin>>{};
     for (final r in rows) {
+      // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
+      // — but it must not reach a chart, a summary or an export, or synthetic
+      // samples would be silently indistinguishable from measurements.
+      final quality = (r['quality'] as int?) ?? 0;
+      if (quality & HsQuality.synthetic != 0) continue;
+
       final t = types[r['type'] as int];
-      if (t == null) continue;
-      final trendType = _trendTypeForKey(t['key'] as String?);
-      if (trendType == null) continue;
+      if (t == null) continue; // unknown id → skip (registry is additive)
+      final role = _trendRoleForKey(t['key'] as String?);
+      if (role == null) continue;
+
       final scale = (t['scale'] as int?) ?? 1;
-      final stored = _toStoredUnits(trendType, (r['value'] as int) / (scale == 0 ? 1 : scale));
+      final stored = _toStoredUnits(
+          role.trend, (r['value'] as int) / (scale == 0 ? 1 : scale));
+
+      // Epoch records timestamp the END of their window, so the hour bucket is
+      // the hour the window closed in. Good enough at 1-minute epochs.
       final hourStart = ((r['ts_utc'] as int) ~/ 3600) * 3600;
-      (buckets[hourStart] ??= {}).putIfAbsent(trendType, () => []).add(stored);
+      final bin = (buckets[hourStart] ??= {})
+          .putIfAbsent(role.trend, () => _TrendBin());
+      switch (role.role) {
+        case _Role.value:
+          bin.values.add(stored);
+          bin.latest = stored; // rows are ts ASC, so the last write wins
+        case _Role.min:
+          bin.mins.add(stored);
+        case _Role.max:
+          bin.maxs.add(stored);
+      }
     }
 
     int written = 0;
     await db.transaction((txn) async {
       buckets.forEach((hourStart, byType) {
-        byType.forEach((trendType, values) {
-          values.sort();
-          final minV = values.first;
-          final maxV = values.last;
-          final avgV = values.reduce((a, b) => a + b) / values.length;
-          final medV = values[values.length ~/ 2];
+        byType.forEach((trendType, bin) {
+          if (bin.values.isEmpty) return; // no central series → nothing to write
+
+          final sorted = [...bin.values]..sort();
+          final avgV =
+              bin.values.reduce((a, b) => a + b) / bin.values.length;
+          final medV = sorted[sorted.length ~/ 2];
+
+          // HS-2: `hr` is now a per-MINUTE MEAN, so a max taken over the hr
+          // series is a peak-of-means and systematically under-reports (a 10 s
+          // spike to 150 collapses to ~110). The firmware emits the true epoch
+          // extremes as separate hr_min / hr_max types — prefer those, and only
+          // fall back to the series when they're absent (older firmware).
+          final minV = bin.mins.isNotEmpty
+              ? bin.mins.reduce((a, b) => a < b ? a : b)
+              : sorted.first;
+          final maxV = bin.maxs.isNotEmpty
+              ? bin.maxs.reduce((a, b) => a > b ? a : b)
+              : sorted.last;
+
           txn.insert(
             'health_trends',
             {
               'timestamp': hourStart,
               'trend_type': trendType,
-              'session_id': 0, // synthetic: derived rows have no device session
+              'session_id': 0, // derived rows have no device session
               'device_mac': effectiveMac,
               'value_max': maxV.round(),
               'value_min': minV.round(),
               'value_avg': avgV.round(),
               'value_median': medV.round(),
-              'value_latest': values.last.round(),
+              'value_latest': (bin.latest ?? medV).round(),
             },
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
@@ -1369,20 +1417,28 @@ class DatabaseHelper {
     return written;
   }
 
-  /// Map an HPI_HS TYPES `key` to the legacy `health_trends.trend_type`, or null
-  /// if this metric has no trend screen (kept raw in hs_samples only).
-  String? _trendTypeForKey(String? key) {
+  /// Map an HPI_HS TYPES `key` onto a `health_trends.trend_type` and the role it
+  /// plays in that trend, or null if the metric has no trend screen (it stays
+  /// raw in `hs_samples`).
+  ///
+  /// The role matters since HS-2: `hr` carries the epoch mean while `hr_min` /
+  /// `hr_max` carry the true extremes, and they must feed different columns.
+  ({String trend, _Role role})? _trendRoleForKey(String? key) {
     switch (key) {
       case 'hr':
-        return hPi4Global.PREFIX_HR;
+        return (trend: hPi4Global.PREFIX_HR, role: _Role.value);
+      case 'hr_min':
+        return (trend: hPi4Global.PREFIX_HR, role: _Role.min);
+      case 'hr_max':
+        return (trend: hPi4Global.PREFIX_HR, role: _Role.max);
       case 'spo2':
-        return hPi4Global.PREFIX_SPO2;
+        return (trend: hPi4Global.PREFIX_SPO2, role: _Role.value);
       case 'skin_temp':
       case 'temp':
-        return hPi4Global.PREFIX_TEMP;
+        return (trend: hPi4Global.PREFIX_TEMP, role: _Role.value);
       case 'steps':
       case 'activity':
-        return hPi4Global.PREFIX_ACTIVITY;
+        return (trend: hPi4Global.PREFIX_ACTIVITY, role: _Role.value);
       default:
         return null;
     }

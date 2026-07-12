@@ -12,6 +12,16 @@ class HsQuality {
   static const int duringSleep = 1 << 4; // captured in a sleep window
   static const int manual = 1 << 5; // user-initiated spot check
 
+  /// **Fabricated test data — not a measurement.** The firmware can generate
+  /// synthetic samples on-device (`CONFIG_HPI_HS_SYNTH=y`) so long-baseline
+  /// features can be tested without wearing the watch for a week; they land in
+  /// the same store, interleaved with real readings.
+  ///
+  /// Storing them is fine. **Rendering them is not** — they must never reach a
+  /// chart, a summary, or an export, or fabricated data would be silently
+  /// mistaken for a measurement. See [HsSample.isSynthetic].
+  static const int synthetic = 1 << 6;
+
   static String describe(int q) {
     final flags = <String>[
       if (q & valid != 0) 'valid',
@@ -20,6 +30,7 @@ class HsQuality {
       if (q & highConf != 0) 'high-conf',
       if (q & duringSleep != 0) 'sleep',
       if (q & manual != 0) 'manual',
+      if (q & synthetic != 0) 'SYNTHETIC',
     ];
     return flags.isEmpty ? '—' : flags.join(',');
   }
@@ -55,6 +66,9 @@ class HsSample {
 
   bool get isValid => (quality & HsQuality.valid) != 0;
   bool get isOnSkin => (quality & HsQuality.onSkin) != 0;
+
+  /// Fabricated test data. Never render this as a health measurement.
+  bool get isSynthetic => (quality & HsQuality.synthetic) != 0;
 
   DateTime get timestamp =>
       DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000, isUtc: true);
