@@ -7,6 +7,7 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/database_helper.dart';
+import '../utils/health_store_sync_manager.dart';
 import 'scr_ble_console.dart';
 
 /// Settings + developer mode (handoff 1i). A pushed route (no nav bar). The
@@ -27,7 +28,23 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _devMode = false;
   bool _deleting = false;
   bool _rebuilding = false;
+  bool _includeSynthetic = false;
   String _version = '';
+
+  /// Toggle whether firmware-fabricated (SYNTHETIC) samples are derived into the
+  /// trends, then rebuild immediately so the change is visible without a sync.
+  ///
+  /// A bench device running CONFIG_HPI_HS_SYNTH generates its *entire* history as
+  /// synthetic data, so with the filter on (the correct production behaviour)
+  /// every screen renders empty and looks broken. This is the escape hatch — and
+  /// it is deliberately loud about what it's showing.
+  Future<void> _setIncludeSynthetic(bool v) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(HealthStoreSyncManager.includeSyntheticPrefKey, v);
+    if (!mounted) return;
+    setState(() => _includeSynthetic = v);
+    await _rebuildTrends();
+  }
 
   /// Re-derive `health_trends` from samples already on the phone — no download.
   ///
@@ -49,19 +66,32 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
         }
         return;
       }
-      final rows = await db.rebuildAllTrends(device);
+      final rows = await db.rebuildAllTrends(device,
+          includeSynthetic: _includeSynthetic);
       final counts = await db.sampleCountsByType(device);
+      final synthetic = await db.syntheticSampleCount(device);
       final types = await db.getTypes(device);
       final summary = (counts.entries.map((e) =>
               '${types[e.key]?['key'] ?? "0x${e.key.toRadixString(16)}"}=${e.value}')
             .toList()
           ..sort())
           .join('  ');
-      debugPrint('[Rebuild] $rows trend rows · stored: $summary');
+      final total = counts.values.fold<int>(0, (a, b) => a + b);
+      debugPrint('[Rebuild] $rows trend rows · stored: $summary · '
+          'synthetic=$synthetic/$total · '
+          'includeSynthetic=$_includeSynthetic');
       if (mounted) {
+        // If everything on the device is synthetic and the filter is on, a "0
+        // rows" result is correct but reads as a failure. Say why.
+        final blocked = rows == 0 && synthetic > 0 && !_includeSynthetic;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Rebuilt $rows trend rows from ${counts.values.fold<int>(0, (a, b) => a + b)} stored samples'),
-          backgroundColor: HpiColors.steps,
+          content: Text(blocked
+              ? 'No trends: all $synthetic samples are synthetic test data. '
+                  'Turn on "Include synthetic data" to chart them.'
+              : 'Rebuilt $rows trend rows from $total stored samples'
+                  '${synthetic > 0 ? " ($synthetic synthetic)" : ""}'),
+          backgroundColor: blocked ? HpiColors.temp : HpiColors.steps,
+          duration: const Duration(seconds: 5),
         ));
       }
     } catch (e) {
@@ -138,6 +168,8 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     if (!mounted) return;
     setState(() {
       _devMode = prefs.getBool(ScrSettingsNew.devModePrefKey) ?? false;
+      _includeSynthetic =
+          prefs.getBool(HealthStoreSyncManager.includeSyntheticPrefKey) ?? false;
       _version = '${info.version}+${info.buildNumber}';
     });
   }
@@ -285,6 +317,40 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                   style: HpiText.mono.copyWith(fontSize: 10)),
               onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ScrBleConsole())),
+            ),
+            const Divider(height: 1, color: HpiColors.divider, indent: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  HpiIconSquare(
+                      icon: Symbols.science,
+                      color: HpiColors.stress,
+                      size: 34,
+                      iconSize: 18),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Include synthetic data', style: HpiText.cardTitle),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Show firmware test data in charts. Never enable in '
+                          'production — it is fabricated, not measured.',
+                          style: HpiText.supporting,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _includeSynthetic,
+                    onChanged: _rebuilding ? null : _setIncludeSynthetic,
+                    activeThumbColor: HpiColors.onHr,
+                    activeTrackColor: HpiColors.stress,
+                  ),
+                ],
+              ),
             ),
             const Divider(height: 1, color: HpiColors.divider, indent: 14),
             HpiListRow(

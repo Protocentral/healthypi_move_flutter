@@ -1339,10 +1339,35 @@ class DatabaseHelper {
   /// So a sample that arrived while its type was missing from `hs_types` stays
   /// invisible forever, even though the raw data is on the phone. This replays
   /// the lot. No network — it reads only what's already stored.
-  Future<int> rebuildAllTrends(String device, {String? deviceMac}) async {
+  Future<int> rebuildAllTrends(
+    String device, {
+    String? deviceMac,
+    bool includeSynthetic = false,
+  }) async {
     final earliest = await earliestSampleTs(device);
     if (earliest == null) return 0;
-    return deriveTrends(device, sinceUtc: earliest, deviceMac: deviceMac);
+    // Rebuilding replaces rows for the hours it touches, but rows derived under
+    // the *other* synthetic setting would linger for hours it no longer covers.
+    // Clear the derived cache first so it always reflects the current setting.
+    final db = await database;
+    await db.delete('health_trends',
+        where: 'session_id = 0'); // derived rows only; legacy sync rows have real ids
+    return deriveTrends(device,
+        sinceUtc: earliest,
+        deviceMac: deviceMac,
+        includeSynthetic: includeSynthetic);
+  }
+
+  /// How many stored samples are firmware-fabricated (quality bit 1<<6).
+  /// A bench device running CONFIG_HPI_HS_SYNTH generates its entire history this
+  /// way, so this is the difference between "no data" and "all data is synthetic".
+  Future<int> syntheticSampleCount(String device) async {
+    final db = await database;
+    return Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM hs_samples WHERE device = ? AND (quality & ?) != 0',
+          [device, HsQuality.synthetic],
+        )) ??
+        0;
   }
 
   /// How many samples we already hold for [device] with `seq > [seq]`.
@@ -1374,10 +1399,17 @@ class DatabaseHelper {
   /// temp is stored in centi-degrees — DECISIONS §3). Runs incrementally over
   /// only the touched hours; safe to re-run (idempotent upsert on the trends
   /// UNIQUE key). Returns the number of derived rows written.
+  /// [includeSynthetic] admits firmware-fabricated samples (quality bit 1<<6)
+  /// into the derived trends. **Off in production, always.** It exists because a
+  /// bench device running `CONFIG_HPI_HS_SYNTH=y` generates its whole history as
+  /// synthetic data — so with the filter on (correctly), every screen renders
+  /// empty and the pipeline can't be tested at all. Gated behind developer mode,
+  /// and the UI must label the data as synthetic wherever it's shown.
   Future<int> deriveTrends(
     String device, {
     required int sinceUtc,
     String? deviceMac,
+    bool includeSynthetic = false,
   }) async {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
@@ -1402,8 +1434,9 @@ class DatabaseHelper {
       // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
       // — but it must not reach a chart, a summary or an export, or synthetic
       // samples would be silently indistinguishable from measurements.
+      // The only exception is an explicit developer opt-in (see [includeSynthetic]).
       final quality = (r['quality'] as int?) ?? 0;
-      if (quality & HsQuality.synthetic != 0) continue;
+      if (!includeSynthetic && quality & HsQuality.synthetic != 0) continue;
 
       final t = types[r['type'] as int];
       if (t == null) continue; // unknown id → skip (registry is additive)

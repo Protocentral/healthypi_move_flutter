@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'background_sync_manager.dart';
 import 'connection_manager.dart';
@@ -59,6 +60,16 @@ class HealthStoreSyncManager {
   ///     peak-of-means over the hr series.
   static const int _deriveVersion = 2;
   static const String _deriveVersionKey = 'derive_version';
+
+  /// Developer opt-in: admit firmware-fabricated (SYNTHETIC) samples into the
+  /// derived trends. Off in production. See [ScrSettingsNew].
+  static const String includeSyntheticPrefKey = 'include_synthetic_data';
+  static const String _syntheticModeKey = 'derive_included_synthetic';
+
+  Future<bool> _includeSynthetic() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(includeSyntheticPrefKey) ?? false;
+  }
 
   /// How many of the newest samples to fetch up-front, ahead of the backlog, so
   /// the UI has current data immediately. Sized to sit inside the device's RAM
@@ -372,20 +383,31 @@ class HealthStoreSyncManager {
     // A version stamp covers both, and every future change, without needing to
     // guess which rows are stale. Bump _deriveVersion whenever deriveTrends
     // changes meaning.
+    final includeSynthetic = await _includeSynthetic();
+
     final gained = types.keys.toSet().difference(knownBefore);
-    final storedVersion =
-        await db.getMetadata<int>(_deriveVersionKey) ?? 0;
-    final stale = storedVersion != _deriveVersion;
+    final storedVersion = await db.getMetadata<int>(_deriveVersionKey) ?? 0;
+    // The synthetic setting is part of "what derivation means", so flipping it
+    // invalidates the cache exactly like a version bump does.
+    final derivedWithSynthetic =
+        (await db.getMetadata<int>(_syntheticModeKey) ?? 0) == 1;
+    final stale = storedVersion != _deriveVersion ||
+        derivedWithSynthetic != includeSynthetic;
 
     if (stale || (knownBefore.isNotEmpty && gained.isNotEmpty)) {
-      final why = stale
+      final why = storedVersion != _deriveVersion
           ? 'derivation v$storedVersion → v$_deriveVersion'
-          : 'registry gained ${gained.length} types '
-              '(${gained.map((id) => types[id]?.key ?? "0x${id.toRadixString(16)}").join(", ")})';
+          : (derivedWithSynthetic != includeSynthetic
+              ? 'synthetic ${derivedWithSynthetic ? "on" : "off"} → '
+                  '${includeSynthetic ? "on" : "off"}'
+              : 'registry gained ${gained.length} types '
+                  '(${gained.map((id) => types[id]?.key ?? "0x${id.toRadixString(16)}").join(", ")})');
       debugPrint('[HS-Sync] rebuilding trends from stored samples — $why');
       onStatus('Rebuilding trends…');
-      final rows = await db.rebuildAllTrends(device);
+      final rows = await db.rebuildAllTrends(device,
+          includeSynthetic: includeSynthetic);
       await db.setMetadata(_deriveVersionKey, _deriveVersion);
+      await db.setMetadata(_syntheticModeKey, includeSynthetic ? 1 : 0);
       debugPrint('[HS-Sync] rebuilt $rows trend rows from existing data');
     }
 
@@ -546,7 +568,8 @@ class HealthStoreSyncManager {
     if (stored > 0 && earliestTs != null) {
       onStatus('Deriving trends…');
       _emit(0.95, SyncState.parsing, 'Deriving trends…');
-      final rows = await db.deriveTrends(device, sinceUtc: earliestTs);
+      final rows = await db.deriveTrends(device,
+          sinceUtc: earliestTs, includeSynthetic: includeSynthetic);
       debugPrint('[HS-Sync] derived $rows trend rows');
     }
 
@@ -560,6 +583,20 @@ class HealthStoreSyncManager {
       }).toList()
         ..sort();
       debugPrint('[HS-Sync] stored samples by type: ${byKey.join("  ")}');
+    }
+
+    // The third possibility, and the one that bit us: downloaded, decodable, and
+    // then *correctly* excluded because the firmware fabricated it. A bench board
+    // running CONFIG_HPI_HS_SYNTH generates its whole history this way, so every
+    // screen renders empty and looks broken. Say so, loudly.
+    final synthetic = await db.syntheticSampleCount(device);
+    final total = counts.values.fold<int>(0, (a, b) => a + b);
+    if (synthetic > 0) {
+      debugPrint('[HS-Sync] ⚠ $synthetic of $total stored samples are SYNTHETIC '
+          '(firmware test data). Currently '
+          '${includeSynthetic ? "INCLUDED in" : "EXCLUDED from"} trends'
+          '${includeSynthetic ? "" : " — enable Settings → Developer → "
+              "\"Include synthetic data\" to see them."}');
     }
 
     return _SessionOutcome(stored: stored, done: done, error: error);
