@@ -41,6 +41,9 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
   Future<void> _setIncludeSynthetic(bool v) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(HealthStoreSyncManager.includeSyntheticPrefKey, v);
+    // Raise the app-wide banner (HpiSyntheticBanner) before the rebuild, so the
+    // charts never repaint with fabricated data ahead of the warning.
+    HealthStoreSyncManager.instance.syntheticIncluded.value = v;
     if (!mounted) return;
     setState(() => _includeSynthetic = v);
     await _rebuildTrends();

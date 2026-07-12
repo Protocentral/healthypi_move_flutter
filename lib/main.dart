@@ -10,7 +10,9 @@ import 'screens/scr_device_settings.dart';
 import 'screens/scr_settings.dart';
 import 'screens/scr_bpt_calibration.dart';
 import 'theme/hpi_theme.dart';
+import 'ui/components/hpi_synthetic_banner.dart';
 import 'utils/ble_manager.dart';
+import 'utils/health_store_sync_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +20,10 @@ void main() async {
   // Sets the universal_ble log level; without this the plugin stays at its
   // verbose default and floods release logs.
   await BleManager.instance.init();
+
+  // Prime the synthetic-data flag before the first frame so the banner is right
+  // on the first paint, not only after a sync has run.
+  await HealthStoreSyncManager.instance.loadSyntheticFlag();
 
   runApp(const HealthyPiApp());
 }
@@ -34,6 +40,10 @@ class HealthyPiApp extends StatelessWidget {
       theme: HpiTheme.dark(),
       darkTheme: HpiTheme.dark(),
       themeMode: ThemeMode.dark,
+      // Wraps every route (pushed screens and dialogs included), so no chart can
+      // render fabricated samples without the app saying so on screen.
+      builder: (context, child) =>
+          HpiSyntheticBanner(child: child ?? const SizedBox.shrink()),
       // Named routes for major screens
       initialRoute: '/',
       routes: {

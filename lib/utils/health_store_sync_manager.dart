@@ -66,9 +66,25 @@ class HealthStoreSyncManager {
   static const String includeSyntheticPrefKey = 'include_synthetic_data';
   static const String _syntheticModeKey = 'derive_included_synthetic';
 
+  /// Mirrors [includeSyntheticPrefKey] for the UI, so the app can say so on
+  /// screen whenever it is charting fabricated data.
+  ///
+  /// The firmware handoff is explicit that a synthetic sample must never be
+  /// *silently* mistaken for a measurement — that is the entire point of the
+  /// quality bit. Filtering it out satisfies that; charting it behind a
+  /// developer opt-in with no label does not. `HpiSyntheticBanner` watches this.
+  final ValueNotifier<bool> syntheticIncluded = ValueNotifier<bool>(false);
+
+  /// Prime [syntheticIncluded] from storage. Call once during startup, before
+  /// the first frame, so the banner is correct on the very first paint rather
+  /// than appearing after the first sync.
+  Future<void> loadSyntheticFlag() => _includeSynthetic();
+
   Future<bool> _includeSynthetic() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(includeSyntheticPrefKey) ?? false;
+    final v = prefs.getBool(includeSyntheticPrefKey) ?? false;
+    syntheticIncluded.value = v;
+    return v;
   }
 
   /// How many of the newest samples to fetch up-front, ahead of the backlog, so
@@ -312,7 +328,12 @@ class HealthStoreSyncManager {
       }
 
       if (stored > 0 && earliestTs != null) {
-        final rows = await db.deriveTrends(device, sinceUtc: earliestTs);
+        // Must honour the same opt-in as the backlog drain. Defaulting to false
+        // here made the recent-first pass drop synthetic samples while the
+        // backlog kept them, so a bench device showed a hole at the newest end
+        // of every chart — the opposite of what the toggle promises.
+        final rows = await db.deriveTrends(device,
+            sinceUtc: earliestTs, includeSynthetic: await _includeSynthetic());
         debugPrint('[HS-Sync] recent-first: $stored samples, $rows trend rows '
             '— the UI has current data now');
       }
