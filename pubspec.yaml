@@ -101,7 +101,9 @@ dependencies:
   url_launcher: ^6.1.11
   archive: ^4.0.7
   shared_preferences: ^2.0.18
-  material_symbols_icons: ^4.2815.0
+  # >=4.2892 is required on Flutter 3.44+: IconData became a `final class`, and
+  # older releases of this package extend it (compile error, not just a lint).
+  material_symbols_icons: ^4.2892.0
 
   share_plus: ^12.0.0
   upgrader: ^12.1.0

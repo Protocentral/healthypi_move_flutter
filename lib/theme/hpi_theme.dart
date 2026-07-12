@@ -1,3 +1,6 @@
+// CupertinoPageTransitionsBuilder moved out of material.dart in Flutter 3.44;
+// importing it explicitly from cupertino.dart works on both old and new SDKs.
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'hpi_colors.dart';
 import 'hpi_text.dart';
