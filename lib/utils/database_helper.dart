@@ -511,6 +511,60 @@ class DatabaseHelper {
     return results;
   }
 
+  /// Hourly buckets over a rolling window ending now, rather than a calendar day.
+  ///
+  /// The home cards use this: a strict "today" query goes blank at 00:05, and on
+  /// a device whose history stops before midnight it shows nothing at all even
+  /// though there's plenty of recent data. Returns oldest-first.
+  Future<List<Map<String, dynamic>>> getRecentHourlyTrends(
+    String trendType, {
+    int hours = 24,
+    String? deviceMac,
+  }) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    final from = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - hours * 3600;
+    return await db.rawQuery('''
+      SELECT
+        (timestamp / 3600) * 3600 as hour_start,
+        MAX(value_max) as max_value,
+        MIN(value_min) as min_value,
+        AVG(value_avg) as avg_value,
+        COUNT(*) as data_points
+      FROM health_trends
+      WHERE trend_type = ? AND timestamp >= ? AND device_mac = ?
+      GROUP BY hour_start
+      ORDER BY hour_start ASC
+    ''', [trendType, from, effectiveMac]);
+  }
+
+  /// The most recent hourly bucket for [trendType] within [withinDays], or null.
+  /// Lets a card show "last reading, 6 h ago" instead of nothing when the newest
+  /// data predates today.
+  Future<Map<String, dynamic>?> getLatestHourlyTrend(
+    String trendType, {
+    int withinDays = 7,
+    String? deviceMac,
+  }) async {
+    final db = await database;
+    final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
+    final from =
+        (DateTime.now().millisecondsSinceEpoch ~/ 1000) - withinDays * 86400;
+    final rows = await db.rawQuery('''
+      SELECT
+        (timestamp / 3600) * 3600 as hour_start,
+        MAX(value_max) as max_value,
+        MIN(value_min) as min_value,
+        AVG(value_avg) as avg_value
+      FROM health_trends
+      WHERE trend_type = ? AND timestamp >= ? AND device_mac = ?
+      GROUP BY hour_start
+      ORDER BY hour_start DESC
+      LIMIT 1
+    ''', [trendType, from, effectiveMac]);
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// Get weekly aggregated trends
   Future<List<Map<String, dynamic>>> getWeeklyTrends(
     String trendType,

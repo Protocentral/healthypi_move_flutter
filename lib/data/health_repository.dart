@@ -183,46 +183,99 @@ class HealthRepository {
   /// plus a 30-day baseline. [cumulative] metrics (steps) sum today's hourly
   /// values into the headline rather than taking the latest reading.
   Future<MetricTrend> _loadMetric(String key, {bool cumulative = false}) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final hourly = await _db.getHourlyTrends(key, today);
+    if (cumulative) return _loadCumulative(key);
 
-    if (hourly.isEmpty) {
+    // A rolling 24-hour window, not a calendar day. "Today" goes blank at 00:05,
+    // and on a device whose newest data predates midnight it shows nothing at all
+    // even though there is plenty of recent data to draw.
+    final recent = await _db.getRecentHourlyTrends(key, hours: 24);
+
+    // The headline is the last reading we have, even if it's older than the
+    // window — better to show "98% · 6 h ago" than an empty card.
+    final latestRow = await _db.getLatestHourlyTrend(key, withinDays: 7);
+    if (recent.isEmpty && latestRow == null) {
       return MetricTrend(key: key, availability: MetricAvailability.noData);
     }
 
     final spark = <double>[];
-    DateTime? latestAt;
     double? minV, maxV;
-    num sumForCumulative = 0;
-    num latestReading = 0;
-
-    for (final row in hourly) {
+    for (final row in recent) {
       final avg = _display(key, row['avg_value'] as num);
       final rmin = _display(key, row['min_value'] as num);
       final rmax = _display(key, row['max_value'] as num);
       spark.add(avg);
-      minV = (minV == null) ? rmin : (rmin < minV ? rmin : minV);
-      maxV = (maxV == null) ? rmax : (rmax > maxV ? rmax : maxV);
-      sumForCumulative += rmax; // steps: hourly max, matching getLatestVitals
-      latestReading = avg;
+      minV = (minV == null || rmin < minV) ? rmin : minV;
+      maxV = (maxV == null || rmax > maxV) ? rmax : maxV;
+    }
+
+    double? latest;
+    DateTime? latestAt;
+    if (latestRow != null) {
+      latest = _display(key, latestRow['avg_value'] as num);
+      latestAt = DateTime.fromMillisecondsSinceEpoch(
+          (latestRow['hour_start'] as int) * 1000,
+          isUtc: false);
+      // Window empty but a recent reading exists: still show min/max from it.
+      minV ??= _display(key, latestRow['min_value'] as num);
+      maxV ??= _display(key, latestRow['max_value'] as num);
+    }
+
+    return MetricTrend(
+      key: key,
+      availability: MetricAvailability.available,
+      latest: latest,
+      latestAt: latestAt,
+      min: minV,
+      max: maxV,
+      spark: spark,
+      baseline: await _baseline(key),
+    );
+  }
+
+  /// Cumulative metrics (steps) headline the **day's total**, so they need a
+  /// calendar day rather than a rolling window.
+  ///
+  /// If today has no data yet, fall back to the most recent day that does. A
+  /// bare "0 steps" would be a claim we can't support — it reads as "you walked
+  /// nowhere", when the truth is "we have nothing for today".
+  Future<MetricTrend> _loadCumulative(String key) async {
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day);
+
+    List<Map<String, dynamic>> hourly = const [];
+    DateTime day = midnight;
+    for (var back = 0; back <= 7; back++) {
+      day = midnight.subtract(Duration(days: back));
+      hourly = await _db.getHourlyTrends(key, day);
+      if (hourly.isNotEmpty) break;
+    }
+    if (hourly.isEmpty) {
+      return MetricTrend(key: key, availability: MetricAvailability.noData);
+    }
+
+    // Derived rows hold each hour's INCREMENT (deriveTrends differences the
+    // device's running counter), so the day's total is their sum.
+    final spark = <double>[];
+    num total = 0;
+    DateTime? latestAt;
+    for (final row in hourly) {
+      final v = _display(key, row['max_value'] as num);
+      spark.add(v);
+      total += v;
       latestAt = DateTime.fromMillisecondsSinceEpoch(
           (row['hour_start'] as int) * 1000,
           isUtc: false);
     }
 
-    final headline =
-        cumulative ? sumForCumulative.toDouble() : latestReading.toDouble();
-
     return MetricTrend(
       key: key,
       availability: MetricAvailability.available,
-      latest: headline,
+      latest: total.toDouble(),
       latestAt: latestAt,
-      min: minV,
-      max: maxV,
+      min: null,
+      max: null,
       spark: spark,
-      baseline: cumulative ? null : await _baseline(key),
+      baseline: null,
     );
   }
 

@@ -340,6 +340,13 @@ class _ScrHomeState extends State<ScrHome> {
                       style: HpiText.supporting),
               ],
             ),
+            // Don't let a big "72 bpm" imply it's current when the newest reading
+            // we hold is hours old.
+            if (!_isToday(hr) && hr.latestAt != null) ...[
+              const SizedBox(height: 2),
+              Text('last reading ${_age(hr.latestAt!)}',
+                  style: HpiText.supporting.copyWith(color: HpiColors.temp)),
+            ],
             const SizedBox(height: 12),
             SizedBox(
               height: 56,
@@ -448,19 +455,39 @@ class _ScrHomeState extends State<ScrHome> {
     );
   }
 
+  /// Whether [t]'s newest reading falls on today's date.
+  bool _isToday(MetricTrend t) {
+    final at = t.latestAt;
+    if (at == null) return false;
+    final now = DateTime.now();
+    return at.year == now.year && at.month == now.month && at.day == now.day;
+  }
+
+  /// "2 h ago" / "3 d ago" — used so a card never implies its value is current
+  /// when the newest data we hold is older than that.
+  String _age(DateTime at) {
+    final d = DateTime.now().difference(at);
+    if (d.inMinutes < 60) return '${d.inMinutes} m ago';
+    if (d.inHours < 24) return '${d.inHours} h ago';
+    return '${d.inDays} d ago';
+  }
+
   String? _rowSupporting(String key, MetricTrend t) {
+    // Never claim "today" when the reading isn't from today — say how old it is.
+    if (!_isToday(t) && t.latestAt != null) return _age(t.latestAt!);
+
     switch (key) {
       case 'activity':
-        return t.baseline != null ? 'daily average ${t.baseline!.round()}' : 'today';
+        return 'today';
       case 'spo2':
-        return 'last night';
+        return 'last reading';
       case 'temp':
         final d = t.baselineDelta;
         if (d != null) {
           final sign = d >= 0 ? '+' : '';
           return '$sign${d.toStringAsFixed(1)}° vs baseline';
         }
-        return 'last night';
+        return 'last reading';
       default:
         return null;
     }
