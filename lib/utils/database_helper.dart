@@ -1452,6 +1452,43 @@ class DatabaseHelper {
     return real;
   }
 
+  /// Delete every health record the app holds, in one transaction.
+  ///
+  /// Wipes the raw Health Store (`hs_samples` / `hs_types` / `hs_sync_state`),
+  /// the derived `health_trends` cache, the legacy `synced_sessions` dedup, the
+  /// research-recording index, and the sync metadata.
+  ///
+  /// **Clearing `hs_sync_state` resets the sync cursor**, which is the whole
+  /// point: the next sync re-pulls from the device's oldest retained sample. Use
+  /// this when the local store and the device have diverged — e.g. after the
+  /// HS-2 firmware discards its on-flash log, or after a derivation bug means
+  /// the derived trends can no longer be trusted.
+  ///
+  /// The pairing is **kept** (that lives in SharedPreferences, not here), so the
+  /// watch stays paired and its own data is untouched — this only deletes the
+  /// phone's copy. Returns the number of rows removed per table.
+  Future<Map<String, int>> deleteAllHealthData() async {
+    final db = await database;
+    const tables = [
+      'hs_samples',
+      'hs_types',
+      'hs_sync_state',
+      'health_trends',
+      'synced_sessions',
+      'research_files',
+      'research_sessions',
+      'app_metadata',
+    ];
+    final removed = <String, int>{};
+    await db.transaction((txn) async {
+      for (final table in tables) {
+        // The table list is a const literal, never user input.
+        removed[table] = await txn.delete(table);
+      }
+    });
+    return removed;
+  }
+
   /// Close database
   Future close() async {
     final db = await database;

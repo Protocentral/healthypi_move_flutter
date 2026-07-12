@@ -348,6 +348,14 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
   Widget _dangerCard() {
     return HpiGroupedCard(rows: [
       HpiListRow(
+        icon: Symbols.delete,
+        iconColor: HpiColors.error,
+        title: 'Delete all data on this phone',
+        supporting: 'Resets the sync cursor and re-pulls from the watch',
+        onTap: _confirmDeleteAll,
+        showChevron: false,
+      ),
+      HpiListRow(
         icon: Symbols.link_off,
         iconColor: HpiColors.error,
         title: 'Unpair watch',
@@ -355,6 +363,44 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
         showChevron: false,
       ),
     ]);
+  }
+
+  /// Same wipe as Settings → Data. Reachable here too because this is where you
+  /// end up when the phone's copy and the watch have diverged.
+  Future<void> _confirmDeleteAll() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: HpiColors.surfaceContainer,
+        title: const Text('Delete all data on this phone?'),
+        content: const Text(
+          'Removes every synced sample, the derived trends, the recording index '
+          'and the sync cursor.\n\n'
+          'Your watch is not touched and stays paired — the next sync re-pulls '
+          'whatever it still holds.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete everything',
+                style: TextStyle(color: HpiColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final removed = await DatabaseHelper.instance.deleteAllHealthData();
+    final total = removed.values.fold<int>(0, (a, b) => a + b);
+    await _load(); // refresh the trend-bin count and last-sync time
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Deleted $total rows. Sync to re-pull from the watch.'),
+        backgroundColor: HpiColors.steps,
+      ));
+    }
   }
 
   String _relative(DateTime t) {

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/database_helper.dart';
 import 'scr_ble_console.dart';
 
 /// Settings + developer mode (handoff 1i). A pushed route (no nav bar). The
@@ -24,7 +25,59 @@ class ScrSettingsNew extends StatefulWidget {
 
 class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _devMode = false;
+  bool _deleting = false;
   String _version = '';
+
+  /// Destructive, and irreversible on the phone — so it's a two-step confirm
+  /// that states plainly what goes and what stays.
+  Future<void> _confirmDeleteAll() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: HpiColors.surfaceContainer,
+        title: const Text('Delete all data on this phone?'),
+        content: const Text(
+          'Removes every synced sample, the derived trends, the recording index '
+          'and the sync cursor.\n\n'
+          'Your watch is not touched and stays paired — its own data is intact, '
+          'so the next sync re-pulls whatever the watch still holds. Anything '
+          'the watch has already aged out is gone for good.\n\n'
+          'CSV files you have already exported are not affected.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete everything',
+                style: TextStyle(color: HpiColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      final removed = await DatabaseHelper.instance.deleteAllHealthData();
+      final total = removed.values.fold<int>(0, (a, b) => a + b);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Deleted $total rows. Sync to re-pull from the watch.'),
+          backgroundColor: HpiColors.steps,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Delete failed: $e'),
+            backgroundColor: HpiColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
 
   @override
   void initState() {
@@ -70,6 +123,16 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
             HpiGroupedCard(rows: [
               _row(Symbols.description, 'Export data', 'CSV · EDF'),
               _row(Symbols.cloud_off, 'Cloud sync', 'Off — local only'),
+              HpiListRow(
+                icon: Symbols.delete,
+                iconColor: HpiColors.error,
+                title: 'Delete all data on this phone',
+                supporting: _deleting
+                    ? 'Deleting…'
+                    : 'Resets the sync cursor and re-pulls from the watch',
+                showChevron: false,
+                onTap: _deleting ? null : _confirmDeleteAll,
+              ),
             ]),
             const SizedBox(height: 20),
             const HpiSectionLabel('DEVELOPER'),
