@@ -16,6 +16,22 @@ import 'scr_trends_hub.dart';
 class ScrMainShell extends StatefulWidget {
   const ScrMainShell({super.key});
 
+  /// Return to the app root from a terminal point in a pushed flow (DFU done,
+  /// BPT calibration finished, device unpaired, back out of streaming).
+  ///
+  /// Every such site used to `pushReplacement` a fresh legacy `HomePage`, which
+  /// syncs through `BackgroundSyncManager` — the pre-HPI_HS path, with no
+  /// SYNTHETIC filter and no `hr_max`. Finishing any of those flows therefore
+  /// stranded the user on the old data path for the rest of the session. Route
+  /// every "go home" through here so there is one way back and it lands on the
+  /// redesigned shell.
+  static void returnToRoot(BuildContext context) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const ScrMainShell()),
+      (route) => false,
+    );
+  }
+
   @override
   State<ScrMainShell> createState() => _ScrMainShellState();
 }

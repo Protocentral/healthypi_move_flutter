@@ -20,7 +20,8 @@ import 'scr_trend_detail.dart';
 /// Redesigned Home (handoff 2a list + 1a grid, with the 4a tablet two-pane).
 /// Reads [HealthRepository] and renders honest zero-states for metrics with no
 /// producing code (stress, EDA) — see docs/REDESIGN_PLAN.md. Sync is delegated
-/// to the existing [BackgroundSyncManager], ported from the legacy home.
+/// to [HealthStoreSyncManager], which falls back to the legacy path only on
+/// pre-HPI_HS firmware.
 class ScrHome extends StatefulWidget {
   const ScrHome({super.key});
 

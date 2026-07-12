@@ -4,7 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../globals.dart';
-import '../home.dart';
+import 'scr_main_shell.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
@@ -360,9 +360,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => HomePage()),
-              );
+              ScrMainShell.returnToRoot(context);
             },
             child: Text('OK', style: TextStyle(color: hPi4Global.hpi4Color)),
           ),
@@ -1075,7 +1073,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         onPressed: () async {
           await _conn.disconnect();
           if (mounted) {
-            Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            ScrMainShell.returnToRoot(context);
           }
         },
         child: Row(

@@ -5,7 +5,7 @@ import '../utils/sizeConfig.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../globals.dart';
-import '../home.dart';
+import 'scr_main_shell.dart';
 import '../utils/snackbar.dart';
 import 'scr_live_stream.dart';
 
@@ -83,9 +83,7 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
             onDisconnectPressed();
-            Navigator.of(
-              context,
-            ).pushReplacement(MaterialPageRoute(builder: (_) => HomePage()));
+            ScrMainShell.returnToRoot(context);
           },
         ),
         title: const Row(

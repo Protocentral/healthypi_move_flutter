@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:move/utils/connection_manager.dart';
 
 import '../globals.dart';
-import '../home.dart';
+import 'scr_main_shell.dart';
 import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../utils/device_manager.dart';
@@ -141,9 +141,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => HomePage()),
-                );
+                ScrMainShell.returnToRoot(context);
               },
               child: Text(
                 'Cancel',
@@ -975,9 +973,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                     }
                                     await onDisconnectPressed();
                                     if (mounted) {
-                                      Navigator.of(context).pushReplacement(
-                                        MaterialPageRoute(builder: (_) => HomePage()),
-                                      );
+                                      ScrMainShell.returnToRoot(context);
                                     }
                                   }
                                 },
@@ -1157,9 +1153,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         }
                         await onDisconnectPressed();
                         if (mounted) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => HomePage()),
-                          );
+                          ScrMainShell.returnToRoot(context);
                         }
                       },
                       style: OutlinedButton.styleFrom(
@@ -1269,9 +1263,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         }
                         await onDisconnectPressed();
                         if (mounted) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => HomePage()),
-                          );
+                          ScrMainShell.returnToRoot(context);
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -1315,9 +1307,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () async {
             await onDisconnectPressed();
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => HomePage()),
-            );
+            ScrMainShell.returnToRoot(context);
           },
         ),
         title: Row(

@@ -15,7 +15,7 @@ import '../utils/device_manager.dart';
 import '../utils/snackbar.dart';
 import '../utils/update_checker.dart';
 import 'scr_device_settings.dart';
-import '../home.dart';
+import 'scr_main_shell.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
@@ -90,12 +90,9 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
       // Navigate to stream selection screen
       if (mounted) {
         await sendDeleteAllCommand();
-        // Directly navigate to HomePage to trigger database deletion
         await DeviceManager.unpairDevice();
         await onDisconnectPressed();
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => HomePage()),
-        );
+        ScrMainShell.returnToRoot(context);
       }
     } catch (e) {
       if (mounted) {

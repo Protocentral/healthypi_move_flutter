@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'utils/trends_data_manager.dart';
-import 'utils/background_sync_manager.dart';
+import 'utils/health_store_sync_manager.dart';
 import 'utils/device_manager.dart';
 import 'utils/database_helper.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
@@ -518,9 +518,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Start background sync (BackgroundSyncManager handles ALL BLE operations)
+    // Sync through HealthStoreSyncManager even on this legacy screen. It probes
+    // HELLO and only falls back to BackgroundSyncManager on pre-HPI_HS
+    // firmware; calling BackgroundSyncManager directly (as this used to) took
+    // the legacy path unconditionally, skipping the SYNTHETIC filter and the
+    // true hr_min/hr_max peaks. This screen is rollback-only, but it must not
+    // be a way to silently land on the old data pipeline.
     debugPrint('Home: Starting sync for device: ${deviceInfo.macAddress}');
-    debugPrint('Home: BackgroundSyncManager will handle all BLE connection/disconnection');
 
     if (mounted) {
       setState(() {
@@ -531,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Listen to progress updates
-    _syncProgressSubscription = BackgroundSyncManager.instance.progressStream.listen(
+    _syncProgressSubscription = HealthStoreSyncManager.instance.progressStream.listen(
       (progress) {
         if (mounted && progress.metric == 'all') {
           setState(() {
@@ -543,7 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     // Start sync - pass only MAC address string
-    final result = await BackgroundSyncManager.instance.syncData(
+    final result = await HealthStoreSyncManager.instance.syncData(
       deviceMacAddress: deviceInfo.macAddress,
       onProgress: (metric, progress) {
         // Progress updates handled via stream

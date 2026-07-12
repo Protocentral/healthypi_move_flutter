@@ -145,8 +145,8 @@ class HomeDashboard {
 /// The single read path the redesigned screens use. Composes the existing
 /// derived `health_trends` store (via [DatabaseHelper]) into typed view models,
 /// and is the one place that decides data availability. It reads only; the write
-/// side (legacy `BackgroundSyncManager` today, `HealthStoreSyncManager` later)
-/// is unchanged.
+/// side (`HealthStoreSyncManager`, which derives `health_trends` from the raw
+/// `hs_samples` store) is unchanged.
 class HealthRepository {
   HealthRepository({DatabaseHelper? db})
       : _db = db ?? DatabaseHelper.instance;
