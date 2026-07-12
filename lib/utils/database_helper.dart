@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:hpi_health_store/hpi_health_store.dart' show HsQuality;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -1388,8 +1390,14 @@ class DatabaseHelper {
         orderBy: 'ts_utc ASC');
     if (rows.isEmpty) return 0;
 
-    // hourStart -> trendType -> bin
+    // hourStart -> trendType -> bin  (discrete metrics)
     final buckets = <int, Map<String, _TrendBin>>{};
+
+    // trendType -> hourStart -> highest RUNNING TOTAL seen in that hour.
+    // Cumulative metrics (steps, energy) carry a running daily total, not an
+    // increment, so they are accumulated separately and differenced below.
+    final cumulative = <String, SplayTreeMap<int, num>>{};
+
     for (final r in rows) {
       // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
       // — but it must not reach a chart, a summary or an export, or synthetic
@@ -1409,6 +1417,14 @@ class DatabaseHelper {
       // Epoch records timestamp the END of their window, so the hour bucket is
       // the hour the window closed in. Good enough at 1-minute epochs.
       final hourStart = ((r['ts_utc'] as int) ~/ 3600) * 3600;
+
+      if ((t['class'] as String?) == 'cumulative') {
+        final byHour = cumulative.putIfAbsent(role.trend, () => SplayTreeMap());
+        final prev = byHour[hourStart];
+        if (prev == null || stored > prev) byHour[hourStart] = stored;
+        continue;
+      }
+
       final bin = (buckets[hourStart] ??= {})
           .putIfAbsent(role.trend, () => _TrendBin());
       switch (role.role) {
@@ -1421,6 +1437,28 @@ class DatabaseHelper {
           bin.maxs.add(stored);
       }
     }
+
+    // Cumulative → per-hour increments.
+    //
+    // `steps` is a running daily total, but the read path computes a day's total
+    // as SUM(MAX(value_max) per hour) — i.e. it expects each hour to hold that
+    // hour's *increment*. Storing the running total would sum running totals and
+    // wildly over-count. So difference consecutive hours here; the hourly bar
+    // chart then also shows steps-per-hour, which is what it should show.
+    cumulative.forEach((trendType, byHour) {
+      num? prev;
+      byHour.forEach((hourStart, total) {
+        // A drop means the counter reset (steps zero at local midnight), so the
+        // new running total *is* the increment.
+        final delta = (prev == null || total < prev!) ? total : total - prev!;
+        prev = total;
+        if (delta <= 0) return; // nothing gained this hour — don't write a row
+        final bin = (buckets[hourStart] ??= {})
+            .putIfAbsent(trendType, () => _TrendBin());
+        bin.values.add(delta);
+        bin.latest = delta;
+      });
+    });
 
     int written = 0;
     await db.transaction((txn) async {

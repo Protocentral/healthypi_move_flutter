@@ -49,6 +49,17 @@ class HealthStoreSyncManager {
   /// Samples requested per SYNC page.
   static const int _pageSize = 256;
 
+  /// Version of the `deriveTrends` logic. `health_trends` is a derived cache, so
+  /// changing what derivation *means* invalidates every row it ever wrote.
+  /// **Bump this whenever deriveTrends changes semantics** — the next sync then
+  /// replays derivation over the stored raw samples automatically.
+  ///
+  /// v2: cumulative metrics (steps) are differenced into per-hour increments, and
+  ///     HR extremes come from the hr_min/hr_max types rather than a
+  ///     peak-of-means over the hr series.
+  static const int _deriveVersion = 2;
+  static const String _deriveVersionKey = 'derive_version';
+
   /// How many of the newest samples to fetch up-front, ahead of the backlog, so
   /// the UI has current data immediately. Sized to sit inside the device's RAM
   /// ring (HS_RING_N = 512) — a cursor that close to `head` is served from RAM
@@ -347,19 +358,34 @@ class HealthStoreSyncManager {
       ]);
     }
 
-    // Did the registry just grow? Then samples we already hold, whose type id we
-    // previously didn't recognise, were silently dropped during derivation — the
-    // raw data is on the phone but invisible to every screen. Replay derivation
-    // over the whole store to bring them in. (This is exactly what happened when
-    // TYPES paging was broken: only ids 0x01–0x05 were cached, so spo2, skin_temp
-    // and steps samples were stored and never derived.)
+    // Replay derivation over the whole store when it can no longer be trusted.
+    //
+    // `health_trends` is a *derived cache*, so it is only as good as the code and
+    // the registry that produced it. Two things invalidate it, and both have now
+    // bitten us:
+    //   • the registry grew — samples whose type id we didn't recognise at the
+    //     time were silently dropped (TYPES paging was broken, so only ids
+    //     0x01–0x05 were cached and spo2/skin_temp/steps never derived); and
+    //   • the derivation logic itself changed (cumulative steps → per-hour
+    //     deltas, HR extremes from hr_min/hr_max).
+    //
+    // A version stamp covers both, and every future change, without needing to
+    // guess which rows are stale. Bump _deriveVersion whenever deriveTrends
+    // changes meaning.
     final gained = types.keys.toSet().difference(knownBefore);
-    if (knownBefore.isNotEmpty && gained.isNotEmpty) {
-      final keys = gained.map((id) => types[id]?.key ?? '0x${id.toRadixString(16)}');
-      debugPrint('[HS-Sync] registry gained ${gained.length} types '
-          '(${keys.join(", ")}) — rebuilding trends from stored samples');
+    final storedVersion =
+        await db.getMetadata<int>(_deriveVersionKey) ?? 0;
+    final stale = storedVersion != _deriveVersion;
+
+    if (stale || (knownBefore.isNotEmpty && gained.isNotEmpty)) {
+      final why = stale
+          ? 'derivation v$storedVersion → v$_deriveVersion'
+          : 'registry gained ${gained.length} types '
+              '(${gained.map((id) => types[id]?.key ?? "0x${id.toRadixString(16)}").join(", ")})';
+      debugPrint('[HS-Sync] rebuilding trends from stored samples — $why');
       onStatus('Rebuilding trends…');
       final rows = await db.rebuildAllTrends(device);
+      await db.setMetadata(_deriveVersionKey, _deriveVersion);
       debugPrint('[HS-Sync] rebuilt $rows trend rows from existing data');
     }
 
