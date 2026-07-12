@@ -1293,6 +1293,56 @@ class DatabaseHelper {
     });
   }
 
+  /// Raw sample counts per type id for [device], newest-first-agnostic.
+  ///
+  /// Diagnostic: this is what actually landed on the phone, before any
+  /// derivation. If a metric is missing from the UI, this says whether it was
+  /// never downloaded, or downloaded and then dropped during derivation (e.g. an
+  /// unknown type id, or the SYNTHETIC filter).
+  Future<Map<int, int>> sampleCountsByType(String device) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT type, COUNT(*) AS n FROM hs_samples WHERE device = ? GROUP BY type',
+      [device],
+    );
+    return {for (final r in rows) r['type'] as int: r['n'] as int};
+  }
+
+  /// The Health Store device key (HELLO.uid) we hold samples for, or null when
+  /// nothing has synced. Used by tools that need to act on "the" store without
+  /// a live connection to ask HELLO.
+  Future<String?> getHealthStoreDeviceKey() async {
+    final db = await database;
+    final rows = await db.rawQuery(
+        'SELECT device, COUNT(*) AS n FROM hs_samples '
+        'GROUP BY device ORDER BY n DESC LIMIT 1');
+    if (rows.isEmpty) return null;
+    return rows.first['device'] as String?;
+  }
+
+  /// Oldest `ts_utc` we hold for [device], or null when the store is empty.
+  Future<int?> earliestSampleTs(String device) async {
+    final db = await database;
+    final rows = await db.rawQuery(
+      'SELECT MIN(ts_utc) AS t FROM hs_samples WHERE device = ?',
+      [device],
+    );
+    return rows.first['t'] as int?;
+  }
+
+  /// Re-derive `health_trends` from **every** stored sample.
+  ///
+  /// Needed when the type registry grows: `deriveTrends` skips samples whose type
+  /// id it doesn't know, and it normally only runs over the window just synced.
+  /// So a sample that arrived while its type was missing from `hs_types` stays
+  /// invisible forever, even though the raw data is on the phone. This replays
+  /// the lot. No network — it reads only what's already stored.
+  Future<int> rebuildAllTrends(String device, {String? deviceMac}) async {
+    final earliest = await earliestSampleTs(device);
+    if (earliest == null) return 0;
+    return deriveTrends(device, sinceUtc: earliest, deviceMac: deviceMac);
+  }
+
   /// How many samples we already hold for [device] with `seq > [seq]`.
   /// Used to skip a redundant newest-first fetch when that window is already on
   /// the phone.

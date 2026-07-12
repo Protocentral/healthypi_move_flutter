@@ -26,7 +26,54 @@ class ScrSettingsNew extends StatefulWidget {
 class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _devMode = false;
   bool _deleting = false;
+  bool _rebuilding = false;
   String _version = '';
+
+  /// Re-derive `health_trends` from samples already on the phone — no download.
+  ///
+  /// This is the repair for a metric that was synced but never showed up: if its
+  /// type id wasn't in the cached registry when it arrived, derivation dropped
+  /// it, and the raw sample sits in `hs_samples` invisible to every screen.
+  /// Sync does this automatically when the registry grows; this is the manual
+  /// lever, and it reports the per-type counts so you can see what's actually
+  /// stored.
+  Future<void> _rebuildTrends() async {
+    setState(() => _rebuilding = true);
+    try {
+      final db = DatabaseHelper.instance;
+      final device = await db.getHealthStoreDeviceKey();
+      if (device == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('No synced samples on this phone yet.')));
+        }
+        return;
+      }
+      final rows = await db.rebuildAllTrends(device);
+      final counts = await db.sampleCountsByType(device);
+      final types = await db.getTypes(device);
+      final summary = (counts.entries.map((e) =>
+              '${types[e.key]?['key'] ?? "0x${e.key.toRadixString(16)}"}=${e.value}')
+            .toList()
+          ..sort())
+          .join('  ');
+      debugPrint('[Rebuild] $rows trend rows · stored: $summary');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Rebuilt $rows trend rows from ${counts.values.fold<int>(0, (a, b) => a + b)} stored samples'),
+          backgroundColor: HpiColors.steps,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Rebuild failed: $e'),
+            backgroundColor: HpiColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _rebuilding = false);
+    }
+  }
 
   /// Destructive, and irreversible on the phone — so it's a two-step confirm
   /// that states plainly what goes and what stays.
@@ -238,6 +285,22 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                   style: HpiText.mono.copyWith(fontSize: 10)),
               onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const ScrBleConsole())),
+            ),
+            const Divider(height: 1, color: HpiColors.divider, indent: 14),
+            HpiListRow(
+              icon: Symbols.refresh,
+              iconColor: HpiColors.steps,
+              title: 'Rebuild trends',
+              supporting: 'Re-derive from stored samples · no download',
+              showChevron: false,
+              onTap: _rebuilding ? null : _rebuildTrends,
+              trailing: _rebuilding
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: HpiColors.steps))
+                  : null,
             ),
           ],
         ],

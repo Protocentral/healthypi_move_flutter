@@ -329,6 +329,7 @@ class HealthStoreSyncManager {
 
     // TYPES: the self-describing registry. deriveTrends needs each type's key
     // (hr/spo2/skin_temp/steps) and scale to convert the fixed-point values.
+    final knownBefore = (await db.getTypes(device)).keys.toSet();
     final types = await hs.types();
     if (types.isNotEmpty) {
       await db.upsertTypes(device, [
@@ -344,6 +345,22 @@ class HealthStoreSyncManager {
             'hc': t.healthConnect,
           }
       ]);
+    }
+
+    // Did the registry just grow? Then samples we already hold, whose type id we
+    // previously didn't recognise, were silently dropped during derivation — the
+    // raw data is on the phone but invisible to every screen. Replay derivation
+    // over the whole store to bring them in. (This is exactly what happened when
+    // TYPES paging was broken: only ids 0x01–0x05 were cached, so spo2, skin_temp
+    // and steps samples were stored and never derived.)
+    final gained = types.keys.toSet().difference(knownBefore);
+    if (knownBefore.isNotEmpty && gained.isNotEmpty) {
+      final keys = gained.map((id) => types[id]?.key ?? '0x${id.toRadixString(16)}');
+      debugPrint('[HS-Sync] registry gained ${gained.length} types '
+          '(${keys.join(", ")}) — rebuilding trends from stored samples');
+      onStatus('Rebuilding trends…');
+      final rows = await db.rebuildAllTrends(device);
+      debugPrint('[HS-Sync] rebuilt $rows trend rows from existing data');
     }
 
     // Resume from the highest seq we have durably stored.
@@ -505,6 +522,18 @@ class HealthStoreSyncManager {
       _emit(0.95, SyncState.parsing, 'Deriving trends…');
       final rows = await db.deriveTrends(device, sinceUtc: earliestTs);
       debugPrint('[HS-Sync] derived $rows trend rows');
+    }
+
+    // What actually landed, per type. This distinguishes "never downloaded" from
+    // "downloaded but dropped in derivation" — the two look identical in the UI.
+    final counts = await db.sampleCountsByType(device);
+    if (counts.isNotEmpty) {
+      final byKey = counts.entries.map((e) {
+        final key = types[e.key]?.key ?? '0x${e.key.toRadixString(16)}';
+        return '$key=${e.value}';
+      }).toList()
+        ..sort();
+      debugPrint('[HS-Sync] stored samples by type: ${byKey.join("  ")}');
     }
 
     return _SessionOutcome(stored: stored, done: done, error: error);
