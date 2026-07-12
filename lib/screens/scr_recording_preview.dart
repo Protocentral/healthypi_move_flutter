@@ -1,100 +1,69 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:hpi_health_store/hpi_health_store.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/research_recording.dart';
+import '../models/hs_recording.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
-import '../utils/research_recording_manager.dart';
+import '../utils/health_store_records_manager.dart';
 
-/// Recording preview + CSV export (handoff 2d).
+/// Recording preview + CSV export (handoff 2d) for HPI_HS **RECORDS** payloads.
 ///
-/// Renders a downloaded session: a full-session minimap with a draggable zoom
-/// window, the windowed detail waveform (IMU shows AX/AY/AZ overlaid), session
-/// stats, and CSV export via the existing [ResearchRecordingManager]. All series
-/// come from the decoded payload — nothing here is synthesized.
+/// Decodes with [HsRecordSamples] (bytes-per-sample inferred from the header).
 class ScrRecordingPreview extends StatefulWidget {
   const ScrRecordingPreview({
     super.key,
-    required this.session,
-    required this.data,
+    required this.recording,
+    required this.payload,
   });
 
-  final ResearchRecording session;
-  final Map<ResearchSignalType, Uint8List> data;
+  final HsRecording recording;
+  final Uint8List payload;
 
   @override
   State<ScrRecordingPreview> createState() => _ScrRecordingPreviewState();
 }
 
 class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
-  late ResearchSignalType _signal;
   bool _exporting = false;
-
-  /// Zoom window over the session, as fractions of the whole [0..1].
   double _windowStart = 0;
   double _windowWidth = 0.2;
-
-  /// Decoded channels for the selected signal (1 channel, or 3 for IMU axes).
-  List<List<double>> _channels = const [];
+  late HsRecordSamples _samples;
 
   @override
   void initState() {
     super.initState();
-    _signal = widget.data.keys.first;
-    _decode();
+    _samples = HsRecordSamples.decode(widget.recording.header, widget.payload);
   }
 
-  void _decode() {
-    final bytes = widget.data[_signal];
-    if (bytes == null) {
-      setState(() => _channels = const []);
-      return;
+  List<List<double>> get _channels => _samples.data;
+
+  Color get _signalColor {
+    switch (widget.recording.kind) {
+      case HsRecordingKind.imu:
+        return HpiColors.steps;
+      case HsRecordingKind.gsr:
+        return HpiColors.eda;
+      case HsRecordingKind.ecg:
+      case HsRecordingKind.hrv:
+        return HpiColors.hr;
+      case HsRecordingKind.ppg:
+      case HsRecordingKind.other:
+        return HpiColors.spo2;
     }
-    // Parsing needs a manager instance, but decoding is pure — no BLE work is
-    // done here, so this never touches the SMP wire lock.
-    final m = ResearchRecordingManager('');
-    List<List<double>> channels;
-    switch (_signal) {
-      case ResearchSignalType.accel:
-        final s = m.parseAccelSamples(bytes);
-        channels = [
-          s.map((e) => e.x.toDouble()).toList(),
-          s.map((e) => e.y.toDouble()).toList(),
-          s.map((e) => e.z.toDouble()).toList(),
-        ];
-      case ResearchSignalType.gyro:
-        final s = m.parseGyroSamples(bytes);
-        channels = [
-          s.map((e) => e.x.toDouble()).toList(),
-          s.map((e) => e.y.toDouble()).toList(),
-          s.map((e) => e.z.toDouble()).toList(),
-        ];
-      case ResearchSignalType.gsr:
-        final s = m.parseGsrSamples(bytes);
-        channels = [s.map((e) => e.value.toDouble()).toList()];
-      case ResearchSignalType.ppgWrist:
-        final s = m.parsePpgWristSamples(bytes);
-        channels = [s.map((e) => e.ir.toDouble()).toList()];
-      case ResearchSignalType.ppgFinger:
-        final s = m.parsePpgFingerSamples(bytes);
-        channels = [s.map((e) => e.ir.toDouble()).toList()];
-    }
-    setState(() => _channels = channels);
   }
 
   Future<void> _exportCsv() async {
-    final bytes = widget.data[_signal];
-    if (bytes == null) return;
     setState(() => _exporting = true);
     final device = await DeviceManager.getPairedDevice();
-    final m = ResearchRecordingManager(device?.macAddress ?? '');
+    final m = HealthStoreRecordsManager(device?.macAddress ?? '');
     try {
-      final file = await m.exportToCsv(widget.session, _signal, bytes);
+      final file = await m.exportCsv(widget.recording, widget.payload);
       if (!mounted) return;
       await SharePlus.instance.share(
           ShareParams(files: [XFile(file.path)], text: 'HealthyPi recording'));
@@ -109,64 +78,47 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     }
   }
 
-  Color get _signalColor => switch (_signal) {
-        ResearchSignalType.accel || ResearchSignalType.gyro => HpiColors.steps,
-        ResearchSignalType.gsr => HpiColors.eda,
-        _ => HpiColors.spo2,
-      };
-
   @override
   Widget build(BuildContext context) {
-    final s = widget.session;
-    final signals = widget.data.keys.toList();
+    final s = widget.recording;
+    final multi = _channels.length > 1;
 
     return Scaffold(
       backgroundColor: HpiColors.background,
       appBar: AppBar(
-        title: Text('${_signal.shortName} · ${_dur(s.durationSeconds)}'),
+        title: Text('${s.kindLabel} · ${_dur(s.durationSeconds)}'),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             Text(
-              '${s.formattedDateTime} · ${_signal.sampleRateHz} Hz · '
-              '${_size(s.totalSizeBytes)}',
+              '${_when(s.startTime)} · ${s.sampleRate} Hz · '
+              '${_size(widget.payload.length)}'
+              '${s.isPartial ? " · partial" : ""}'
+              '${_samples.assumed ? " · format inferred" : ""}',
               style: HpiText.mono.copyWith(fontSize: 10.5),
             ),
             const SizedBox(height: 14),
-            if (signals.length > 1) ...[
-              HpiSegmentedControl(
-                segments: [for (final x in signals) x.shortName],
-                selectedIndex: signals.indexOf(_signal),
-                accent: _signalColor,
-                onChanged: (i) {
-                  setState(() => _signal = signals[i]);
-                  _decode();
-                },
-              ),
-              const SizedBox(height: 14),
-            ],
             if (_channels.isEmpty || _channels.first.isEmpty)
               _noSamples()
             else ...[
               _minimapCard(),
               const SizedBox(height: 12),
-              _detailCard(),
+              _detailCard(multi: multi),
               const SizedBox(height: 12),
               _statsRow(),
               const SizedBox(height: 16),
               HpiFilledButton(
                 label: _exporting
                     ? 'Exporting…'
-                    : 'Export CSV · ${_size(widget.data[_signal]!.length)}',
+                    : 'Export CSV · ${_size(widget.payload.length)}',
                 icon: Symbols.download,
                 onPressed: _exporting ? null : _exportCsv,
               ),
               const SizedBox(height: 10),
               Text(
-                'CSV shares the t_ms timebase — align it column-wise with other '
-                'signals from this session for correlation.',
+                'CSV uses a shared t_ms timebase from the session start.',
                 style: HpiText.supporting,
               ),
             ],
@@ -209,7 +161,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('0:00', style: HpiText.mono.copyWith(fontSize: 9)),
-              Text(_dur(widget.session.durationSeconds),
+              Text(_dur(widget.recording.durationSeconds),
                   style: HpiText.mono.copyWith(fontSize: 9)),
             ],
           ),
@@ -224,9 +176,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
         (centerFraction - half).clamp(0.0, 1.0 - _windowWidth));
   }
 
-  Widget _detailCard() {
-    final imu = _signal == ResearchSignalType.accel ||
-        _signal == ResearchSignalType.gyro;
+  Widget _detailCard({required bool multi}) {
     return HpiCard(
       waveform: true,
       child: Column(
@@ -234,12 +184,14 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
         children: [
           Row(
             children: [
-              Text(_signal.shortName.toUpperCase(),
+              Text(widget.recording.kindLabel.toUpperCase(),
                   style: HpiText.sectionLabel.copyWith(color: _signalColor)),
               const Spacer(),
-              if (imu)
-                Text('AX  AY  AZ',
-                    style: HpiText.mono.copyWith(fontSize: 9.5)),
+              if (multi)
+                Text(
+                  [for (var i = 0; i < _channels.length; i++) 'CH$i'].join('  '),
+                  style: HpiText.mono.copyWith(fontSize: 9.5),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -248,7 +200,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
             child: CustomPaint(
               painter: _DetailPainter(
                 channels: _channels,
-                colors: imu
+                colors: multi
                     ? const [HpiColors.hr, HpiColors.spo2, HpiColors.eda]
                     : [_signalColor],
                 windowStart: _windowStart,
@@ -295,7 +247,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   }
 
   String _windowLabel() {
-    final total = widget.session.durationSeconds;
+    final total = widget.recording.durationSeconds;
     final from = (total * _windowStart).round();
     final to = (total * (_windowStart + _windowWidth)).round();
     return '${_clock(from)} – ${_clock(to)}';
@@ -316,8 +268,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
           child: HpiStatChip(value: mean.toStringAsFixed(0), label: 'Mean')),
       const SizedBox(width: 10),
       Expanded(
-          child: HpiStatChip(
-              value: '${ch.length}', label: 'Samples')),
+          child: HpiStatChip(value: '${ch.length}', label: 'Samples')),
     ]);
   }
 
@@ -330,7 +281,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
           const SizedBox(height: 12),
           Text('No samples decoded', style: HpiText.appBarTitle),
           const SizedBox(height: 6),
-          Text('This signal downloaded with no readable samples.',
+          Text('This payload had no readable samples for the header shape.',
               textAlign: TextAlign.center,
               style: HpiText.body.copyWith(fontSize: 12)),
         ],
@@ -339,9 +290,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   }
 
   String _dur(int seconds) {
+    if (seconds <= 0) return '—';
     final h = seconds ~/ 3600;
     final m = (seconds % 3600) ~/ 60;
-    return h > 0 ? '${h}h ${m}m' : '$m min';
+    return h > 0 ? '${h}h ${m}m' : (m > 0 ? '$m min' : '${seconds}s');
   }
 
   String _clock(int seconds) =>
@@ -350,9 +302,19 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   String _size(int bytes) => bytes >= 1 << 20
       ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
       : '${(bytes / 1024).toStringAsFixed(0)} kB';
+
+  String _when(DateTime dt) {
+    final months = const [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+    final amPm = dt.hour >= 12 ? 'PM' : 'AM';
+    return '${dt.day} ${months[dt.month - 1]} $hour:'
+        '${dt.minute.toString().padLeft(2, '0')} $amPm';
+  }
 }
 
-/// Full-session amplitude envelope with the zoom-window rect drawn over it.
 class _MinimapPainter extends CustomPainter {
   _MinimapPainter({
     required this.channel,
@@ -369,7 +331,6 @@ class _MinimapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (channel.isEmpty) return;
-    // Bucket the session into one column per pixel and fill min..max.
     final cols = size.width.floor().clamp(1, 4096);
     final per = (channel.length / cols).ceil().clamp(1, channel.length);
     var lo = double.infinity, hi = -double.infinity;
@@ -430,8 +391,6 @@ class _MinimapPainter extends CustomPainter {
       old.windowWidth != windowWidth;
 }
 
-/// The windowed detail waveform. Draws every channel overlaid on a shared scale
-/// so IMU axes stay comparable.
 class _DetailPainter extends CustomPainter {
   _DetailPainter({
     required this.channels,
@@ -461,7 +420,6 @@ class _DetailPainter extends CustomPainter {
     final from = (n * windowStart).floor().clamp(0, n - 1);
     final to = (n * (windowStart + windowWidth)).ceil().clamp(from + 1, n);
 
-    // Shared scale across channels within the window.
     var lo = double.infinity, hi = -double.infinity;
     for (final ch in channels) {
       for (var i = from; i < to && i < ch.length; i++) {
@@ -481,8 +439,6 @@ class _DetailPainter extends CustomPainter {
       final ch = channels[c];
       final path = Path();
       var started = false;
-      // Never draw more segments than pixels — long windows would otherwise
-      // build a path with tens of thousands of points.
       final step = (span / size.width).ceil().clamp(1, span);
       for (var i = from; i < to && i < ch.length; i += step) {
         final x = size.width * (i - from) / span;

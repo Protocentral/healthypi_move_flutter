@@ -1,6 +1,7 @@
 import 'dart:collection';
 
-import 'package:hpi_health_store/hpi_health_store.dart' show HsQuality;
+import 'package:hpi_health_store/hpi_health_store.dart'
+    show HsQuality, HsRecordHeader;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,7 +39,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 6, // v6: Health Store raw sample store (hs_*) + value_median
+      version: 7, // v7: hs_records index for HPI_HS RECORDS tier
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -195,6 +196,31 @@ class DatabaseHelper {
         last_record_id INTEGER
       )
     ''');
+
+    // Local index of episodic RECORDS downloads (raw payload lives on disk).
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS hs_records (
+        device         TEXT NOT NULL,
+        record_id      INTEGER NOT NULL,
+        start_ts       INTEGER NOT NULL,
+        signal         INTEGER NOT NULL,
+        sample_format  INTEGER,
+        channels       INTEGER,
+        sample_rate    INTEGER,
+        n_samples      INTEGER,
+        byte_len       INTEGER,
+        crc32          INTEGER,
+        flags          INTEGER,
+        file_path      TEXT,
+        crc_ok         INTEGER,
+        acked          INTEGER DEFAULT 0,
+        status         TEXT,
+        downloaded_at  TEXT,
+        PRIMARY KEY (device, record_id)
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_hs_records_device ON hs_records(device, start_ts)');
   }
 
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -292,6 +318,13 @@ class DatabaseHelper {
       // existing rows get NULL median (legacy sync never computed one).
       await db.execute('ALTER TABLE health_trends ADD COLUMN value_median INTEGER');
       await _createHealthStoreTables(db);
+    }
+
+    if (oldVersion < 7) {
+      // v7: local index for HPI_HS RECORDS downloads. _createHealthStoreTables is
+      // IF NOT EXISTS-safe for the v6 tables already present on upgrade from 6.
+      await _createHealthStoreTables(db);
+      print('DatabaseHelper: Upgraded to version 7 - hs_records index');
     }
 
     // Migrate lastSynced from SharedPreferences to database (moved outside version check)
@@ -1241,6 +1274,14 @@ class DatabaseHelper {
       }
       if (!advanceCursor) return;
       final nowUtc = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      // Preserve last_record_id — REPLACE would otherwise null it out.
+      final prev = await txn.query('hs_sync_state',
+          columns: ['last_record_id'],
+          where: 'device = ?',
+          whereArgs: [device],
+          limit: 1);
+      final lastRecordId =
+          prev.isEmpty ? null : prev.first['last_record_id'] as int?;
       await txn.insert(
         'hs_sync_state',
         {
@@ -1249,11 +1290,99 @@ class DatabaseHelper {
           'head': head,
           'schema': schema,
           'last_sync_utc': nowUtc,
+          if (lastRecordId != null) 'last_record_id': lastRecordId,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     });
     return advanceCursor ? maxSeq : persisted;
+  }
+
+  /// Highest RECORDS id listed for [device], or -1 if none.
+  Future<int> getLastRecordId(String device) async {
+    final db = await database;
+    final rows = await db.query('hs_sync_state',
+        columns: ['last_record_id'],
+        where: 'device = ?',
+        whereArgs: [device],
+        limit: 1);
+    if (rows.isEmpty || rows.first['last_record_id'] == null) return -1;
+    return rows.first['last_record_id'] as int;
+  }
+
+  /// Persist the RECORDS list cursor without clobbering the sample-tier cursor.
+  Future<void> setLastRecordId(String device, int recordId) async {
+    final db = await database;
+    final existing = await db.query('hs_sync_state',
+        where: 'device = ?', whereArgs: [device], limit: 1);
+    if (existing.isEmpty) {
+      await db.insert('hs_sync_state', {
+        'device': device,
+        'cursor': -1,
+        'last_record_id': recordId,
+      });
+      return;
+    }
+    await db.update(
+      'hs_sync_state',
+      {'last_record_id': recordId},
+      where: 'device = ?',
+      whereArgs: [device],
+    );
+  }
+
+  /// All locally indexed HPI_HS records for [device], keyed by record_id.
+  Future<Map<int, Map<String, Object?>>> getHsRecordIndex(String device) async {
+    final db = await database;
+    final rows = await db.query('hs_records',
+        where: 'device = ?', whereArgs: [device]);
+    return {
+      for (final r in rows) (r['record_id'] as int): Map<String, Object?>.from(r),
+    };
+  }
+
+  /// Upsert a downloaded RECORDS payload's metadata (file lives on disk).
+  Future<void> upsertHsRecord({
+    required String device,
+    required HsRecordHeader header,
+    required String filePath,
+    required bool crcOk,
+    required bool acked,
+    required String status,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'hs_records',
+      {
+        'device': device,
+        'record_id': header.id,
+        'start_ts': header.startTs,
+        'signal': header.signal,
+        'sample_format': header.sampleFormat,
+        'channels': header.channels,
+        'sample_rate': header.sampleRate,
+        'n_samples': header.nSamples,
+        'byte_len': header.byteLen,
+        'crc32': header.crc32,
+        'flags': header.flags,
+        'file_path': filePath,
+        'crc_ok': crcOk ? 1 : 0,
+        'acked': acked ? 1 : 0,
+        'status': status,
+        'downloaded_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> markHsRecordAcked(String device, int recordId) async {
+    final db = await database;
+    await db.update(
+      'hs_records',
+      {'acked': 1},
+      where: 'device = ? AND record_id = ?',
+      whereArgs: [device, recordId],
+    );
   }
 
   /// Cache the self-describing TYPES registry for [device].
@@ -1313,11 +1442,15 @@ class DatabaseHelper {
           'UPDATE OR IGNORE hs_types SET device = ? WHERE device = ?',
           [newKey, oldKey]);
       await txn.rawUpdate(
+          'UPDATE OR IGNORE hs_records SET device = ? WHERE device = ?',
+          [newKey, oldKey]);
+      await txn.rawUpdate(
           'UPDATE OR IGNORE hs_sync_state SET device = ? WHERE device = ?',
           [newKey, oldKey]);
       // Anything that lost the UPDATE race to an existing row is a duplicate.
       await txn.delete('hs_samples', where: 'device = ?', whereArgs: [oldKey]);
       await txn.delete('hs_types', where: 'device = ?', whereArgs: [oldKey]);
+      await txn.delete('hs_records', where: 'device = ?', whereArgs: [oldKey]);
       await txn
           .delete('hs_sync_state', where: 'device = ?', whereArgs: [oldKey]);
     });
@@ -1622,6 +1755,7 @@ class DatabaseHelper {
       'hs_samples',
       'hs_types',
       'hs_sync_state',
+      'hs_records',
       'health_trends',
       'synced_sessions',
       'research_files',

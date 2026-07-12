@@ -100,12 +100,15 @@ screens keep working unchanged. **Two verified traps:**
 
 ## Phase 4 — Records tier (Stage 4)
 
-- [ ] Move `scr_{ecg,gsr,hrv}_recordings.dart` and `research_recording_manager`
-      off the `/lfs/{ecg,…}` `FsMgmt` pulls onto `RECORDS` list/get/ack.
-- [ ] Keep `research_sessions` / `research_files` tables as-is.
-- [ ] Download **on demand**, not eagerly on every sync.
-- [ ] Check `HsRecordDownload.crcOk` before `recordsAck`. Store and mark
+- [x] Redesigned Recordings library uses HPI_HS `RECORDS` list/get/ack
+      (`HealthStoreRecordsManager` + `ScrRecordings` / `ScrRecordingPreview`).
+- [x] Keep `research_sessions` / `research_files` tables (mirrored on download);
+      additive `hs_records` index (schema **v7**).
+- [x] Download **on demand**, not eagerly on every sync.
+- [x] Check `HsRecordDownload.crcOk` before `recordsAck`. Store and mark
       `PARTIAL`-flagged sessions (interrupted, not truncated) — don't discard.
+- [ ] Retire legacy `scr_{ecg,gsr,hrv}_recordings.dart` + FS pulls once RECORDS
+      is device-validated (legacy screens still in tree for rollback).
 
 ## Phase 5 — SUMMARY, retention, retire the legacy path (Stage 5)
 

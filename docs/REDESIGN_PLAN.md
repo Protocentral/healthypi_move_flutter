@@ -143,13 +143,13 @@ baseline — the replaced scan tile carried a deprecated `withOpacity`), and
   RR intervals, the stress index, or EDA spot checks, so 3a's HRV card and
   1e/2b render explanatory zero-states rather than invented numbers. Live BPM and
   RR-interval read "—" for the same reason.
-- **The live `HealthStoreSyncManager` is still not wired** (roadmap Phase 2 —
-  needs hardware to pin the `TYPES`/`SUMMARY`/`RECORDS` wire shapes). The v6
-  schema, derivation, and repository are ready to receive samples.
+- **Sample sync is live** (`HealthStoreSyncManager` on redesigned Home/Device).
+  **RECORDS** list/download/CRC/ack is wired in the redesigned Recordings library
+  (`HealthStoreRecordsManager`); still needs on-device validation of wire shapes
+  and sample encodings.
 - Legacy screens (`home.dart`, `scr_trends.dart`, `scr_device_mgmt.dart`,
-  `scr_stream_selection.dart`, `scr_settings.dart`, `scr_recordings_hub.dart`)
-  are still in the tree and reachable (`/home_legacy`, named routes) as a
-  rollback path. They can be deleted once the redesign is validated on device.
+  `scr_stream_selection.dart`, `scr_settings.dart`, `scr_recordings_hub.dart`,
+  and legacy ECG/GSR/HRV recording FS screens) remain as rollback until device QA.
 
 ## Relationship to ROADMAP.md
 
