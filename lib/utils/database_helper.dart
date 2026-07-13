@@ -1299,6 +1299,18 @@ class DatabaseHelper {
     return advanceCursor ? maxSeq : persisted;
   }
 
+  /// The whole `hs_sync_state` row for [device] (cursor, head, schema,
+  /// last_sync_utc, last_record_id), or null if the device has never synced.
+  ///
+  /// For the developer screen: these numbers decide every sync's behaviour and
+  /// until now existed only in `debugPrint` output.
+  Future<Map<String, Object?>?> getSyncState(String device) async {
+    final db = await database;
+    final rows = await db.query('hs_sync_state',
+        where: 'device = ?', whereArgs: [device], limit: 1);
+    return rows.isEmpty ? null : rows.first;
+  }
+
   /// Highest RECORDS id listed for [device], or -1 if none.
   Future<int> getLastRecordId(String device) async {
     final db = await database;

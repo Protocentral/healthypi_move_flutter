@@ -282,12 +282,20 @@ P3 turns that into a continuous background metric: R-R intervals are gated
 (confidence >= 80, on-skin, still, 300-1500 ms) and aggregated into **5-minute
 windows** (the standard Task-Force short-term HRV window), each producing:
 
-| type | id | scale |
-|---|---|---|
-| `HRV_RMSSD` | `0x51` | ms x10 |
-| `HRV_SDNN` | `0x52` | ms x10 |
-| `HRV_MEAN_RR` | `0x53` | ms |
-| `HRV_COVERAGE` | `0x54` | **%** |
+| type | key | id | scale |
+|---|---|---|---|
+| `HRV_RMSSD` | `hrv_rmssd` | `0x51` | ms x10 |
+| `HRV_SDNN` | `hrv_sdnn` | `0x50` | ms x10 |
+| `HRV_MEAN_RR` | `hrv_mean_rr` | `0x53` | ms |
+| `HRV_COVERAGE` | `hrv_coverage` | `0x54` | **%** |
+
+> **Bind on the `key` string from `TYPES`, never on the numeric id.** The ids above are
+> the as-built registry (`hpi_hs_types.h`), but an earlier revision of this section had
+> two of them wrong — and *both wrong ids collided with live, different types*
+> (`0x52` is `hrv_lfhf`; `0x60` is `eda_scl`, tonic skin conductance in uS x100). An
+> id-keyed client would not have failed to bind: it would have silently charted LF/HF as
+> SDNN, and a conductance level as a 0..100 stress index. `TYPES` exists so ids can be
+> renumbered; treat them as informational.
 
 **`HRV_COVERAGE` is not decoration — please gate on it.** It is the fraction of the
 5-minute window actually accounted for by accepted beats. A window with 300 clean
@@ -331,7 +339,7 @@ if that window is over an hour old — stale HRV is not current stress.
    a number the user would believe and that means nothing. This is the single most
    important line in this section.
 3. **Distinguish the two `STRESS` samples in the sample stream.** Both the continuous
-   HRV score and the EDA spot check record type `STRESS` (`0x60`). They are told apart by
+   HRV score and the EDA spot check record type `STRESS` (key `stress`, id `0x62`). They are told apart by
    the **`MANUAL` quality bit (`1<<5`)**: set = the EDA spot check, clear = the continuous
    HRV score. If you plot them on one axis without separating them you are mixing two
    different scales.
@@ -346,3 +354,21 @@ if that window is over an hour old — stale HRV is not current stress.
   which was the entire point of P1: a missed sync must not be permanent data loss.
 - The store's on-disk layout is now **v3**; migration is automatic and, as with v2, **seq
   only ever moves forward** — your `(uid, seq)` dedup stays safe across the upgrade.
+
+### Synthetic data now covers P3 (2026-07-13)
+
+The `SYNTH` generator previously emitted **no RMSSD and no coverage at all**, so on a
+synthetic dataset `stress_hrv_v` could never go true and your `baselining` state had
+nothing to come out of. Fixed. A 7-day generate now produces ~1,650 HRV windows, so:
+
+- **`stress_hrv_v` goes true**, and **today is generated as a deliberately high-strain
+  day**, so the score reads *elevated* rather than neutral — a fixture whose right
+  answer is exactly 50 cannot tell a working score from a stub returning the midpoint.
+- **`hrv_coverage` spans 50-98%** (asleep ~90, awake ~71 — awake HRV coverage really is
+  that much worse), so your coverage gate has real variety to act on.
+- **It never emits a window below 50%**, because the firmware discards those *before*
+  recording — a fixture that emits samples the device cannot produce is a fixture that
+  lies. Your defensive re-check is still correct (our floor is a compile-time constant
+  and can move); it just will not fire on this data. Don't read that as your gate being
+  dead.
+- Everything still carries **`SYNTHETIC` (`1<<6`)** — keep filtering it.

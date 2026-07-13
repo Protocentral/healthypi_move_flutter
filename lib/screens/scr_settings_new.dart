@@ -7,14 +7,16 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/database_helper.dart';
-import '../utils/health_store_sync_manager.dart';
-import 'scr_ble_console.dart';
+import 'scr_developer.dart';
 
-/// Settings + developer mode (handoff 1i). A pushed route (no nav bar). The
-/// developer card has an amber border and a toggle that reveals the developer
-/// rows (BLE console, packet log, sample-rate) only when on — persisted so it
-/// survives restarts. Preference rows that aren't yet wired to real settings
-/// show their current value read-only, honestly, rather than faking controls.
+/// Settings (handoff 1i). A pushed route (no nav bar). Preference rows that
+/// aren't yet wired to real settings show their current value read-only,
+/// honestly, rather than faking controls.
+///
+/// The developer card is now only a **gate**: the toggle (persisted, so it
+/// survives restarts) reveals a single row into [ScrDeveloper], which owns every
+/// developer control. It used to inline them here, including two rows — "BLE
+/// console" and "Raw packet log" — that pushed the same screen.
 class ScrSettingsNew extends StatefulWidget {
   const ScrSettingsNew({super.key});
 
@@ -27,86 +29,8 @@ class ScrSettingsNew extends StatefulWidget {
 class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _devMode = false;
   bool _deleting = false;
-  bool _rebuilding = false;
-  bool _includeSynthetic = false;
   String _version = '';
 
-  /// Toggle whether firmware-fabricated (SYNTHETIC) samples are derived into the
-  /// trends, then rebuild immediately so the change is visible without a sync.
-  ///
-  /// A bench device running CONFIG_HPI_HS_SYNTH generates its *entire* history as
-  /// synthetic data, so with the filter on (the correct production behaviour)
-  /// every screen renders empty and looks broken. This is the escape hatch — and
-  /// it is deliberately loud about what it's showing.
-  Future<void> _setIncludeSynthetic(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(HealthStoreSyncManager.includeSyntheticPrefKey, v);
-    // Raise the app-wide banner (HpiSyntheticBanner) before the rebuild, so the
-    // charts never repaint with fabricated data ahead of the warning.
-    HealthStoreSyncManager.instance.syntheticIncluded.value = v;
-    if (!mounted) return;
-    setState(() => _includeSynthetic = v);
-    await _rebuildTrends();
-  }
-
-  /// Re-derive `health_trends` from samples already on the phone — no download.
-  ///
-  /// This is the repair for a metric that was synced but never showed up: if its
-  /// type id wasn't in the cached registry when it arrived, derivation dropped
-  /// it, and the raw sample sits in `hs_samples` invisible to every screen.
-  /// Sync does this automatically when the registry grows; this is the manual
-  /// lever, and it reports the per-type counts so you can see what's actually
-  /// stored.
-  Future<void> _rebuildTrends() async {
-    setState(() => _rebuilding = true);
-    try {
-      final db = DatabaseHelper.instance;
-      final device = await db.getHealthStoreDeviceKey();
-      if (device == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('No synced samples on this phone yet.')));
-        }
-        return;
-      }
-      final rows = await db.rebuildAllTrends(device,
-          includeSynthetic: _includeSynthetic);
-      final counts = await db.sampleCountsByType(device);
-      final synthetic = await db.syntheticSampleCount(device);
-      final types = await db.getTypes(device);
-      final summary = (counts.entries.map((e) =>
-              '${types[e.key]?['key'] ?? "0x${e.key.toRadixString(16)}"}=${e.value}')
-            .toList()
-          ..sort())
-          .join('  ');
-      final total = counts.values.fold<int>(0, (a, b) => a + b);
-      debugPrint('[Rebuild] $rows trend rows · stored: $summary · '
-          'synthetic=$synthetic/$total · '
-          'includeSynthetic=$_includeSynthetic');
-      if (mounted) {
-        // If everything on the device is synthetic and the filter is on, a "0
-        // rows" result is correct but reads as a failure. Say why.
-        final blocked = rows == 0 && synthetic > 0 && !_includeSynthetic;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(blocked
-              ? 'No trends: all $synthetic samples are synthetic test data. '
-                  'Turn on "Include synthetic data" to chart them.'
-              : 'Rebuilt $rows trend rows from $total stored samples'
-                  '${synthetic > 0 ? " ($synthetic synthetic)" : ""}'),
-          backgroundColor: blocked ? HpiColors.temp : HpiColors.steps,
-          duration: const Duration(seconds: 5),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Rebuild failed: $e'),
-            backgroundColor: HpiColors.error));
-      }
-    } finally {
-      if (mounted) setState(() => _rebuilding = false);
-    }
-  }
 
   /// Destructive, and irreversible on the phone — so it's a two-step confirm
   /// that states plainly what goes and what stays.
@@ -171,8 +95,6 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     if (!mounted) return;
     setState(() {
       _devMode = prefs.getBool(ScrSettingsNew.devModePrefKey) ?? false;
-      _includeSynthetic =
-          prefs.getBool(HealthStoreSyncManager.includeSyntheticPrefKey) ?? false;
       _version = '${info.version}+${info.buildNumber}';
     });
   }
@@ -270,6 +192,9 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     );
   }
 
+  /// Just the gate now. Every developer control lives on [ScrDeveloper] — the
+  /// toggle stays here because it has to be reachable while that screen is
+  /// hidden, and because a setting is what it is.
   Widget _developerCard() {
     return HpiCard(
       padding: EdgeInsets.zero,
@@ -282,7 +207,10 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
             child: Row(
               children: [
                 HpiIconSquare(
-                    icon: Symbols.code, color: HpiColors.hr, size: 34, iconSize: 18),
+                    icon: Symbols.code,
+                    color: HpiColors.hr,
+                    size: 34,
+                    iconSize: 18),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text('Developer mode', style: HpiText.cardTitle),
@@ -305,71 +233,14 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
             HpiListRow(
               icon: Symbols.terminal,
               iconColor: HpiColors.hr,
-              title: 'BLE console',
-              trailing: Text('GATT · LOG',
-                  style: HpiText.mono.copyWith(color: HpiColors.hr, fontSize: 10)),
+              title: 'Developer tools',
+              supporting:
+                  'Link · store · HPI_HS probe · GATT · log · synthetic data',
+              trailing: Text('DEV',
+                  style:
+                      HpiText.mono.copyWith(color: HpiColors.hr, fontSize: 10)),
               onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ScrBleConsole())),
-            ),
-            const Divider(height: 1, color: HpiColors.divider, indent: 14),
-            HpiListRow(
-              icon: Symbols.receipt_long,
-              iconColor: HpiColors.onSurfaceVariant,
-              title: 'Raw packet log',
-              trailing: Text('live',
-                  style: HpiText.mono.copyWith(fontSize: 10)),
-              onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ScrBleConsole())),
-            ),
-            const Divider(height: 1, color: HpiColors.divider, indent: 14),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  HpiIconSquare(
-                      icon: Symbols.science,
-                      color: HpiColors.stress,
-                      size: 34,
-                      iconSize: 18),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Include synthetic data', style: HpiText.cardTitle),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Show firmware test data in charts. Never enable in '
-                          'production — it is fabricated, not measured.',
-                          style: HpiText.supporting,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _includeSynthetic,
-                    onChanged: _rebuilding ? null : _setIncludeSynthetic,
-                    activeThumbColor: HpiColors.onHr,
-                    activeTrackColor: HpiColors.stress,
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: HpiColors.divider, indent: 14),
-            HpiListRow(
-              icon: Symbols.refresh,
-              iconColor: HpiColors.steps,
-              title: 'Rebuild trends',
-              supporting: 'Re-derive from stored samples · no download',
-              showChevron: false,
-              onTap: _rebuilding ? null : _rebuildTrends,
-              trailing: _rebuilding
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: HpiColors.steps))
-                  : null,
+                  MaterialPageRoute(builder: (_) => const ScrDeveloper())),
             ),
           ],
         ],
