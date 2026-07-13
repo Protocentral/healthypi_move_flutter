@@ -25,6 +25,7 @@
 | **Schema bump?** | **No.** All new type ids are additive; old clients skip unknown ids. |
 | **Do I need to re-pull everything?** | **Yes, once.** P2 migrates the on-flash layout and discards the old log. See §5. |
 | **Anything new to ignore?** | **Yes** — filter out samples with `quality & (1<<6)` (`SYNTHETIC`). See §2(c). |
+| **Anything new to *use*?** | **Yes** — **continuous HRV** (RMSSD/SDNN/mean-RR), no ECG needed. But you must respect `hrv_coverage`. See §2(d). |
 
 The device now stores **~6,000 samples/day instead of ~46,000** and serves a page
 with one seek instead of rescanning the whole log. Daily sync payload drops from
@@ -91,6 +92,32 @@ This only ever appears on a build with `CONFIG_HPI_HS_SYNTH=y`, which is off in
 release — but the app should be robust to it regardless, because the whole point of
 the bit is that fabricated data can never be *silently* mistaken for a measurement.
 
+### (d) ⚠️ NEW CAPABILITY: continuous HRV — and you **must** respect `hrv_coverage`
+
+The watch now produces **HRV continuously** from the wrist PPG, in 5-minute windows —
+no ECG spot check required. This is new product surface: overnight HRV, recovery, and
+a much stronger stress signal (ours is EDA-only today).
+
+You get four types per window: `hrv_rmssd` (0x51), `hrv_sdnn` (0x50),
+`hrv_mean_rr` (0x53) and **`hrv_coverage` (0x54)**.
+
+**`hrv_coverage` is not decoration.** It is the share of the 5-minute window actually
+backed by valid beats. **Do not plot or trend a window without checking it.**
+
+- The firmware already discards anything below **50 % coverage or 30 beats**, so what
+  reaches you is never garbage — but coverage still varies (50 % vs 95 % are very
+  different confidences in the same number).
+- **A low-coverage window is how a noisy five minutes becomes a "recovery dip" in the
+  UI.** Weight by it, grey it out, or exclude it — but do not treat 55 % and 95 %
+  windows as equally trustworthy.
+- Overnight (still, on-skin) is where coverage is high and HRV is most meaningful. That
+  is the window worth surfacing.
+
+**RMSSD is the headline metric** — it is what Whoop/Oura report, and it is the most
+robust of the four over a short window. `hrv_sdnn` (0x50) previously appeared only after
+a manual ECG session; it is now continuous, so any UI keyed on "HRV = ECG spot check"
+needs revisiting.
+
 ### Also
 - **Render `hr` as a per-minute mean** (a smoother line with ~1 point/min), not as
   instantaneous readings.
@@ -102,7 +129,7 @@ the bit is that fabricated data can never be *silently* mistaken for a measureme
 
 ## 3. Full type registry (as-built)
 
-`TYPES` is **paged, 5 entries per call**. `total` is now **19** (was 16). Loop
+`TYPES` is **paged, 5 entries per call**. `total` is now **21** (was 16). Loop
 `from := next` until `next == total`.
 
 Legend — **class**: `D` discrete, `C` cumulative, `E` event.
@@ -123,9 +150,11 @@ Legend — **class**: `D` discrete, `C` cumulative, `E` event.
 | `0x31` | `bp_dia` | mmHg | 1 | E | | — | raw, unchanged |
 | `0x40` | `steps` | count | 1 | C | | ≤1/min | **CUMULATIVE daily total — UNCHANGED semantics** |
 | `0x41` | `active_energy` | kcal | 1 | C | | ≤1/min | cumulative (no producer yet) |
-| `0x50` | `hrv_sdnn` | ms | 10 | D | | — | today: ECG spot check only |
-| `0x51` | `hrv_rmssd` | ms | 10 | D | | — | reserved (continuous HRV lands in P3) |
-| `0x52` | `hrv_lfhf` | ratio | 100 | D | | — | derived |
+| `0x50` | `hrv_sdnn` | ms | 10 | D | | **5 min** | **now CONTINUOUS** (was: ECG spot check only) |
+| `0x51` | `hrv_rmssd` | ms | 10 | D | **NEW (live)** | **5 min** | **RMSSD — the headline HRV metric** |
+| `0x52` | `hrv_lfhf` | ratio | 100 | D | | — | derived (not emitted yet) |
+| `0x53` | `hrv_mean_rr` | ms | 1 | D | **NEW** | **5 min** | mean R-R interval |
+| `0x54` | `hrv_coverage` | % | 1 | D | **NEW** | **5 min** | **⚠️ quality gate — see §2(d)** |
 | `0x60` | `eda_scl` | uS | 100 | D | | — | raw, unchanged |
 | `0x61` | `eda_scr_rate` | /min | 1 | D | | — | raw, unchanged |
 | `0x62` | `stress` | index | 1 | D | | — | derived |
@@ -206,11 +235,6 @@ Anything the app already synced and stored stays valid.
 
 ## 7. Coming next (not in this drop)
 
-- **P3 — continuous HRV.** The MAX32664C already emits R-R intervals with a
-  confidence value and nothing reads them; HRV/stress today needs a manual ECG spot
-  check. P3 will compute RMSSD / SDNN / mean-RR / **coverage** in 5-minute gated
-  windows. New additive type ids — you will want to **respect `coverage`** and not
-  plot low-coverage windows (they are motion artefacts, not physiology).
 - **P4 — `SEGS` bulk fetch.** Whole-segment chunked get, mirroring `RECORDS get`
   (which you already implement). Segments are immutable once rolled, so "already have
   segment N? skip it" is safe forever. This is the "send the whole file" model.
