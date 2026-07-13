@@ -252,6 +252,21 @@ class hPi4Global {
   static const String PREFIX_SPO2 = 'spo2';
   static const String PREFIX_ACTIVITY = 'activity';
 
+  /// Continuous HRV (RMSSD), stored in whole milliseconds. Firmware P3 emits a
+  /// 5-minute-window RMSSD from gated wrist R-R intervals.
+  static const String PREFIX_HRV = 'hrv';
+
+  /// Continuous, HRV-derived stress (0..100), scored against the user's own
+  /// rolling RMSSD baseline.
+  static const String PREFIX_STRESS = 'stress';
+
+  /// The *other* stress number: the manual 30-second EDA spot check, scored on
+  /// absolute skin conductance. Both arrive as the same HPI_HS `stress` type and
+  /// are told apart only by the MANUAL quality bit — they are kept in separate
+  /// trends on purpose, because they are two different scales and plotting them
+  /// on one axis would silently mix them (firmware handoff §6.3).
+  static const String PREFIX_STRESS_EDA = 'stress_eda';
+
   static const TextStyle eventStyle = TextStyle(
     fontSize: 30,
     fontWeight: FontWeight.bold,

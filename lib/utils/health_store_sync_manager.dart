@@ -58,7 +58,10 @@ class HealthStoreSyncManager {
   /// v2: cumulative metrics (steps) are differenced into per-hour increments, and
   ///     HR extremes come from the hr_min/hr_max types rather than a
   ///     peak-of-means over the hr series.
-  static const int _deriveVersion = 2;
+  /// v3: firmware P3 — continuous HRV (hrv_rmssd, gated on hrv_coverage) is
+  ///     derived into a trend, and the two `stress` metrics are split apart by
+  ///     the MANUAL quality bit instead of being averaged onto one axis.
+  static const int _deriveVersion = 3;
   static const String _deriveVersionKey = 'derive_version';
 
   /// Developer opt-in: admit firmware-fabricated (SYNTHETIC) samples into the
@@ -592,6 +595,17 @@ class HealthStoreSyncManager {
       final rows = await db.deriveTrends(device,
           sinceUtc: earliestTs, includeSynthetic: includeSynthetic);
       debugPrint('[HS-Sync] derived $rows trend rows');
+    }
+
+    // SUMMARY carries what the phone cannot derive itself: the device's own
+    // rolling baselines, and — since firmware P3 — the HRV-derived stress score
+    // with its validity flag. Cheap (one round-trip), so refresh it every
+    // session, and never let a failure here fail the sync: the samples are the
+    // system of record, this is a convenience read on top of them.
+    try {
+      await db.setHsSummary(device, await hs.summary());
+    } catch (e) {
+      debugPrint('[HS-Sync] SUMMARY refresh failed (non-fatal): $e');
     }
 
     // What actually landed, per type. This distinguishes "never downloaded" from

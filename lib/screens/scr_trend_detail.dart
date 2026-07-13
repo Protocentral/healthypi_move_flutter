@@ -29,6 +29,15 @@ class TrendMetricStyle {
       case 'activity':
         return const TrendMetricStyle(
             Symbols.steps, HpiColors.steps, 'Steps', '');
+      case 'hrv':
+        // RMSSD, in whole ms — the short-window parasympathetic marker the
+        // stress score is built on (handoff §6.4).
+        return const TrendMetricStyle(
+            Symbols.ecg_heart, HpiColors.stress, 'HRV (RMSSD)', 'ms');
+      case 'stress':
+        // The continuous, HRV-derived 0..100 score, not the EDA spot check.
+        return const TrendMetricStyle(
+            Symbols.self_improvement, HpiColors.stress, 'Stress', '');
       default:
         return const TrendMetricStyle(
             Symbols.monitoring, HpiColors.hr, 'Trend', '');

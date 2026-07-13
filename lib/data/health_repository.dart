@@ -1,4 +1,5 @@
 import '../globals.dart';
+import '../models/hs_summary.dart';
 import '../utils/database_helper.dart';
 
 /// Whether a metric can be shown, and if not, why. Drives the redesign's
@@ -15,6 +16,19 @@ enum MetricAvailability {
   /// derived analytics they need). UI: an explanatory zero-state, e.g. EDA's
   /// "Measure on watch" — never a made-up number.
   unsupported,
+
+  /// The device produces this metric but has no score *yet*: it is still
+  /// building the user's personal baseline. UI: "Building your baseline",
+  /// **never a zero**.
+  ///
+  /// This exists because HRV stress is scored against the user's own rolling
+  /// RMSSD baseline, which takes ~20 valid 5-minute windows (realistically one
+  /// decent night) to establish. Until then the firmware reports
+  /// `stress_hrv_v == false`, and a 0 rendered there is a number the user would
+  /// believe and that means nothing — it is not "calm". Collapsing this into
+  /// [noData] would lose the distinction between "sync your watch" and "your
+  /// watch is still learning you".
+  baselining,
 }
 
 /// A metric's dashboard view: headline value, today's sparkline series, and an
@@ -167,16 +181,54 @@ class HealthRepository {
       _loadMetric(hPi4Global.PREFIX_TEMP),
       _loadMetric(hPi4Global.PREFIX_ACTIVITY, cumulative: true),
       _db.getLastSyncTime(),
+      _loadHrvStress(),
     ]);
     return HomeDashboard(
       hr: results[0] as MetricTrend,
       spo2: results[1] as MetricTrend,
       temp: results[2] as MetricTrend,
       steps: results[3] as MetricTrend,
-      stress: MetricTrend.unsupportedStress,
+      stress: results[5] as MetricTrend,
       eda: MetricTrend.unsupportedEda,
       lastSync: results[4] as DateTime?,
     );
+  }
+
+  /// Stress, read from the device's own `SUMMARY` rather than derived here.
+  ///
+  /// Prefer the continuous HRV score over the legacy EDA one: it needs no user
+  /// action (the EDA spot check needs 30 deliberate seconds), and it is scored
+  /// against the user's *own* rolling RMSSD baseline rather than an absolute
+  /// skin-conductance scale, which is not comparable between people or even
+  /// between two sessions on one person. Handoff §6.
+  ///
+  /// The three outcomes are deliberately distinct, and collapsing any two of
+  /// them would put a misleading number on screen:
+  ///  - a score            → [MetricAvailability.available]
+  ///  - `stress_hrv_v` false → [MetricAvailability.baselining] ("still learning
+  ///    you"), **never 0**
+  ///  - key absent entirely  → [MetricAvailability.unsupported] (pre-P3 firmware)
+  Future<MetricTrend> _loadHrvStress() async {
+    final raw = await _db.latestHsSummary();
+    if (raw == null) return MetricTrend.unsupportedStress;
+
+    final summary = HsSummary.fromMap(raw);
+    final score = summary.stressHrv;
+    if (score != null) {
+      return MetricTrend(
+        key: hPi4Global.PREFIX_STRESS,
+        availability: MetricAvailability.available,
+        latest: score.toDouble(),
+        baseline: summary.rmssdBaselineMs,
+      );
+    }
+    if (summary.isBuildingHrvBaseline) {
+      return const MetricTrend(
+        key: hPi4Global.PREFIX_STRESS,
+        availability: MetricAvailability.baselining,
+      );
+    }
+    return MetricTrend.unsupportedStress;
   }
 
   /// Build a [MetricTrend] for one supported metric from today's hourly rows
@@ -279,11 +331,18 @@ class HealthRepository {
     );
   }
 
-  /// Load the full trend detail for one supported metric. Unsupported metrics
-  /// (stress/eda) short-circuit to an unsupported detail so the screen renders a
-  /// zero-state. All values are in display units.
+  /// Load the full trend detail for one metric. All values are in display units.
+  ///
+  /// `stress` and `hrv` used to short-circuit to an unsupported zero-state
+  /// because nothing produced them. Firmware P3 does: both are now derived into
+  /// `health_trends` from the sample stream (continuous HRV RMSSD, and the
+  /// non-MANUAL `stress` samples), so they read like any other metric — and a
+  /// device that hasn't sent any yet falls out as [MetricAvailability.noData]
+  /// rather than being declared impossible.
+  ///
+  /// EDA still short-circuits: it is a manual spot check with no producing code.
   Future<MetricDetail> loadMetricDetail(String key) async {
-    if (key == 'stress' || key == 'eda' || key == 'hrv') {
+    if (key == 'eda') {
       return MetricDetail(key: key, availability: MetricAvailability.unsupported);
     }
     final now = DateTime.now();

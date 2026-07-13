@@ -94,7 +94,11 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
         HpiGroupedCard(
             rows: [for (final k in _real) _row(k, expanded)]),
         const SizedBox(height: 12),
-        const HpiSectionLabel('DERIVED · NOT YET AVAILABLE'),
+        // Stress is real once the watch has an HRV baseline (firmware P3), so
+        // the header can't keep claiming the whole section is unavailable.
+        HpiSectionLabel(_trend('stress').hasData
+            ? 'DERIVED'
+            : 'DERIVED · NOT YET AVAILABLE'),
         HpiGroupedCard(rows: [_row('stress', expanded), _row('eda', expanded)]),
       ],
     );
@@ -103,7 +107,9 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   Widget _row(String key, bool expanded) {
     final t = _trend(key);
     final style = TrendMetricStyle.of(key);
-    final unsupported = t.availability == MetricAvailability.unsupported;
+    final baselining = t.availability == MetricAvailability.baselining;
+    final unsupported =
+        t.availability == MetricAvailability.unsupported || baselining;
     final title = unsupported
         ? (key == 'stress' ? 'Stress' : 'EDA · GSR')
         : style.title;
@@ -113,7 +119,13 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
         icon: key == 'stress' ? Symbols.self_improvement : Symbols.water_drop,
         iconColor: key == 'stress' ? HpiColors.stress : HpiColors.eda,
         title: title,
-        supporting: key == 'stress' ? 'from HRV · continuous' : 'spot check on watch',
+        supporting: baselining
+            // Supported, measuring, just no score yet — not the same thing as
+            // "we can't do this" (handoff §6.2).
+            ? 'Building your baseline · wear overnight'
+            : (key == 'stress'
+                ? 'from HRV · continuous'
+                : 'spot check on watch'),
         dim: true,
         onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const ScrStressEda())),

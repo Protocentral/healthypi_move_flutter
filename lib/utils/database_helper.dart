@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:hpi_health_store/hpi_health_store.dart'
     show HsQuality, HsRecordHeader;
@@ -1531,6 +1532,43 @@ class DatabaseHelper {
         0;
   }
 
+  /// Cache the raw HPI_HS `SUMMARY` map for [device].
+  ///
+  /// Stored whole and untyped, exactly as the device sent it. SUMMARY is the one
+  /// thing the phone cannot recompute — it carries the device's own rolling
+  /// baselines (7-day RMSSD, skin-temp nights) and, since firmware P3, the
+  /// HRV-derived stress score. Keys are additive and not fully pinned, so
+  /// freezing a schema over them would just guarantee a migration later.
+  Future<void> setHsSummary(String device, Map<String, Object?> summary) =>
+      setMetadata('hs_summary_$device', jsonEncode(summary),
+          description: 'Last HPI_HS SUMMARY response');
+
+  /// The last cached `SUMMARY` for [device], or null if none has been read yet.
+  Future<Map<String, Object?>?> getHsSummary(String device) async {
+    final raw = await getMetadata<String>('hs_summary_$device');
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? decoded.cast<String, Object?>() : null;
+    } catch (_) {
+      return null; // corrupt cache is not worth crashing a dashboard over
+    }
+  }
+
+  /// The cached `SUMMARY` of the most recently synced device.
+  ///
+  /// Read-side callers (the dashboard) key off the platform BLE id, not the
+  /// HELLO `uid` that the Health Store tables are keyed on, and they have no way
+  /// to resolve one to the other without a live connection. Since the app pairs
+  /// one watch at a time, "the device we synced last" is that device.
+  Future<Map<String, Object?>?> latestHsSummary() async {
+    final db = await database;
+    final rows = await db.query('hs_sync_state',
+        columns: ['device'], orderBy: 'last_sync_utc DESC', limit: 1);
+    if (rows.isEmpty) return null;
+    return getHsSummary(rows.first['device'] as String);
+  }
+
   /// How many samples we already hold for [device] with `seq > [seq]`.
   /// Used to skip a redundant newest-first fetch when that window is already on
   /// the phone.
@@ -1591,6 +1629,19 @@ class DatabaseHelper {
     // increment, so they are accumulated separately and differenced below.
     final cumulative = <String, SplayTreeMap<int, num>>{};
 
+    // ts_utc -> HRV window coverage %. The firmware emits `hrv_coverage` as its
+    // own sample sharing the window's end timestamp with `hrv_rmssd`, so the two
+    // are correlated by ts. Collected in a pre-pass because a window's coverage
+    // may be read before or after its RMSSD in ts-ASC order.
+    final hrvCoverage = <int, num>{};
+    for (final r in rows) {
+      final t = types[r['type'] as int];
+      if ((t?['key'] as String?) != 'hrv_coverage') continue;
+      final scale = (t!['scale'] as int?) ?? 1;
+      hrvCoverage[r['ts_utc'] as int] =
+          (r['value'] as int) / (scale == 0 ? 1 : scale);
+    }
+
     for (final r in rows) {
       // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
       // — but it must not reach a chart, a summary or an export, or synthetic
@@ -1601,8 +1652,16 @@ class DatabaseHelper {
 
       final t = types[r['type'] as int];
       if (t == null) continue; // unknown id → skip (registry is additive)
-      final role = _trendRoleForKey(t['key'] as String?);
+      final key = t['key'] as String?;
+      final role = _trendRoleFor(key, quality);
       if (role == null) continue;
+
+      // A low-coverage HRV window is a motion artefact, not physiology, and it
+      // charts as a perfectly plausible line — so drop it rather than plot it.
+      if (key == 'hrv_rmssd') {
+        final cov = hrvCoverage[r['ts_utc'] as int];
+        if (cov != null && cov < _minHrvCoveragePct) continue;
+      }
 
       final scale = (t['scale'] as int?) ?? 1;
       final stored = _toStoredUnits(
@@ -1705,7 +1764,17 @@ class DatabaseHelper {
   ///
   /// The role matters since HS-2: `hr` carries the epoch mean while `hr_min` /
   /// `hr_max` carry the true extremes, and they must feed different columns.
-  ({String trend, _Role role})? _trendRoleForKey(String? key) {
+  ///
+  /// Keyed on the TYPES **key string**, never on the numeric id. The firmware
+  /// handoff's P3 section renumbers several HRV/stress ids relative to its own
+  /// as-built registry (it lists SDNN as both 0x50 and 0x52, stress as both
+  /// 0x60 and 0x62), so an id-keyed map would silently mis-bind. The registry is
+  /// self-describing precisely so we don't have to guess — see design doc §1.
+  ///
+  /// [quality] is needed because `stress` is two different metrics on one type:
+  /// the MANUAL bit distinguishes the EDA spot check from the continuous
+  /// HRV-derived score (handoff §6.3).
+  ({String trend, _Role role})? _trendRoleFor(String? key, int quality) {
     switch (key) {
       case 'hr':
         return (trend: hPi4Global.PREFIX_HR, role: _Role.value);
@@ -1721,14 +1790,38 @@ class DatabaseHelper {
       case 'steps':
       case 'activity':
         return (trend: hPi4Global.PREFIX_ACTIVITY, role: _Role.value);
+      case 'hrv_rmssd':
+        // RMSSD, not SDNN: the short-window parasympathetic marker, and what the
+        // stress score is built on (handoff §6.4).
+        return (trend: hPi4Global.PREFIX_HRV, role: _Role.value);
+      case 'stress':
+        return (
+          trend: quality & HsQuality.manual != 0
+              ? hPi4Global.PREFIX_STRESS_EDA // manual 30 s GSR spot check
+              : hPi4Global.PREFIX_STRESS, // continuous, HRV-derived
+          role: _Role.value,
+        );
       default:
         return null;
     }
   }
 
+  /// Below this, a 5-minute HRV window is motion artefact rather than
+  /// physiology: its RMSSD still plots as a perfectly plausible line, which is
+  /// exactly what makes it dangerous (handoff §6). The firmware already drops
+  /// anything under 50%, but we don't depend on that — if `hrv_coverage` is
+  /// absent (older firmware) we keep the sample rather than silently discard the
+  /// whole series.
+  static const int _minHrvCoveragePct = 50;
+
   /// Convert a real-world value into `health_trends`' stored integer convention.
   /// Temp is stored in centi-degrees (read side divides by 100, see
   /// scr_skin_temp.dart); HR / SpO₂ / steps are stored raw.
+  ///
+  /// HRV (RMSSD) arrives as ms×10 and is stored as whole **milliseconds** — the
+  /// 0.1 ms the rounding drops is far below the measurement's own noise, and
+  /// keeping it raw would put a 10× error in every chart that reads it as ms.
+  /// Stress is a 0..100 index, stored raw.
   num _toStoredUnits(String trendType, num real) {
     if (trendType == hPi4Global.PREFIX_TEMP) return real * 100;
     return real;

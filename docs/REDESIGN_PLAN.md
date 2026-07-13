@@ -139,10 +139,13 @@ baseline — the replaced scan tile carried a deprecated `withOpacity`), and
 - **Nothing has been exercised on real hardware.** Streaming (1f/4b), scan/pair
   (1g), and recording download/export (2c/2d) are wired to the existing, proven
   primitives but have not been driven against a Move.
-- **HRV / stress / EDA stay zero-states.** There is still no producing code for
-  RR intervals, the stress index, or EDA spot checks, so 3a's HRV card and
-  1e/2b render explanatory zero-states rather than invented numbers. Live BPM and
-  RR-interval read "—" for the same reason.
+- **HRV and stress now have a producer; EDA still doesn't.** Firmware P3 emits
+  continuous HRV (5-min RMSSD from gated wrist R-R intervals) and an HRV-derived
+  0..100 stress score baselined against the user's own RMSSD. The app derives
+  both. Three states are kept distinct on purpose: a real score, *"building your
+  baseline"* (`stress_hrv_v == false` — **never a 0**), and unsupported (pre-P3
+  firmware). EDA remains a manual spot check with no producing code, so 1e/2b
+  keeps its honest zero-state. Live BPM and RR-interval still read "—".
 - **Sample sync is live** (`HealthStoreSyncManager` on redesigned Home/Device).
   **RECORDS** list/download/CRC/ack is wired in the redesigned Recordings library
   (`HealthStoreRecordsManager`); still needs on-device validation of wire shapes

@@ -1,7 +1,8 @@
-# HS-2 P1 + P2 — App Handoff
+# HS-2 P1 + P2 + P3 (+P5/P6) — App Handoff
 
 > **From: the HealthyPi Move *firmware* coding agent.**
-> Repo: `healthypi-move-fw-next`. Commits: `794d756` (P1), `a6fd48e` (P2).
+> Repo: `healthypi-move-fw-next`. Commits: `794d756` (P1), `a6fd48e` (P2),
+> P3 = continuous HRV + HRV-derived stress (see §6, **new — action needed**).
 > Status: **VALIDATED ON DEVICE AND END-TO-END WITH THE APP (2026-07-12).**
 > - P2 layout migration ran on hardware exactly as designed: seq 35088 -> 35392
 >   (segment 79), `layout=2`, seq moved FORWARD and was never rewound.
@@ -181,6 +182,16 @@ Legend — **class**: `D` discrete, `C` cumulative, `E` event.
 `temp_baseline_nights`, `hrv_sdnn_x10` / `hrv_sdnn_base_x10` + `hrv_valid`,
 `steps_today`, `energy_today_kcal`, `stress_last` + `stress_valid`.
 
+**New in P3 (additive keys — old clients keep working):**
+
+| key | meaning |
+|---|---|
+| `rmssd` | today's mean RMSSD, **ms x10** |
+| `rmssd_base` | the user's 7-day rolling RMSSD baseline, ms x10 |
+| `hrv_wins` | how many 5-min windows are behind that baseline |
+| `stress_hrv` | **0..100** HRV-derived stress (see §6) |
+| `stress_hrv_v` | **`false` = NO SCORE YET. It does not mean "zero stress".** |
+
 ---
 
 ## 4. `HELLO` — new fields (shipped earlier in `7d9112b`)
@@ -249,3 +260,89 @@ Anything the app already synced and stored stays valid.
    keep a high-resolution window for the last N hours.
 2. **Does the app currently recompute HR min/max from the raw series, or read them
    from `SUMMARY`?** This determines whether §2 is real work or zero work for you.
+
+
+---
+
+## 6. P3 — continuous HRV, and a stress score that finally means something
+
+**This is the one section with real app work in it.** Everything above was
+firmware-internal; this adds a metric the app should surface, and one it should
+reconsider.
+
+### What changed in the firmware
+
+The MAX32664C wrist sensor has been emitting **R-R intervals and a per-beat
+confidence all along** — the driver even parsed them. **Nothing ever read them.**
+(`smf_ppg_wrist.c` was not copying `rtor_confidence` at all: it was always zero.)
+
+So HRV existed only if the user sat down and ran a **manual ECG session**.
+
+P3 turns that into a continuous background metric: R-R intervals are gated
+(confidence >= 80, on-skin, still, 300-1500 ms) and aggregated into **5-minute
+windows** (the standard Task-Force short-term HRV window), each producing:
+
+| type | id | scale |
+|---|---|---|
+| `HRV_RMSSD` | `0x51` | ms x10 |
+| `HRV_SDNN` | `0x52` | ms x10 |
+| `HRV_MEAN_RR` | `0x53` | ms |
+| `HRV_COVERAGE` | `0x54` | **%** |
+
+**`HRV_COVERAGE` is not decoration — please gate on it.** It is the fraction of the
+5-minute window actually accounted for by accepted beats. A window with 300 clean
+beats is ~100%; one with 40 beats scattered through a noisy walk is ~13%, and its
+RMSSD is an artefact that will still plot as a perfectly plausible line. The firmware
+already discards anything under 50%, but if you chart per-window HRV, **prefer high
+coverage** and consider showing it.
+
+### The stress score
+
+The existing stress number (`stress_last`) is **EDA-only**: it comes from a *manual*
+30-second GSR spot check and is scored on **absolute skin conductance**. Absolute EDA
+is not comparable between people, or even between two sessions on the same person
+(electrode contact, hydration, room temperature). It looks like a measurement and
+behaves like a mood ring. **We have not removed it or changed it** — it still records
+its own `STRESS` sample on a spot check.
+
+`stress_hrv` is the replacement, and it differs in the way that matters: it is scored
+**against the user's own rolling RMSSD baseline**, not against an absolute scale. An
+RMSSD of 30 ms is low for one person and normal for another; only the deviation from
+*their own* normal carries information. This is what Whoop/Oura/Garmin actually do.
+
+```
+ratio = rmssd / personal_baseline
+  1.0 -> 50    at your own normal
+  0.5 -> 100   HRV halved: strongly suppressed
+  1.5 -> 0     HRV well above normal: relaxed
+```
+
+It uses the **most recent** window (where am I *now* vs my normal), and is suppressed
+if that window is over an hour old — stale HRV is not current stress.
+
+### What the app must do
+
+1. **Read `stress_hrv` / `stress_hrv_v` from `SUMMARY`.** Prefer it over `stress_last`
+   for the Stress card. It needs no user action; the EDA spot check needs 30 seconds of
+   deliberate effort.
+2. **`stress_hrv_v == false` means SHOW NOTHING** — "Building your baseline" or similar,
+   *not* a zero. It stays false until ~20 valid windows (~100 min of still, on-skin HRV;
+   realistically one decent night). A stress score presented before the baseline exists is
+   a number the user would believe and that means nothing. This is the single most
+   important line in this section.
+3. **Distinguish the two `STRESS` samples in the sample stream.** Both the continuous
+   HRV score and the EDA spot check record type `STRESS` (`0x60`). They are told apart by
+   the **`MANUAL` quality bit (`1<<5`)**: set = the EDA spot check, clear = the continuous
+   HRV score. If you plot them on one axis without separating them you are mixing two
+   different scales.
+4. If you chart HRV, chart **`HRV_RMSSD`**, not SDNN — RMSSD is the short-window
+   parasympathetic marker and is what the stress score is built on.
+
+### Also shipped alongside (no app impact, FYI)
+
+- **P5** — the summary recompute did **9 full scans** of the log per rebuild; now 1.
+- **P6** — retention: segments now hold 4480 records and the summary scan skips segments
+  outside the 7-day window. Retention went from **~1.2 days to comfortably past a week**,
+  which was the entire point of P1: a missed sync must not be permanent data loss.
+- The store's on-disk layout is now **v3**; migration is automatic and, as with v2, **seq
+  only ever moves forward** — your `(uid, seq)` dedup stays safe across the upgrade.

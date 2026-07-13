@@ -393,6 +393,23 @@ class _ScrHomeState extends State<ScrHome> {
     final t = _trendFor(key);
     final s = _styleFor(key);
 
+    // The watch produces this metric but is still learning the user's personal
+    // baseline. Say that — never render a 0, which reads as "calm" and is a
+    // number the user would believe (handoff §6.2).
+    if (t.availability == MetricAvailability.baselining) {
+      return HpiListRow(
+        icon: s.icon,
+        iconColor: s.color,
+        title: s.title,
+        supporting: 'Building your baseline · wear overnight',
+        dim: true,
+        onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ScrStressEda())),
+        trailing:
+            Text('—', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
+      );
+    }
+
     // Unsupported metrics → honest zero-state row that opens the explainer.
     if (t.availability == MetricAvailability.unsupported) {
       final measure = key == 'eda';
@@ -512,7 +529,10 @@ class _ScrHomeState extends State<ScrHome> {
   Widget _metricTile(String key) {
     final t = _trendFor(key);
     final s = _styleFor(key);
-    final unsupported = t.availability == MetricAvailability.unsupported;
+    // "No score yet" shows the same dash as "not supported" — both must refuse to
+    // invent a number — but they say different things in _tileExtra below.
+    final unsupported = t.availability == MetricAvailability.unsupported ||
+        t.availability == MetricAvailability.baselining;
     return HpiCard(
       onTap: unsupported ? null : () => _openMetric(key),
       child: Column(
@@ -539,6 +559,9 @@ class _ScrHomeState extends State<ScrHome> {
   }
 
   Widget _tileExtra(String key, MetricTrend t, _MetricStyle s) {
+    if (t.availability == MetricAvailability.baselining) {
+      return Text('building baseline', style: HpiText.supporting);
+    }
     if (t.availability == MetricAvailability.unsupported) {
       return Text(key == 'stress' ? 'from HRV' : 'measure on watch',
           style: HpiText.supporting);
