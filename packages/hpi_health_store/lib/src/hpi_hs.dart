@@ -105,6 +105,7 @@ class HpiHs {
   static const int cmdSummary = 3;
   static const int cmdRecords = 4;
   static const int cmdAck = 5;
+  static const int cmdSynth = 6;
 
   SmpMessage _check(SmpMessage rsp) {
     final code = rsp.rc;
@@ -372,4 +373,39 @@ class HpiHs {
   @Deprecated('Use ackDurablyStored(seq). This is destructive: the device may '
       'drop all samples with seq <= the acked value. Will be removed in 1.0.0.')
   Future<void> ack(int seq) => ackDurablyStored(seq);
+
+  /// `SYNTH` — **generate fabricated data on the device. TEST BUILDS ONLY.**
+  ///
+  /// Backdates [days] of synthetic samples so trends, the 7-day skin-temp
+  /// baseline and sync-at-scale can be exercised without wearing the watch for a
+  /// week. Every sample it writes carries `quality & (1<<6)`
+  /// ([HsQuality.synthetic]) and **must be filtered out of anything user-facing**
+  /// — on a health device, test data must never render as a measurement.
+  ///
+  /// **This is destructive by default.** [wipe] discards the existing durable log
+  /// first, so a re-run does not stack a second dataset on the first. Real
+  /// measurements on the watch that the phone has not yet synced are **gone**.
+  /// (`seq` is never rewound by it, so the phone's `(device, seq)` dedup stays
+  /// safe.) Pass `wipe: false` to append instead.
+  ///
+  /// **Returns immediately.** Generation runs on its own device thread and takes
+  /// roughly 100 s per week of data — blocking the SMP thread would stall the BLE
+  /// link and trip the watchdog. Poll [hello] and watch `head` grow to track it.
+  ///
+  /// Throws [SmpException] with `rc = -EBUSY` if a generation is already running,
+  /// and with an unknown-command `rc` on a **release build**, where the command
+  /// does not exist at all (`CONFIG_HPI_HS_SYNTH=n`). Callers should treat that
+  /// second case as "this watch is not a test build", not as a failure.
+  ///
+  /// Returns the device's echo of what it accepted: `{rc, days, wipe}`.
+  Future<Map<String, Object?>> synth({int days = 7, bool wipe = true}) async {
+    final rsp = _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdSynth,
+      payload: {'days': days, 'wipe': wipe},
+    ));
+    _logMsg('SYNTH days=$days wipe=$wipe → ${rsp.payload}');
+    return rsp.payload;
+  }
 }

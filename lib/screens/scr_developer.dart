@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:mcumgr_dart/mcumgr_dart.dart' show SmpException;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
@@ -9,6 +10,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/health_store_client.dart';
 import '../utils/health_store_probe.dart';
 import '../utils/health_store_sync_manager.dart';
 
@@ -75,6 +77,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
 
   bool _includeSynthetic = false;
   bool _rebuilding = false;
+  bool _synthing = false;
   _StoreStats? _store;
   bool _loadingStore = true;
 
@@ -220,6 +223,115 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
       if (mounted) setState(() => _rebuilding = false);
       await _loadStore(); // the counts just changed
     }
+  }
+
+  /// `SYNTH` — ask the **watch** to fabricate a backdated dataset (HPI_HS cmd 6).
+  ///
+  /// Two things make this worth a real confirm rather than a plain button:
+  ///
+  ///  - **`wipe` is destructive on the device.** It discards the existing durable
+  ///    log, so any real measurement the watch is still holding that this phone
+  ///    has not synced yet is gone. Not the phone's copy — the watch's.
+  ///  - **It only exists on a test build.** On release firmware the command is
+  ///    compiled out (`CONFIG_HPI_HS_SYNTH=n`) and the device answers with an
+  ///    unknown-command rc. That is a correct answer, not a bug, so it is
+  ///    reported as "not a test build" rather than as a failure.
+  ///
+  /// Generation is asynchronous on the device (~100 s per week of data) and the
+  /// command returns immediately, so we can't report completion — the honest
+  /// thing is to say so and let the user watch `head` grow via Probe.
+  Future<void> _generateSynthetic() async {
+    final opts = await showDialog<({int days, bool wipe})>(
+      context: context,
+      builder: (_) => const _SynthDialog(),
+    );
+    if (opts == null || !mounted) return;
+
+    final device = await DeviceManager.getPairedDevice();
+    if (device == null) {
+      if (mounted) setState(() => _push('WARN', 'no paired device'));
+      return;
+    }
+
+    setState(() {
+      _synthing = true;
+      _push('TX', 'SYNTH days=${opts.days} wipe=${opts.wipe}');
+    });
+
+    HealthStoreClient? client;
+    try {
+      if (!_cm.isConnected || _cm.deviceId != device.macAddress) {
+        await _cm.connect(device.macAddress);
+      }
+      client = HealthStoreClient(device.macAddress,
+          requestTimeout: const Duration(seconds: 20));
+      await client.connect();
+      if (!client.hasHealthStore) {
+        throw StateError('device did not answer HELLO — no Health Store');
+      }
+
+      final rsp = await client.hs!.synth(days: opts.days, wipe: opts.wipe);
+
+      // Generating fabricated data and then filtering it out of every chart —
+      // the correct production behaviour — leaves the app looking broken. So
+      // turn the display opt-in on, and say so rather than doing it silently.
+      // The app-wide SYNTHETIC banner comes up with it.
+      if (!_includeSynthetic) await _setIncludeSynthetic(true);
+
+      if (!mounted) return;
+      setState(() {
+        _push('RX', 'SYNTH accepted → $rsp');
+        _push('OK',
+            'generating ~${opts.days}d on-device (~${opts.days * 15}s) — poll Probe and watch head grow');
+      });
+      _snack(
+          'Generating ${opts.days} days on the watch. It runs in the background '
+          '(~${opts.days * 15}s) — hit Probe to watch head grow, then Sync. '
+          'Synthetic display was switched on.',
+          HpiColors.stress);
+    } on SmpBusyException {
+      // Our own lock: a sync or DFU owns the wire. Never tear the link down
+      // here — that would kill the flow that legitimately holds it.
+      if (mounted) {
+        setState(() => _push('WARN', 'SMP busy — sync or DFU running'));
+      }
+      _snack('The SMP link is busy (sync or DFU). Try again after it finishes.',
+          HpiColors.temp);
+    } on SmpException catch (e) {
+      // Two of the device's answers are expected, not defects, and each needs a
+      // different sentence. Read the typed rc rather than sniffing the message.
+      final String msg;
+      switch (e.rc) {
+        case 8: // MGMT_ERR_ENOTSUP — command compiled out of a release build
+          msg = 'This watch has no SYNTH command: it is a release build '
+              '(CONFIG_HPI_HS_SYNTH=n). Nothing was changed.';
+        case 10: // MGMT_ERR_EBUSY — a generation is already in flight
+          msg = 'A generation is already running on the watch. Wait for it to '
+              'finish, then Probe to watch head grow.';
+        default:
+          msg = 'SYNTH failed: $e';
+      }
+      if (mounted) setState(() => _push('WARN', 'SYNTH rc=${e.rc}: $e'));
+      _snack(msg, HpiColors.error);
+    } catch (e) {
+      if (mounted) setState(() => _push('WARN', 'SYNTH failed: $e'));
+      _snack('SYNTH failed: $e', HpiColors.error);
+    } finally {
+      // Releases the SMP lock. Must run even on the early throws above, or the
+      // wire stays held and every later sync/DFU is refused.
+      await client?.disconnect();
+      if (mounted) setState(() => _synthing = false);
+      await _loadStore();
+    }
+  }
+
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: color,
+      duration: const Duration(seconds: 8),
+    ));
   }
 
   /// The Health Store capability check: HELLO *is* the probe (design doc §6).
@@ -409,6 +521,24 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                     height: 16,
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: HpiColors.steps))
+                : null,
+          ),
+          const Divider(height: 1, color: HpiColors.divider, indent: 14),
+          // Writes to the WATCH, unlike everything above it, and wipes its log by
+          // default — hence the error colour and the confirm behind it.
+          HpiListRow(
+            icon: Symbols.experiment,
+            iconColor: HpiColors.error,
+            title: 'Generate synthetic data on watch',
+            supporting: 'SYNTH · test firmware only · wipes the watch log',
+            showChevron: false,
+            onTap: _synthing ? null : _generateSynthetic,
+            trailing: _synthing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: HpiColors.error))
                 : null,
           ),
         ],
@@ -642,6 +772,95 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                 itemBuilder: (_, i) => _log[i].build(),
               ),
       ),
+    );
+  }
+}
+
+/// Confirm + parameters for `SYNTH`. Returns null on cancel.
+///
+/// The firmware defaults are `days: 7`, `wipe: true`, and we keep them — 7 days
+/// is what the skin-temp baseline needs, and stacking a second dataset on top of
+/// the first (`wipe: false`) is usually not what you meant.
+class _SynthDialog extends StatefulWidget {
+  const _SynthDialog();
+
+  @override
+  State<_SynthDialog> createState() => _SynthDialogState();
+}
+
+class _SynthDialogState extends State<_SynthDialog> {
+  int _days = 7;
+  bool _wipe = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: HpiColors.surfaceContainer,
+      title: const Text('Generate synthetic data on the watch?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The watch fabricates a backdated dataset so trends, the 7-day '
+            'skin-temp baseline and the HRV stress baseline can be exercised '
+            'without wearing it for a week.\n\n'
+            'Every generated sample is flagged SYNTHETIC. It is test data, not a '
+            'measurement, and the app will keep it out of anything user-facing.\n\n'
+            'Only test firmware has this command. On a release build the watch '
+            'will simply refuse it.',
+            style: HpiText.body.copyWith(fontSize: 12),
+          ),
+          const SizedBox(height: 16),
+          Text('DAYS', style: HpiText.sectionLabel),
+          const SizedBox(height: 6),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 1, label: Text('1')),
+              ButtonSegment(value: 7, label: Text('7')),
+              ButtonSegment(value: 14, label: Text('14')),
+            ],
+            selected: {_days},
+            onSelectionChanged: (s) => setState(() => _days = s.first),
+          ),
+          const SizedBox(height: 8),
+          // ~100 s per week on-device; scale it so 14 days doesn't look instant.
+          Text('Runs on the watch for roughly ${_days * 15}s after you confirm.',
+              style: HpiText.supporting),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _wipe,
+            onChanged: (v) => setState(() => _wipe = v),
+            activeThumbColor: HpiColors.onHr,
+            activeTrackColor: HpiColors.error,
+            title: Text('Wipe the watch log first', style: HpiText.cardTitle),
+            subtitle: Text(
+              _wipe
+                  // This is the sentence that matters: it destroys data on the
+                  // *device*, not on the phone, and the phone cannot get it back.
+                  ? 'DESTRUCTIVE — discards the watch\'s stored log. Any real '
+                      'measurement it still holds that this phone has not synced '
+                      'yet is gone for good.'
+                  : 'Appends to the existing log. A second run will stack another '
+                      'dataset on top of the first.',
+              style: HpiText.supporting.copyWith(
+                  color: _wipe ? HpiColors.error : HpiColors.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, (days: _days, wipe: _wipe)),
+          child: Text(_wipe ? 'Wipe and generate' : 'Generate',
+              style: const TextStyle(color: HpiColors.error)),
+        ),
+      ],
     );
   }
 }
