@@ -15,6 +15,9 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
 import '../widgets/export_dialogs.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../widgets/loading_indicator.dart';
+import '../models/trend_models.dart';
 
 class ScrSPO2 extends StatefulWidget {
   const ScrSPO2({super.key});
@@ -279,7 +282,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    palette: <Color>[hPi4Global.hpi4Color],
+                    palette: <Color>[HpiLegacyTheme.hpi4Color],
                     series: <CartesianSeries>[
                       // Use LineSeries for single values and HiloSeries for ranges
                       ...Spo2TrendsData.any((data) => data.minSpo2 != data.maxSpo2)
@@ -519,7 +522,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
     return Card(
       color: Color(0xFF1E1E1E),
       child: ListTile(
-        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        leading: Icon(icon, color: HpiLegacyTheme.hpi4Color),
         title: Text(label, style: TextStyle(color: Colors.white)),
         trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
         onTap: onTap,
@@ -700,7 +703,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                         children: <Widget>[
                           Text(
                             "Minimum",
-                            style: hPi4Global.movecardSubValueTextStyle,
+                            style: HpiLegacyTheme.movecardSubValueTextStyle,
                           ),
                           Row(
                             children: <Widget>[
@@ -708,13 +711,13 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                                 (rangeMinSpo2.toString() == "0")
                                     ? "--"
                                     : rangeMinSpo2.toString(),
-                                style: hPi4Global.moveValueGreenTextStyle,
+                                style: HpiLegacyTheme.moveValueGreenTextStyle,
                               ),
                               SizedBox(width: 5.0),
                               Text(
                                 '%',
                                 style:
-                                    hPi4Global.movecardSubValueGreenTextStyle,
+                                    HpiLegacyTheme.movecardSubValueGreenTextStyle,
                               ),
                             ],
                           ),
@@ -726,7 +729,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                         children: <Widget>[
                           Text(
                             "Average",
-                            style: hPi4Global.movecardSubValueTextStyle,
+                            style: HpiLegacyTheme.movecardSubValueTextStyle,
                           ),
                           Row(
                             children: <Widget>[
@@ -734,13 +737,13 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                                 (averageSpo2.toString() == "0")
                                     ? "--"
                                     : averageSpo2.toString(),
-                                style: hPi4Global.moveValueOrangeTextStyle,
+                                style: HpiLegacyTheme.moveValueOrangeTextStyle,
                               ),
                               SizedBox(width: 5.0),
                               Text(
                                 '%',
                                 style:
-                                    hPi4Global.movecardSubValueOrangeTextStyle,
+                                    HpiLegacyTheme.movecardSubValueOrangeTextStyle,
                               ),
                             ],
                           ),
@@ -752,7 +755,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                         children: <Widget>[
                           Text(
                             "Maximum",
-                            style: hPi4Global.movecardSubValueTextStyle,
+                            style: HpiLegacyTheme.movecardSubValueTextStyle,
                           ),
                           Row(
                             children: <Widget>[
@@ -760,12 +763,12 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                                 (rangeMaxSpo2.toString() == "0")
                                     ? "--"
                                     : rangeMaxSpo2.toString(),
-                                style: hPi4Global.moveValueBlueTextStyle,
+                                style: HpiLegacyTheme.moveValueBlueTextStyle,
                               ),
                               SizedBox(width: 5.0),
                               Text(
                                 '%',
-                                style: hPi4Global.movecardSubValueBlueTextStyle,
+                                style: HpiLegacyTheme.movecardSubValueBlueTextStyle,
                               ),
                             ],
                           ),
@@ -804,7 +807,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Text("About SpO2", style: hPi4Global.moveValueTextStyle),
+                      Text("About SpO2", style: HpiLegacyTheme.moveValueTextStyle),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
                   ),
@@ -816,7 +819,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                         child: Text(
                           "SpO2 is estimated from optical sensors and represents the percentage of oxygen carried by your red blood cells."
                           " Values may be influenced by motion, light interference, or sensor placement. ",
-                          style: hPi4Global.movecardSubValue1TextStyle,
+                          style: HpiLegacyTheme.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -827,7 +830,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                     children: <Widget>[
                       Text(
                         'Learn more at',
-                        style: hPi4Global.movecardSubValue1TextStyle,
+                        style: HpiLegacyTheme.movecardSubValue1TextStyle,
                       ),
                       TextButton(
                         onPressed: () {
@@ -897,9 +900,9 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -908,7 +911,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
               'Spo2',
               style: TextStyle(
                 fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+                color: HpiLegacyTheme.hpi4AppBarIconsColor,
               ),
             ),
             IconButton(
@@ -936,7 +939,7 @@ class _ScrSPO2State extends State<ScrSPO2> with SingleTickerProviderStateMixin {
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: const BoxDecoration(
-                  color: hPi4Global.hpi4Color,
+                  color: HpiLegacyTheme.hpi4Color,
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 labelColor: Colors.white,

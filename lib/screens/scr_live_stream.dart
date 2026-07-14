@@ -10,6 +10,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../globals.dart';
 import '../utils/connection_manager.dart';
 import '../utils/sizeConfig.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 class ScrLiveStream extends StatefulWidget {
   ScrLiveStream({
@@ -279,7 +280,7 @@ class _ScrLiveStreamState extends State<ScrLiveStream> {
                       : widget.selectedType == "GSR"
                           ? Icons.water_drop
                           : Icons.show_chart,
-              color: hPi4Global.hpi4Color,
+              color: HpiLegacyTheme.hpi4Color,
               size: 24,
             ),
             const SizedBox(width: 12),

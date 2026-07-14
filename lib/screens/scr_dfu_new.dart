@@ -6,7 +6,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import '../globals.dart';
 import 'scr_main_shell.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../models/firmware_release.dart';
@@ -17,6 +16,7 @@ import '../utils/device_manager.dart';
 import '../utils/firmware_update_service.dart';
 import '../utils/manifest.dart';
 import '../utils/snackbar.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 /// DFU Screen States
 enum DFUScreenState {
@@ -365,7 +365,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
               Navigator.of(context).pop();
               ScrMainShell.returnToRoot(context);
             },
-            child: Text('OK', style: TextStyle(color: hPi4Global.hpi4Color)),
+            child: Text('OK', style: TextStyle(color: HpiLegacyTheme.hpi4Color)),
           ),
         ],
       ),
@@ -444,7 +444,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         backgroundColor: const Color(0xFF121212),
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: hPi4Global.hpi4AppBarColor,
+          backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.white),
             onPressed: () async {
@@ -513,7 +513,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+            valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
           ),
           const SizedBox(height: 20),
           Text(
@@ -548,7 +548,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             const SizedBox(height: 24),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4Color,
+                backgroundColor: HpiLegacyTheme.hpi4Color,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
@@ -575,10 +575,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: hPi4Global.hpi4Color.withOpacity(0.2),
+                color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(Icons.watch, color: hPi4Global.hpi4Color, size: 28),
+              child: Icon(Icons.watch, color: HpiLegacyTheme.hpi4Color, size: 28),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -700,7 +700,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                       Text('v$_currentFWVersion', style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  Icon(Icons.arrow_forward, color: hPi4Global.hpi4Color, size: 24),
+                  Icon(Icons.arrow_forward, color: HpiLegacyTheme.hpi4Color, size: 24),
                   Column(
                     children: [
                       Text('Latest', style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
@@ -719,9 +719,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                 data: ThemeData.dark(),
                 child: ExpansionTile(
                   tilePadding: EdgeInsets.zero,
-                  title: Text('What\'s New', style: TextStyle(color: hPi4Global.hpi4Color, fontSize: 15, fontWeight: FontWeight.w600)),
-                  iconColor: hPi4Global.hpi4Color,
-                  collapsedIconColor: hPi4Global.hpi4Color,
+                  title: Text('What\'s New', style: TextStyle(color: HpiLegacyTheme.hpi4Color, fontSize: 15, fontWeight: FontWeight.w600)),
+                  iconColor: HpiLegacyTheme.hpi4Color,
+                  collapsedIconColor: HpiLegacyTheme.hpi4Color,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(16),
@@ -739,7 +739,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Downloading firmware...', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: TextStyle(color: hPi4Global.hpi4Color, fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: TextStyle(color: HpiLegacyTheme.hpi4Color, fontSize: 14, fontWeight: FontWeight.w600)),
                 ],
               ),
               const SizedBox(height: 8),
@@ -748,7 +748,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                 child: LinearProgressIndicator(
                   value: _downloadProgress,
                   minHeight: 8,
-                  valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                  valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                   backgroundColor: Colors.grey[800],
                 ),
               ),
@@ -760,7 +760,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _dfuState == DFUScreenState.readyToInstall ? hPi4Global.hpi4Color : Colors.grey[700],
+                  backgroundColor: _dfuState == DFUScreenState.readyToInstall ? HpiLegacyTheme.hpi4Color : Colors.grey[700],
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 16),
@@ -870,7 +870,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           children: [
             CircularProgressIndicator(
               value: _dfuProgress,
-              valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+              valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
               strokeWidth: 6,
             ),
             const SizedBox(height: 20),
@@ -948,7 +948,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             const SizedBox(height: 20),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4Color,
+                backgroundColor: HpiLegacyTheme.hpi4Color,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
@@ -1009,8 +1009,8 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: hPi4Global.hpi4Color,
-                  side: BorderSide(color: hPi4Global.hpi4Color, width: 1.5),
+                  foregroundColor: HpiLegacyTheme.hpi4Color,
+                  side: BorderSide(color: HpiLegacyTheme.hpi4Color, width: 1.5),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),

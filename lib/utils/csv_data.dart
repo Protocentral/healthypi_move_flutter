@@ -7,8 +7,8 @@
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
-import '../globals.dart';
 import 'package:path/path.dart' as p;
+import '../models/trend_models.dart';
 
 class CsvDataManager<T> {
   final String filePrefix;

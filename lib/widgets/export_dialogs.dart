@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import 'package:flutter/material.dart';
-import '../globals.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 /// Returns 'share' action for export (Save to Device option removed)
 Future<String?> showExportActionDialog(BuildContext context) async {
@@ -54,7 +54,7 @@ void showSaveSuccessDialog(BuildContext context, String filename, String directo
               children: [
                 Row(
                   children: [
-                    Icon(Icons.folder, color: hPi4Global.hpi4Color, size: 16),
+                    Icon(Icons.folder, color: HpiLegacyTheme.hpi4Color, size: 16),
                     const SizedBox(width: 8),
                     Text(
                       'Location:',
@@ -70,7 +70,7 @@ void showSaveSuccessDialog(BuildContext context, String filename, String directo
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Icon(Icons.insert_drive_file, color: hPi4Global.hpi4Color, size: 16),
+                    Icon(Icons.insert_drive_file, color: HpiLegacyTheme.hpi4Color, size: 16),
                     const SizedBox(width: 8),
                     Text(
                       'Filename:',
@@ -95,7 +95,7 @@ void showSaveSuccessDialog(BuildContext context, String filename, String directo
           child: Text(
             'OK',
             style: TextStyle(
-              color: hPi4Global.hpi4Color,
+              color: HpiLegacyTheme.hpi4Color,
               fontWeight: FontWeight.w600,
             ),
           ),

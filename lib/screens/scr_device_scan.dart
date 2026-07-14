@@ -7,13 +7,13 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:universal_ble/universal_ble.dart';
 import 'package:move/utils/snackbar.dart';
 
-import '../globals.dart';
 import '../models/device_info.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/database_helper.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 /// Clean, focused screen for BLE device scanning and pairing.
 /// Purpose: scan for HealthyPi Move devices and pair them. Can optionally connect
@@ -241,7 +241,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                    valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                   ),
                   SizedBox(height: 16),
                   Text(

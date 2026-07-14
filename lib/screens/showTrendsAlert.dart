@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../globals.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 Widget displayValuesAlert() {
   return Row(
@@ -14,7 +14,7 @@ Widget displayValuesAlert() {
       Expanded(
         child: Text("These values should not be used to diagnose or monitor medical conditions.",
           style:
-          hPi4Global.movecardSubValueRedTextStyle,
+          HpiLegacyTheme.movecardSubValueRedTextStyle,
           textAlign: TextAlign.center,
         ),
       ),

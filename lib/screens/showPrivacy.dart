@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:simple_html_css/simple_html_css.dart';
 
-import '../globals.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 void showPrivacyDialog(BuildContext context) async {
   String htmlContent = await rootBundle.loadString('assets/privacyPolicy.html');
@@ -20,7 +20,7 @@ void showPrivacyDialog(BuildContext context) async {
           "Privacy Policy",
           style: TextStyle(
             fontSize: 16,
-            color: hPi4Global.hpi4AppBarIconsColor,
+            color: HpiLegacyTheme.hpi4AppBarIconsColor,
           ),
         ),
         content: SingleChildScrollView(
@@ -57,7 +57,7 @@ void showPrivacyDialog(BuildContext context) async {
         ),
         actions: <Widget>[
           TextButton(
-            child: Text("Close", style: hPi4Global.eventsWhite),
+            child: Text("Close", style: HpiLegacyTheme.eventsWhite),
             onPressed: () {
               Navigator.of(context).pop();
             },

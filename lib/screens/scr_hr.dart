@@ -16,6 +16,9 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
 import '../widgets/export_dialogs.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../widgets/loading_indicator.dart';
+import '../models/trend_models.dart';
 
 class ScrHR extends StatefulWidget {
   const ScrHR({super.key});
@@ -280,7 +283,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    palette: <Color>[hPi4Global.hpi4Color],
+                    palette: <Color>[HpiLegacyTheme.hpi4Color],
                     series: <CartesianSeries>[
                       HiloSeries<HRTrends, DateTime>(
                         dataSource: hrTrendsData,
@@ -492,7 +495,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     return Card(
       color: Color(0xFF1E1E1E),
       child: ListTile(
-        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        leading: Icon(icon, color: HpiLegacyTheme.hpi4Color),
         title: Text(label, style: TextStyle(color: Colors.white)),
         trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
         onTap: onTap,
@@ -671,16 +674,16 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                          // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Minimum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text((rangeMinHR.toString() == "0")
                                       ? "--"
                                       : rangeMinHR.toString(),
-                                    style: hPi4Global.moveValueGreenTextStyle,
+                                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                                 ]
                             ),
 
@@ -690,17 +693,17 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                           //mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Average", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (averageHR.toString() == "0")
                                         ? "--"
                                         : averageHR.toString(),
-                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                    style: HpiLegacyTheme.moveValueOrangeTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueOrangeTextStyle),
                                 ]
                             ),
                           ]
@@ -709,17 +712,17 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                          // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Maximum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (rangeMaxHR.toString() == "0")
                                         ? "--"
                                         : rangeMaxHR.toString(),
-                                    style: hPi4Global.moveValueBlueTextStyle,
+                                    style: HpiLegacyTheme.moveValueBlueTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueBlueTextStyle),
                                 ]
                             ),
 
@@ -760,7 +763,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Text("About Heart Rate",
-                        style: hPi4Global.moveValueTextStyle,
+                        style: HpiLegacyTheme.moveValueTextStyle,
                       ),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
@@ -774,7 +777,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                           "Heart rate is measured using optical PPG sensors on the wrist. "
                               "The values shown reflect pulse rate and are for general information and personal insight only.",
                           style:
-                          hPi4Global.movecardSubValue1TextStyle,
+                          HpiLegacyTheme.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -784,7 +787,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
-                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      Text('Learn more at', style: HpiLegacyTheme.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
                           launchURL('https://www.health.harvard.edu/heart-health/all-about-your-heart-rate');
@@ -855,9 +858,9 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
     //length: 3,
     // child:
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -866,7 +869,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
               'Heart Rate',
               style: TextStyle(
                 fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+                color: HpiLegacyTheme.hpi4AppBarIconsColor,
               ),
             ),
             IconButton(
@@ -894,7 +897,7 @@ class _ScrHRState extends State<ScrHR> with SingleTickerProviderStateMixin {
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: const BoxDecoration(
-                  color: hPi4Global.hpi4Color,
+                  color: HpiLegacyTheme.hpi4Color,
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 labelColor: Colors.white,

@@ -14,6 +14,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:csv/csv.dart';
 import '../globals.dart';
 import '../utils/snackbar.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 // HRV Recording Constants
 class HRVConstants {
@@ -499,7 +500,7 @@ class ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color,
+                  backgroundColor: HpiLegacyTheme.hpi4Color,
                 ),
               ),
             ],
@@ -537,7 +538,7 @@ class ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Refresh'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color,
+                  backgroundColor: HpiLegacyTheme.hpi4Color,
                 ),
               ),
             ],
@@ -576,12 +577,12 @@ class ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: hPi4Global.hpi4Color.withOpacity(0.2),
+                    color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.monitor_heart,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                     size: 24,
                   ),
                 ),
@@ -625,7 +626,7 @@ class ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
                 value: recording.downloadProgress,
                 backgroundColor: Colors.grey[700],
                 valueColor:
-                AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
               ),
               const SizedBox(height: 4),
               Text(
@@ -642,8 +643,8 @@ class ScrHRVRecordingsContentState extends State<ScrHRVRecordingsContent> {
                       icon: const Icon(Icons.download, size: 18),
                       label: const Text('Download CSV'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: hPi4Global.hpi4Color,
-                        side: BorderSide(color: hPi4Global.hpi4Color),
+                        foregroundColor: HpiLegacyTheme.hpi4Color,
+                        side: BorderSide(color: HpiLegacyTheme.hpi4Color),
                       ),
                     ),
                   ),

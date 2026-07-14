@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import 'database_helper.dart';
-import '../globals.dart';
+import '../models/trend_models.dart';
 
 /// Data access layer for health trend data
 /// Provides clean API for trend screens to query SQLite database

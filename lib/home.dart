@@ -17,6 +17,7 @@ import 'utils/sizeConfig.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'theme/hpi_legacy_theme.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -59,7 +60,7 @@ class _HomePageState extends State<HomePage> {
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.transparent,
             elevation: 0,
-            selectedItemColor: hPi4Global.hpi4Color,
+            selectedItemColor: HpiLegacyTheme.hpi4Color,
             unselectedItemColor: Colors.grey[500],
             selectedFontSize: 12,
             unselectedFontSize: 11,
@@ -615,7 +616,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false,
         title: Image.asset(
           'assets/healthypi_move.png',
@@ -629,14 +630,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: LinearProgressIndicator(
                   value: _syncProgress,
                   backgroundColor: Colors.grey[800],
-                  valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                  valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                 ),
               )
             : null,
       ),
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
-        color: hPi4Global.hpi4Color,
+        color: HpiLegacyTheme.hpi4Color,
         backgroundColor: const Color(0xFF2D2D2D),
         displacement: 60, // Move the refresh indicator higher to avoid covering content
         strokeWidth: 3.0,
@@ -666,7 +667,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: hPi4Global.hpi4Color.withOpacity(0.2),
+                            color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: _isSyncing
@@ -675,12 +676,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   height: 24,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 3,
-                                    valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                                    valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                                   ),
                                 )
                               : Icon(
                                   Icons.sync,
-                                  color: hPi4Global.hpi4Color,
+                                  color: HpiLegacyTheme.hpi4Color,
                                   size: 24,
                                 ),
                         ),
@@ -766,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isSyncing ? null : _handleRefresh,
-        backgroundColor: _isSyncing ? Colors.grey : hPi4Global.hpi4Color,
+        backgroundColor: _isSyncing ? Colors.grey : HpiLegacyTheme.hpi4Color,
         foregroundColor: Colors.white,
         elevation: 4,
         icon: _isSyncing 

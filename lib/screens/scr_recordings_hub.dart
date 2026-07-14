@@ -7,12 +7,12 @@ import 'package:flutter/material.dart';
 import '../utils/connection_manager.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:share_plus/share_plus.dart';
-import '../globals.dart';
 import '../models/research_recording.dart';
 import '../utils/research_recording_manager.dart';
 import 'scr_ecg_recordings.dart';
 import 'scr_hrv_recordings.dart';
 import 'scr_gsr_recordings.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 /// Unified recordings hub screen with tabs for Spot Check and Research recordings
 class ScrRecordingsHub extends StatefulWidget {
@@ -56,13 +56,13 @@ class _ScrRecordingsHubState extends State<ScrRecordingsHub>
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('Recordings'),
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         foregroundColor: Colors.white,
         actions: _buildAppBarActions(),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: hPi4Global.hpi4Color,
-          labelColor: hPi4Global.hpi4Color,
+          indicatorColor: HpiLegacyTheme.hpi4Color,
+          labelColor: HpiLegacyTheme.hpi4Color,
           unselectedLabelColor: Colors.grey[400],
           tabs: const [
             Tab(
@@ -297,8 +297,8 @@ class _SpotCheckTabState extends State<_SpotCheckTab>
           color: const Color(0xFF121212),
           child: TabBar(
             controller: _nestedTabController,
-            indicatorColor: hPi4Global.hpi4Color,
-            labelColor: hPi4Global.hpi4Color,
+            indicatorColor: HpiLegacyTheme.hpi4Color,
+            labelColor: HpiLegacyTheme.hpi4Color,
             unselectedLabelColor: Colors.grey[400],
             tabs: const [
               Tab(text: 'ECG'),
@@ -737,7 +737,7 @@ class _ResearchTabState extends State<_ResearchTab> {
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color,
+                  backgroundColor: HpiLegacyTheme.hpi4Color,
                 ),
               ),
             ],
@@ -775,7 +775,7 @@ class _ResearchTabState extends State<_ResearchTab> {
                 icon: const Icon(Icons.add),
                 label: const Text('New Recording'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: hPi4Global.hpi4Color,
+                  backgroundColor: HpiLegacyTheme.hpi4Color,
                 ),
               ),
             ],
@@ -803,7 +803,7 @@ class _ResearchTabState extends State<_ResearchTab> {
             _activeRecordingStatus != null ? null : _navigateToNewRecording,
             backgroundColor: _activeRecordingStatus != null
                 ? Colors.grey
-                : hPi4Global.hpi4Color,
+                : HpiLegacyTheme.hpi4Color,
             icon: const Icon(Icons.add),
             label: const Text('New Recording'),
           ),
@@ -901,8 +901,8 @@ class _ResearchTabState extends State<_ResearchTab> {
                     icon: const Icon(Icons.download, size: 18),
                     label: const Text('Download'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: hPi4Global.hpi4Color,
-                      side: BorderSide(color: hPi4Global.hpi4Color),
+                      foregroundColor: HpiLegacyTheme.hpi4Color,
+                      side: BorderSide(color: HpiLegacyTheme.hpi4Color),
                     ),
                   ),
                 ),
@@ -1067,7 +1067,7 @@ class _ResearchRecordingConfigScreenState
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('New Research Recording'),
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         foregroundColor: Colors.white,
       ),
       body: _isInitializing
@@ -1133,7 +1133,7 @@ class _ResearchRecordingConfigScreenState
                     _selectedDurationMinutes = minutes;
                   });
                 },
-                selectedColor: hPi4Global.hpi4Color,
+                selectedColor: HpiLegacyTheme.hpi4Color,
                 labelStyle: TextStyle(
                   color: isSelected ? Colors.white : Colors.grey[400],
                 ),
@@ -1177,7 +1177,7 @@ class _ResearchRecordingConfigScreenState
                   '${signal.kbPerMinute.toStringAsFixed(1)} KB/min',
                   style: TextStyle(color: Colors.grey[400], fontSize: 12),
                 ),
-                activeColor: hPi4Global.hpi4Color,
+                activeColor: HpiLegacyTheme.hpi4Color,
                 checkColor: Colors.white,
               ),
             );
@@ -1235,7 +1235,7 @@ class _ResearchRecordingConfigScreenState
               label: Text(_isStarting ? 'Starting...' : 'START RECORDING'),
               style: ElevatedButton.styleFrom(
                 backgroundColor:
-                _selectedSignals.isEmpty ? Colors.grey : hPi4Global.hpi4Color,
+                _selectedSignals.isEmpty ? Colors.grey : HpiLegacyTheme.hpi4Color,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1591,7 +1591,7 @@ class _ResearchSessionDetailScreenState
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         title: const Text('Recording Details'),
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -1742,7 +1742,7 @@ class _ResearchSessionDetailScreenState
                       value: _downloadProgress,
                       backgroundColor: Colors.grey[700],
                       valueColor: AlwaysStoppedAnimation<Color>(
-                          hPi4Global.hpi4Color),
+                          HpiLegacyTheme.hpi4Color),
                     ),
                   ],
                 ),
@@ -1758,7 +1758,7 @@ class _ResearchSessionDetailScreenState
               icon: const Icon(Icons.download),
               label: const Text('Download All Signals'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4Color,
+                backgroundColor: HpiLegacyTheme.hpi4Color,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -1900,7 +1900,7 @@ class _ResearchSessionDetailScreenState
                 children: [
                   IconButton(
                     icon: const Icon(Icons.share, size: 20),
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                     onPressed:
                     _isExporting ? null : () => _exportToCsv(signal),
                     tooltip: 'Export CSV',
@@ -1915,7 +1915,7 @@ class _ResearchSessionDetailScreenState
             else
               IconButton(
                 icon: const Icon(Icons.download, size: 20),
-                color: hPi4Global.hpi4Color,
+                color: HpiLegacyTheme.hpi4Color,
                 onPressed:
                 _isDownloading ? null : () => _downloadSignal(signal),
                 tooltip: 'Download',

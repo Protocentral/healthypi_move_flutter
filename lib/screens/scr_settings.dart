@@ -23,6 +23,8 @@ import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../utils/update_checker.dart';
 import '../widgets/export_dialogs.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../models/trend_models.dart';
 
 class ScrSettings extends StatefulWidget {
   ScrSettings({super.key});
@@ -82,7 +84,7 @@ class _ScrSettingsState extends State<ScrSettings> {
           width: double.infinity,
           child: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: hPi4Global.hpi4Color,
+              backgroundColor: HpiLegacyTheme.hpi4Color,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -111,7 +113,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                     text: 'Privacy Policy',
                     style: TextStyle(
                       fontSize: 14,
-                      color: hPi4Global.hpi4Color,
+                      color: HpiLegacyTheme.hpi4Color,
                       fontWeight: FontWeight.w600,
                     ),
                     recognizer: TapGestureRecognizer()
@@ -127,7 +129,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                     text: 'Terms of Use',
                     style: TextStyle(
                       fontSize: 14,
-                      color: hPi4Global.hpi4Color,
+                      color: HpiLegacyTheme.hpi4Color,
                       fontWeight: FontWeight.w600,
                     ),
                     recognizer: TapGestureRecognizer()
@@ -182,7 +184,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
               ),
@@ -211,7 +213,7 @@ class _ScrSettingsState extends State<ScrSettings> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: hPi4Global.hpi4Color),
+                CircularProgressIndicator(color: HpiLegacyTheme.hpi4Color),
                 SizedBox(height: 16),
                 Text(
                   'Preparing complete data export...',
@@ -454,7 +456,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: hPi4Global.hpi4Color,
+                      color: HpiLegacyTheme.hpi4Color,
                     ),
                   ),
                 ),
@@ -525,7 +527,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
                 onPressed: () {
@@ -546,7 +548,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
                 onPressed: () {
@@ -567,7 +569,7 @@ class _ScrSettingsState extends State<ScrSettings> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -619,7 +621,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: hPi4Global.hpi4Color,
+                        backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -713,7 +715,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                       children: [
                         Icon(
                           Icons.autorenew,
-                          color: hPi4Global.hpi4Color,
+                          color: HpiLegacyTheme.hpi4Color,
                           size: 24,
                         ),
                         const SizedBox(width: 12),
@@ -744,7 +746,7 @@ class _ScrSettingsState extends State<ScrSettings> {
                         Switch(
                           value: _autoCheckUpdates,
                           onChanged: _toggleAutoCheck,
-                          activeColor: hPi4Global.hpi4Color,
+                          activeColor: HpiLegacyTheme.hpi4Color,
                         ),
                       ],
                     ),

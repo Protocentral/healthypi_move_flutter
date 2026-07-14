@@ -22,6 +22,7 @@ import 'scr_main_shell.dart';
 
 import '../globals.dart';
 import 'package:flutter/cupertino.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 class ScrDeviceMgmt extends StatefulWidget {
   const ScrDeviceMgmt({super.key});
@@ -178,7 +179,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
                 onPressed: () async {
@@ -204,7 +205,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
               ),
@@ -222,7 +223,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -277,7 +278,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                           child: Padding(
                             padding: const EdgeInsets.all(16.0),
                             child: CircularProgressIndicator(
-                              color: hPi4Global.hpi4Color,
+                              color: HpiLegacyTheme.hpi4Color,
                             ),
                           ),
                         );
@@ -323,7 +324,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                               width: double.infinity,
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: hPi4Global.hpi4Color,
+                                  backgroundColor: HpiLegacyTheme.hpi4Color,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -367,12 +368,12 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                         leading: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: hPi4Global.hpi4Color.withOpacity(0.2),
+                            color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Icon(
                             Icons.watch,
-                            color: hPi4Global.hpi4Color,
+                            color: HpiLegacyTheme.hpi4Color,
                             size: 24,
                           ),
                         ),
@@ -461,7 +462,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                           _buildActionButton(
                             icon: Icons.system_update,
                             label: 'Update Firmware',
-                            color: hPi4Global.hpi4Color,
+                            color: HpiLegacyTheme.hpi4Color,
                             onPressed: () async {
                               // Get paired device info
                               final deviceInfo = await DeviceManager.getPairedDevice();
@@ -534,7 +535,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   _buildActionButton(
                     icon: Symbols.blood_pressure,
                     label: 'BPT Calibration',
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                     onPressed: () {
                       setState(() {
                         selectedOption = "BPT";
@@ -551,7 +552,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   _buildActionButton(
                     icon: Symbols.assignment,
                     label: 'Recordings',
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                     onPressed: () async {
                       // Get paired device info
                       final deviceInfo = await DeviceManager.getPairedDevice();
@@ -581,7 +582,7 @@ class _ScrDeviceMgmtState extends State<ScrDeviceMgmt> {
                   _buildActionButton(
                     icon: Symbols.monitoring,
                     label: 'Live View',
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                     onPressed: () async {
                       // Check for paired device first
                       final deviceInfo = await DeviceManager.getPairedDevice();
@@ -773,11 +774,11 @@ class _LiveStreamConnectorState extends State<_LiveStreamConnector> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: hPi4Global.hpi4Color.withOpacity(0.2),
+                            color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                            valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                             strokeWidth: 3,
                           ),
                         )
@@ -839,7 +840,7 @@ class _LiveStreamConnectorState extends State<_LiveStreamConnector> {
                         const SizedBox(height: 24),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: hPi4Global.hpi4Color,
+                            backgroundColor: HpiLegacyTheme.hpi4Color,
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

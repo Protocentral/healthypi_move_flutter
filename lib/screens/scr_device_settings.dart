@@ -6,8 +6,8 @@ import 'package:intl/intl.dart';
 import '../models/device_info.dart';
 import '../utils/device_manager.dart';
 import '../utils/database_helper.dart';
-import '../globals.dart';
 import 'scr_device_scan.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 /// Dedicated device management screen for paired HealthyPi Move devices
 /// Allows users to view device info, edit nickname, and unpair devices
@@ -97,7 +97,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
         backgroundColor: Color(0xFF2D2D2D),
         title: Row(
           children: [
-            Icon(Icons.bluetooth_searching, color: hPi4Global.hpi4Color, size: 28),
+            Icon(Icons.bluetooth_searching, color: HpiLegacyTheme.hpi4Color, size: 28),
             SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -148,7 +148,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: hPi4Global.hpi4Color,
+              backgroundColor: HpiLegacyTheme.hpi4Color,
               foregroundColor: Colors.white,
             ),
             child: Text(
@@ -204,7 +204,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
               borderRadius: BorderRadius.circular(8),
             ),
             focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(color: hPi4Global.hpi4Color),
+              borderSide: BorderSide(color: HpiLegacyTheme.hpi4Color),
               borderRadius: BorderRadius.circular(8),
             ),
             prefixIcon: Icon(Icons.edit, color: Colors.grey[500]),
@@ -218,7 +218,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
             style: ElevatedButton.styleFrom(
-              backgroundColor: hPi4Global.hpi4Color,
+              backgroundColor: HpiLegacyTheme.hpi4Color,
             ),
             child: Text('Save'),
           ),
@@ -246,7 +246,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         title: Text('Device Settings', style: TextStyle(color: Colors.white)),
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
@@ -254,7 +254,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
         ),
       ),
       body: _loading
-          ? Center(child: CircularProgressIndicator(color: hPi4Global.hpi4Color))
+          ? Center(child: CircularProgressIndicator(color: HpiLegacyTheme.hpi4Color))
           : _pairedDevice == null
               ? _buildNoPairedDevice()
               : _buildPairedDeviceInfo(),
@@ -301,7 +301,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
                 );
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: hPi4Global.hpi4Color,
+                backgroundColor: HpiLegacyTheme.hpi4Color,
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -341,12 +341,12 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
                     Container(
                       padding: EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: hPi4Global.hpi4Color.withOpacity(0.2),
+                        color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(
                         Icons.watch,
-                        color: hPi4Global.hpi4Color,
+                        color: HpiLegacyTheme.hpi4Color,
                         size: 32,
                       ),
                     ),
@@ -375,7 +375,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.edit, color: hPi4Global.hpi4Color),
+                      icon: Icon(Icons.edit, color: HpiLegacyTheme.hpi4Color),
                       onPressed: _editNickname,
                       tooltip: 'Edit nickname',
                     ),
@@ -428,7 +428,7 @@ class _ScrDeviceSettingsState extends State<ScrDeviceSettings> {
         ElevatedButton.icon(
           onPressed: _pairNewDevice,
           style: ElevatedButton.styleFrom(
-            backgroundColor: hPi4Global.hpi4Color,
+            backgroundColor: HpiLegacyTheme.hpi4Color,
             foregroundColor: Colors.white,
             padding: EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(

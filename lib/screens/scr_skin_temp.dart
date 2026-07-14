@@ -16,6 +16,9 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
 import '../widgets/export_dialogs.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../widgets/loading_indicator.dart';
+import '../models/trend_models.dart';
 
 class ScrSkinTemperature extends StatefulWidget {
   const ScrSkinTemperature({super.key});
@@ -282,7 +285,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    palette: <Color>[hPi4Global.hpi4Color],
+                    palette: <Color>[HpiLegacyTheme.hpi4Color],
                     series: <CartesianSeries>[
                       HiloSeries<TempTrends, DateTime>(
                         dataSource: TempTrendsData,
@@ -498,7 +501,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
     return Card(
       color: Color(0xFF1E1E1E),
       child: ListTile(
-        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        leading: Icon(icon, color: HpiLegacyTheme.hpi4Color),
         title: Text(label, style: TextStyle(color: Colors.white)),
         trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
         onTap: onTap,
@@ -677,16 +680,16 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Minimum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text((rangeMinTemp.toString() == "0")
                                       ? "--"
                                       : rangeMinTemp.toString(),
-                                    style: hPi4Global.moveValueGreenTextStyle,
+                                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                  Text('\u00b0 F', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                                 ]
                             ),
 
@@ -696,17 +699,17 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                         //mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Average", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (averageTemp.toString() == "0")
                                         ? "--"
                                         : averageTemp.toString(),
-                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                    style: HpiLegacyTheme.moveValueOrangeTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                  Text('\u00b0 F', style: HpiLegacyTheme.movecardSubValueOrangeTextStyle),
                                 ]
                             ),
                           ]
@@ -715,17 +718,17 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Maximum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (rangeMaxTemp.toString() == "0")
                                         ? "--"
                                         : rangeMaxTemp.toString(),
-                                    style: hPi4Global.moveValueBlueTextStyle,
+                                    style: HpiLegacyTheme.moveValueBlueTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('\u00b0 F', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                  Text('\u00b0 F', style: HpiLegacyTheme.movecardSubValueBlueTextStyle),
                                 ]
                             ),
 
@@ -765,7 +768,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Text("About Skin Temperature",
-                        style: hPi4Global.moveValueTextStyle,
+                        style: HpiLegacyTheme.moveValueTextStyle,
                       ),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
@@ -780,7 +783,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                               "Fluctuations can occur due to physical activity, ambient conditions, and device positioning. "
                               "This is provided for general awareness and is not a substitute for medical-grade thermometers ",
                           style:
-                          hPi4Global.movecardSubValue1TextStyle,
+                          HpiLegacyTheme.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -790,7 +793,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                   /*Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
-                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      Text('Learn more at', style: HpiLegacyTheme.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
                           //launchURL("");
@@ -861,9 +864,9 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -872,7 +875,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
               'Temperature',
               style: TextStyle(
                 fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+                color: HpiLegacyTheme.hpi4AppBarIconsColor,
               ),
             ),
             IconButton(
@@ -900,7 +903,7 @@ class _ScrSkinTemperatureState extends State<ScrSkinTemperature>
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: const BoxDecoration(
-                  color: hPi4Global.hpi4Color,
+                  color: HpiLegacyTheme.hpi4Color,
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 labelColor: Colors.white,

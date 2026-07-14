@@ -8,6 +8,7 @@ import '../globals.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../smp/smp_ble_transport.dart';
 import 'connection_manager.dart';
+import 'device_info_service.dart';
 import 'database_helper.dart';
 import 'update_checker.dart';
 
@@ -147,12 +148,13 @@ class BackgroundSyncManager {
       _emitProgress('all', 0.02, SyncState.connecting, 'Checking firmware version...');
       onStatus('Checking firmware version...');
 
-      final firmwareVersion = await _readFirmwareVersion();
+      final firmwareVersion =
+          await DeviceInfoService.readFirmwareVersion(deviceMacAddress);
       debugPrint('Background sync: Firmware version: $firmwareVersion');
 
-      if (!_isFirmwareVersionSupported(firmwareVersion)) {
+      if (!DeviceInfoService.isAtLeast(firmwareVersion, major: 1, minor: 9)) {
         throw Exception(
-          'Firmware version $firmwareVersion is not supported. '
+          'Firmware version ${firmwareVersion ?? "unknown"} is not supported. '
           'Please update to version 1.9.0 or higher. '
           'Go to Device > Update Firmware to update.'
         );
@@ -608,54 +610,6 @@ class BackgroundSyncManager {
       sub.cancel();
     }
     _activeSubscriptions.clear();
-  }
-
-  /// Read firmware version from Device Information Service (0x180A / 0x2A26)
-  Future<String> _readFirmwareVersion() async {
-    try {
-      final value = await _conn.read("180a", "2a26");
-      final version = String.fromCharCodes(value).trim();
-      return version.isEmpty ? 'unknown' : version;
-    } catch (e) {
-      debugPrint('Background sync: Error reading firmware version: $e');
-      return 'unknown';
-    }
-  }
-
-  /// Check if firmware version is supported (>= 1.9.0)
-  bool _isFirmwareVersionSupported(String version) {
-    if (version == 'unknown') {
-      // If we can't read the version, allow sync but log warning
-      debugPrint('Background sync: WARNING - Could not verify firmware version, proceeding anyway');
-      return true;
-    }
-
-    try {
-      // Remove 'v' prefix if present
-      final cleanVersion = version.toLowerCase().startsWith('v')
-          ? version.substring(1)
-          : version;
-
-      // Parse version parts
-      final parts = cleanVersion.split('.');
-      if (parts.length < 2) {
-        debugPrint('Background sync: Invalid version format: $version');
-        return false;
-      }
-
-      final major = int.tryParse(parts[0]) ?? 0;
-      final minor = int.tryParse(parts[1]) ?? 0;
-
-      // Check if version >= 1.9.0
-      if (major > 1) return true;
-      if (major == 1 && minor >= 9) return true;
-
-      debugPrint('Background sync: Firmware version $version is below minimum 1.9.0');
-      return false;
-    } catch (e) {
-      debugPrint('Background sync: Error parsing version $version: $e');
-      return false;
-    }
   }
 
   void dispose() {

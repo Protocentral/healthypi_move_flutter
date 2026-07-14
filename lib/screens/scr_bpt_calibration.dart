@@ -13,6 +13,8 @@ import '../utils/sizeConfig.dart';
 import '../utils/snackbar.dart';
 import '../utils/device_manager.dart';
 import 'scr_device_scan.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../widgets/loading_indicator.dart';
 
 enum CalibrationState {
   preCalibration,
@@ -148,7 +150,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
               },
               child: Text(
                 'Cancel',
-                style: TextStyle(color: hPi4Global.hpi4Color),
+                style: TextStyle(color: HpiLegacyTheme.hpi4Color),
               ),
             ),
             TextButton(
@@ -160,7 +162,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
               },
               child: Text(
                 'Scan for Device',
-                style: TextStyle(color: hPi4Global.hpi4Color),
+                style: TextStyle(color: HpiLegacyTheme.hpi4Color),
               ),
             ),
           ],
@@ -249,7 +251,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                 ),
               ),
@@ -458,7 +460,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
               ),
               const SizedBox(height: 20),
               Text(
@@ -514,7 +516,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   const Icon(
                     Icons.monitor_heart,
                     size: 64,
-                    color: hPi4Global.hpi4Color,
+                    color: HpiLegacyTheme.hpi4Color,
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -557,7 +559,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         });
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: hPi4Global.hpi4Color,
+                        backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -582,7 +584,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   Widget _buildInfoTile(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, color: hPi4Global.hpi4Color, size: 20),
+        Icon(icon, color: HpiLegacyTheme.hpi4Color, size: 20),
         const SizedBox(width: 12),
         Text(
           '$label: ',
@@ -606,7 +608,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('• ', style: TextStyle(color: hPi4Global.hpi4Color, fontSize: 16)),
+          const Text('• ', style: TextStyle(color: HpiLegacyTheme.hpi4Color, fontSize: 16)),
           Expanded(
             child: Text(
               tip,
@@ -642,7 +644,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   color: isComplete
                       ? Colors.green
                       : isCurrent
-                          ? hPi4Global.hpi4Color
+                          ? HpiLegacyTheme.hpi4Color
                           : Colors.grey[700],
                 ),
                 child: Center(
@@ -699,12 +701,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: hPi4Global.hpi4Color.withOpacity(0.2),
+                        color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Column(
                         children: [
-                          Icon(Icons.info_outline, color: hPi4Global.hpi4Color, size: 32),
+                          Icon(Icons.info_outline, color: HpiLegacyTheme.hpi4Color, size: 32),
                           SizedBox(height: 12),
                           Text(
                             'Instructions',
@@ -818,7 +820,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: hPi4Global.hpi4Color,
+                          backgroundColor: HpiLegacyTheme.hpi4Color,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -877,7 +879,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           value: _progress / 100,
                           strokeWidth: 8,
                           backgroundColor: Colors.grey[700],
-                          valueColor: const AlwaysStoppedAnimation<Color>(hPi4Global.hpi4Color),
+                          valueColor: const AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
                         ),
                       ),
                       Text(
@@ -945,7 +947,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                 onPressed: () => Navigator.pop(context),
                                 child: Text(
                                   'Continue',
-                                  style: TextStyle(color: hPi4Global.hpi4Color),
+                                  style: TextStyle(color: HpiLegacyTheme.hpi4Color),
                                 ),
                               ),
                               TextButton(
@@ -1115,7 +1117,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         });
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: hPi4Global.hpi4Color,
+                        backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -1254,7 +1256,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: hPi4Global.hpi4Color,
+                        backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -1287,9 +1289,9 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () async {

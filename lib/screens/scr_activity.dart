@@ -14,6 +14,9 @@ import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import '../utils/export_helpers.dart';
 import '../widgets/export_dialogs.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../widgets/loading_indicator.dart';
+import '../models/trend_models.dart';
 
 class ScrActivity extends StatefulWidget {
   const ScrActivity({super.key});
@@ -272,7 +275,7 @@ class _ScrActivityState extends State<ScrActivity>
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    palette: <Color>[hPi4Global.hpi4Color],
+                    palette: <Color>[HpiLegacyTheme.hpi4Color],
                     series: <CartesianSeries>[
                       HiloSeries<ActivityTrends, DateTime>(
                         dataSource: ActivityTrendsData,
@@ -442,7 +445,7 @@ class _ScrActivityState extends State<ScrActivity>
     return Card(
       color: Color(0xFF1E1E1E),
       child: ListTile(
-        leading: Icon(icon, color: hPi4Global.hpi4Color),
+        leading: Icon(icon, color: HpiLegacyTheme.hpi4Color),
         title: Text(label, style: TextStyle(color: Colors.white)),
         trailing: Icon(Icons.arrow_forward_ios, color: Colors.grey, size: 16),
         onTap: onTap,
@@ -591,16 +594,16 @@ class _ScrActivityState extends State<ScrActivity>
         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
         //mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text("Today's total", style: hPi4Global.movecardSubValueTextStyle,),
+            Text("Today's total", style: HpiLegacyTheme.movecardSubValueTextStyle,),
             Row(
                 children: <Widget>[
                   Text((Count.toString() == "0")
                       ? "--"
                       : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
+                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                   ),
                   SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
+                  Text('steps', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                 ]
             ),
 
@@ -611,16 +614,16 @@ class _ScrActivityState extends State<ScrActivity>
         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
         //mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text("This week's total", style: hPi4Global.movecardSubValueTextStyle,),
+            Text("This week's total", style: HpiLegacyTheme.movecardSubValueTextStyle,),
             Row(
                 children: <Widget>[
                   Text((Count.toString() == "0")
                       ? "--"
                       : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
+                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                   ),
                   SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
+                  Text('steps', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                 ]
             ),
 
@@ -631,16 +634,16 @@ class _ScrActivityState extends State<ScrActivity>
         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
         //mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text("This month's total", style: hPi4Global.movecardSubValueTextStyle,),
+            Text("This month's total", style: HpiLegacyTheme.movecardSubValueTextStyle,),
             Row(
                 children: <Widget>[
                   Text((Count.toString() == "0")
                       ? "--"
                       : Count.toString(),
-                    style: hPi4Global.moveValueGreenTextStyle,
+                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                   ),
                   SizedBox(width: 5.0),
-                  Text('steps', style: hPi4Global.movecardSubValueGreenTextStyle),
+                  Text('steps', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                 ]
             ),
 
@@ -710,7 +713,7 @@ class _ScrActivityState extends State<ScrActivity>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Text("About Activity",
-                        style: hPi4Global.moveValueTextStyle,
+                        style: HpiLegacyTheme.moveValueTextStyle,
                       ),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
@@ -724,7 +727,7 @@ class _ScrActivityState extends State<ScrActivity>
                           "Step count is estimated using motion sensors in the device. "
                               "It reflects walking-related movement but may vary based on gait, posture, and activity type.",
                           style:
-                          hPi4Global.movecardSubValue1TextStyle,
+                          HpiLegacyTheme.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -733,7 +736,7 @@ class _ScrActivityState extends State<ScrActivity>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
-                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      Text('Learn more at', style: HpiLegacyTheme.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
                           launchURL("https://www.mayoclinic.org/healthy-lifestyle/fitness/in-depth/walking/art-20047880");
@@ -805,9 +808,9 @@ class _ScrActivityState extends State<ScrActivity>
   Widget build(BuildContext context) {
     SizeConfig().init(context);
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false, // Remove back button
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -816,7 +819,7 @@ class _ScrActivityState extends State<ScrActivity>
               'Activity',
               style: TextStyle(
                 fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+                color: HpiLegacyTheme.hpi4AppBarIconsColor,
               ),
             ),
             IconButton(
@@ -844,7 +847,7 @@ class _ScrActivityState extends State<ScrActivity>
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: const BoxDecoration(
-                  color: hPi4Global.hpi4Color,
+                  color: HpiLegacyTheme.hpi4Color,
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 labelColor: Colors.white,

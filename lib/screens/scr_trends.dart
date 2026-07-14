@@ -6,7 +6,7 @@ import 'scr_hr.dart';
 import 'scr_spo2.dart';
 import 'scr_skin_temp.dart';
 import 'scr_activity.dart';
-import '../globals.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 class ScrTrends extends StatefulWidget {
   final String? initialMetric; // Optional: navigate to specific metric
@@ -62,7 +62,7 @@ class _ScrTrendsState extends State<ScrTrends> with SingleTickerProviderStateMix
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         elevation: 0,
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -86,12 +86,12 @@ class _ScrTrendsState extends State<ScrTrends> with SingleTickerProviderStateMix
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(56),
           child: Container(
-            color: hPi4Global.hpi4AppBarColor,
+            color: HpiLegacyTheme.hpi4AppBarColor,
             child: TabBar(
               controller: _tabController,
-              indicatorColor: hPi4Global.hpi4Color,
+              indicatorColor: HpiLegacyTheme.hpi4Color,
               indicatorWeight: 3,
-              labelColor: hPi4Global.hpi4Color,
+              labelColor: HpiLegacyTheme.hpi4Color,
               unselectedLabelColor: Colors.grey[400],
               labelStyle: const TextStyle(
                 fontSize: 13,

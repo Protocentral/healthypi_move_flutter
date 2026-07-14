@@ -4,7 +4,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/firmware_release.dart';
-import 'ble_manager.dart';
+import 'device_info_service.dart';
 import 'firmware_update_service.dart';
 
 /// Background update checker for firmware updates
@@ -55,7 +55,7 @@ class UpdateChecker {
       print('[UpdateChecker] Running background update check...');
 
       // Read current firmware version from device
-      final currentVersion = await _readFirmwareVersion(deviceId);
+      final currentVersion = await DeviceInfoService.readFirmwareVersion(deviceId);
       if (currentVersion == null || currentVersion == 'Unknown') {
         print('[UpdateChecker] Could not read firmware version');
         return false;
@@ -121,22 +121,6 @@ class UpdateChecker {
   /// Clear cached update check data (force re-check on next connection)
   static Future<void> clearCache() async {
     await _clearCache();
-  }
-
-  /// Read firmware version from the connected device (Device Information
-  /// Service 0x180A → Firmware Revision String 0x2A26).
-  static Future<String?> _readFirmwareVersion(String deviceId) async {
-    try {
-      if (!await BleManager.instance.isConnected(deviceId)) {
-        return null;
-      }
-      final value =
-          await BleManager.instance.read(deviceId, "180a", "2a26");
-      return String.fromCharCodes(value).trim();
-    } catch (e) {
-      print('[UpdateChecker] Error reading firmware version: $e');
-      return null;
-    }
   }
 
   /// Check if we have a valid cached result

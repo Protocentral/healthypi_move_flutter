@@ -7,10 +7,10 @@ import '../utils/connection_manager.dart';
 import '../utils/sizeConfig.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
-import '../globals.dart';
 import 'scr_main_shell.dart';
 import '../utils/snackbar.dart';
 import 'scr_live_stream.dart';
+import '../theme/hpi_legacy_theme.dart';
 
 class ScrStreamsSelection extends StatefulWidget {
   const ScrStreamsSelection(
@@ -282,10 +282,10 @@ class _ScrStreamsSelectionState extends State<ScrStreamsSelection> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: hPi4Global.hpi4Color.withOpacity(0.2),
+                color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: hPi4Global.hpi4Color, size: 24),
+              child: Icon(icon, color: HpiLegacyTheme.hpi4Color, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(

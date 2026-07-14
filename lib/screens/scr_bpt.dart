@@ -11,6 +11,8 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../globals.dart';
 import 'package:intl/intl.dart';
+import '../theme/hpi_legacy_theme.dart';
+import '../models/trend_models.dart';
 
 class ScrBPT extends StatefulWidget {
   const ScrBPT({super.key});
@@ -269,11 +271,11 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-               // palette: <Color>[hPi4Global.hpi4Color],
+               // palette: <Color>[HpiLegacyTheme.hpi4Color],
                 series: <CartesianSeries>[
                   ColumnSeries<BPTTrends, DateTime>(
                     dataSource: BPTTrendsData,
-                    color: hPi4Global.hpi4Color, // Set color for the first line
+                    color: HpiLegacyTheme.hpi4Color, // Set color for the first line
                     xValueMapper: (BPTTrends data, _) => data.date,
                     yValueMapper: (BPTTrends data, _) => data.minHR,
                     borderWidth: borderWidth(),
@@ -428,16 +430,16 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Minimum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Minimum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text((rangeMinSys.toString() == "0")
                                       ? "--"
                                       : rangeMinSys.toString(),
-                                    style: hPi4Global.moveValueGreenTextStyle,
+                                    style: HpiLegacyTheme.moveValueGreenTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueGreenTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueGreenTextStyle),
                                 ]
                             ),
 
@@ -447,17 +449,17 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                         //mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Average", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Average", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (averageSys.toString() == "0")
                                         ? "--"
                                         : averageSys.toString(),
-                                    style: hPi4Global.moveValueOrangeTextStyle,
+                                    style: HpiLegacyTheme.moveValueOrangeTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueOrangeTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueOrangeTextStyle),
                                 ]
                             ),
                           ]
@@ -466,17 +468,17 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                         // mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         //mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text("Maximum", style: hPi4Global.movecardSubValueTextStyle,),
+                            Text("Maximum", style: HpiLegacyTheme.movecardSubValueTextStyle,),
                             Row(
                                 children: <Widget>[
                                   Text(
                                     (rangeMaxSys.toString() == "0")
                                         ? "--"
                                         : rangeMaxSys.toString(),
-                                    style: hPi4Global.moveValueBlueTextStyle,
+                                    style: HpiLegacyTheme.moveValueBlueTextStyle,
                                   ),
                                   SizedBox(width: 5.0),
-                                  Text('bpm', style: hPi4Global.movecardSubValueBlueTextStyle),
+                                  Text('bpm', style: HpiLegacyTheme.movecardSubValueBlueTextStyle),
                                 ]
                             ),
 
@@ -517,7 +519,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Text("About Heart Rate",
-                        style: hPi4Global.moveValueTextStyle,
+                        style: HpiLegacyTheme.moveValueTextStyle,
                       ),
                       //Icon(Icons.favorite_border, color: Colors.black),
                     ],
@@ -531,7 +533,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                           "Heart rate is measured using optical PPG sensors on the wrist. "
                               "The values shown reflect pulse rate and are for general information and personal insight only.",
                           style:
-                          hPi4Global.movecardSubValue1TextStyle,
+                          HpiLegacyTheme.movecardSubValue1TextStyle,
                           textAlign: TextAlign.justify,
                         ),
                       ),
@@ -541,7 +543,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.start,
                     children: <Widget>[
-                      Text('Learn more at', style: hPi4Global.movecardSubValue1TextStyle),
+                      Text('Learn more at', style: HpiLegacyTheme.movecardSubValue1TextStyle),
                       TextButton(
                         onPressed: () {
                           launchURL('https://www.health.harvard.edu/heart-health/all-about-your-heart-rate');
@@ -615,9 +617,9 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
     //length: 3,
     // child:
     return Scaffold(
-      backgroundColor: hPi4Global.appBackgroundColor,
+      backgroundColor: HpiLegacyTheme.appBackgroundColor,
       appBar: AppBar(
-        backgroundColor: hPi4Global.hpi4AppBarColor,
+        backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: Colors.white),
           onPressed:
@@ -631,7 +633,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
               'BPT',
               style: TextStyle(
                 fontSize: 16,
-                color: hPi4Global.hpi4AppBarIconsColor,
+                color: HpiLegacyTheme.hpi4AppBarIconsColor,
               ),
             ),
             SizedBox(width: 30.0),
@@ -655,7 +657,7 @@ class _ScrBPTState extends State<ScrBPT> with SingleTickerProviderStateMixin {
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: const BoxDecoration(
-                  color: hPi4Global.hpi4Color,
+                  color: HpiLegacyTheme.hpi4Color,
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 labelColor: Colors.white,
