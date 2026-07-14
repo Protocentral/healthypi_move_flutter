@@ -34,7 +34,7 @@ class SmpBusyException implements Exception {
 ///
 /// - **Streaming** — live ECG/PPG/HR/SpO₂/temp over the custom GATT
 ///   characteristics, via [subscribe] / [write] here.
-/// - **SMP** — health-store sync, records and firmware DFU over the SMP
+/// - **SMP** — healthy-store sync, records and firmware DFU over the SMP
 ///   characteristic, via `SmpBleTransport(id, manageConnection: false)` riding
 ///   this link.
 ///

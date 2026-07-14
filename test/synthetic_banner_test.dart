@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:move/ui/components/hpi_synthetic_banner.dart';
-import 'package:move/utils/health_store_sync_manager.dart';
+import 'package:move/utils/healthy_store_sync_manager.dart';
 
 /// The SYNTHETIC quality bit exists so fabricated samples can never be silently
 /// mistaken for measurements. When the developer opt-in charts them anyway, the
 /// banner is the only thing on screen saying so — so it is worth a test.
 void main() {
-  final flag = HealthStoreSyncManager.instance.syntheticIncluded;
+  final flag = HealthyStoreSyncManager.instance.syntheticIncluded;
 
   tearDown(() => flag.value = false);
 

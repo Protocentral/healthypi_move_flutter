@@ -86,9 +86,9 @@ dependencies:
   # Pure-Dart HPI_HS Health Store client (group 0x1000) + wire models, shared
   # with OpenView 3 (both apps previously carried identical copies).
   # smp_ble_transport + hs_summary (presentation) remain app-side.
-  # TODO: switch to a git/hosted dep once pushed to Protocentral/hpi_health_store.
-  hpi_health_store:
-    path: packages/hpi_health_store
+  # TODO: switch to a git/hosted dep once pushed to Protocentral/healthypi_healthy_store.
+  healthypi_healthy_store:
+    path: packages/healthypi_healthy_store
   equatable: ^2.0.5
   flutter_archive: ^6.0.0
   flutter_bloc: ^9.1.1

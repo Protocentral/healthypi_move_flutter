@@ -501,6 +501,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.8"
+  healthypi_healthy_store:
+    dependency: "direct main"
+    description:
+      path: "packages/healthypi_healthy_store"
+      relative: true
+    source: path
+    version: "0.1.0"
   hex:
     dependency: transitive
     description:
@@ -509,13 +516,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.2.0"
-  hpi_health_store:
-    dependency: "direct main"
-    description:
-      path: "packages/hpi_health_store"
-      relative: true
-    source: path
-    version: "0.1.0"
   html:
     dependency: transitive
     description:

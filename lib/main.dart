@@ -12,7 +12,7 @@ import 'screens/scr_bpt_calibration.dart';
 import 'theme/hpi_theme.dart';
 import 'ui/components/hpi_synthetic_banner.dart';
 import 'utils/ble_manager.dart';
-import 'utils/health_store_sync_manager.dart';
+import 'utils/healthy_store_sync_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +23,7 @@ void main() async {
 
   // Prime the synthetic-data flag before the first frame so the banner is right
   // on the first paint, not only after a sync has run.
-  await HealthStoreSyncManager.instance.loadSyntheticFlag();
+  await HealthyStoreSyncManager.instance.loadSyntheticFlag();
 
   runApp(const HealthyPiApp());
 }

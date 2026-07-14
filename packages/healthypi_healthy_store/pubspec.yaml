@@ -1,11 +1,11 @@
-name: hpi_health_store
+name: healthypi_healthy_store
 description: >-
-  Pure-Dart client for the ProtoCentral Health Store (HPI_HS), the MCUmgr group
+  Pure-Dart client for the ProtoCentral Healthy Store (HPI_HS), the MCUmgr group
   0x1000 on HealthyPi Move. Cursor-based sample sync, a self-describing metric
   registry, and CRC-verified raw-signal records. Bring your own transport.
 version: 0.1.0
-repository: https://github.com/Protocentral/hpi_health_store
-issue_tracker: https://github.com/Protocentral/hpi_health_store/issues
+repository: https://github.com/Protocentral/healthypi_healthy_store
+issue_tracker: https://github.com/Protocentral/healthypi_healthy_store/issues
 
 environment:
   sdk: ^3.3.0

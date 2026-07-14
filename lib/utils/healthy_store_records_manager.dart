@@ -2,13 +2,13 @@ import 'dart:io';
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/hs_recording.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
-import 'health_store_client.dart';
+import 'healthy_store_client.dart';
 
 /// On-demand list / download / CRC / ack for HPI_HS **RECORDS** (episodic
 /// raw-signal sessions: ECG, GSR, PPG, HRV, IMU).
@@ -18,12 +18,12 @@ import 'health_store_client.dart';
 ///
 /// ## Safety
 ///
-/// - Claims the SMP wire via [HealthStoreClient] (same lock as sample sync / DFU).
+/// - Claims the SMP wire via [HealthyStoreClient] (same lock as sample sync / DFU).
 /// - Persists the payload **before** `recordsAck`.
 /// - Acks only when [HsRecordDownload.crcOk] is true.
 /// - PARTIAL-flagged headers are stored and shown, not discarded.
-class HealthStoreRecordsManager {
-  HealthStoreRecordsManager(this.deviceId);
+class HealthyStoreRecordsManager {
+  HealthyStoreRecordsManager(this.deviceId);
 
   /// Platform BLE id (CoreBluetooth UUID / Android MAC).
   final String deviceId;
@@ -31,14 +31,14 @@ class HealthStoreRecordsManager {
   final ConnectionManager _conn = ConnectionManager.instance;
   final DatabaseHelper _db = DatabaseHelper.instance;
 
-  HealthStoreClient? _client;
+  HealthyStoreClient? _client;
 
   /// HELLO store key (`uid`, else `dev`) once connected.
   String? get storeKey => _client?.hello?.storeKey;
 
-  bool get isOpen => _client != null && _client!.hasHealthStore;
+  bool get isOpen => _client != null && _client!.hasHealthyStore;
 
-  /// Connect the shared link if needed, open an SMP Health Store session.
+  /// Connect the shared link if needed, open an SMP Healthy Store session.
   ///
   /// Throws [SmpBusyException] if sync/DFU holds the wire, or [StateError] if
   /// the device has no HPI_HS group.
@@ -49,17 +49,17 @@ class HealthStoreRecordsManager {
       await _conn.connect(deviceId);
     }
 
-    final client = HealthStoreClient(
+    final client = HealthyStoreClient(
       deviceId,
       // Large RECORDS chunks can be slow on a cold flash read.
       requestTimeout: const Duration(seconds: 40),
     );
     await client.connect();
 
-    if (!client.hasHealthStore) {
+    if (!client.hasHealthyStore) {
       await client.disconnect();
       throw StateError(
-          'This watch does not expose the Health Store (HELLO failed). '
+          'This watch does not expose the Healthy Store (HELLO failed). '
           'Update firmware to use RECORDS.');
     }
 

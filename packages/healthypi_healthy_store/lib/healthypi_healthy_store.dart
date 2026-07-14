@@ -1,13 +1,13 @@
 // Copyright (c) 2026 ProtoCentral
 // SPDX-License-Identifier: MIT
 
-/// A pure-Dart client for the **ProtoCentral Health Store** (`HPI_HS`), the
+/// A pure-Dart client for the **ProtoCentral Healthy Store** (`HPI_HS`), the
 /// vendor MCUmgr group (`0x1000`) exposed by HealthyPi Move firmware.
 ///
 /// It lets you read a device's health data — without touching firmware — over
 /// any SMP transport (BLE, serial, TCP). Bring your own
 /// [`SmpTransport`](https://pub.dev/documentation/mcumgr_dart/latest/) from
-/// `package:mcumgr_dart`; this package adds only the Health Store group and its
+/// `package:mcumgr_dart`; this package adds only the Healthy Store group and its
 /// wire models.
 ///
 /// The protocol has two tiers:

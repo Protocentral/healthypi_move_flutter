@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 import '../smp/smp_ble_transport.dart';
 import 'connection_manager.dart';
 
 /// A single SMP session to a HealthyPi Move over the SMP GATT service, on
 /// `universal_ble`. This is the app-to-device backbone for the redesigned
-/// architecture: **one** BLE plugin and **one** SMP client for health-store sync
+/// architecture: **one** BLE plugin and **one** SMP client for healthy-store sync
 /// (HPI_HS group `0x1000`) *and* firmware DFU (image group), replacing the old
 /// dual-channel (custom cmd/data service + MCUmgr-FS) path.
 ///
@@ -28,8 +28,8 @@ import 'connection_manager.dart';
 /// See `docs/HEALTH_STORE_SYNC_DESIGN.md`. The SMP core (`lib/smp`, `lib/mcumgr`,
 /// `lib/models/hs_*`) is ported verbatim from the hardware-verified OpenView 3
 /// client and is transport-agnostic; only [SmpBleTransport] is BLE-specific.
-class HealthStoreClient {
-  HealthStoreClient(
+class HealthyStoreClient {
+  HealthyStoreClient(
     this.deviceId, {
     this.name,
     this.manageConnection = false,
@@ -55,7 +55,7 @@ class HealthStoreClient {
   Object? _smpToken;
 
   /// Label used for the SMP lock and its error messages.
-  static const String smpOwnerLabel = 'health-store';
+  static const String smpOwnerLabel = 'healthy-store';
 
   SmpBleTransport? _transport;
   SmpClient? _client;
@@ -66,7 +66,7 @@ class HealthStoreClient {
   ImgMgmt? img;
   FsMgmt? fs;
 
-  /// ProtoCentral Health Store (group 0x1000) — present once [hello] succeeds.
+  /// ProtoCentral Healthy Store (group 0x1000) — present once [hello] succeeds.
   HpiHs? hs;
   HsHello? hello;
 
@@ -75,19 +75,19 @@ class HealthStoreClient {
   bool get isConnected => _state == SmpConnectionState.connected;
 
   /// True once a HELLO handshake succeeds (i.e. the device implements HPI_HS).
-  bool get hasHealthStore => hs != null && hello != null;
+  bool get hasHealthyStore => hs != null && hello != null;
 
   /// The `rc` the device returned when it *refused* HELLO, or null.
   ///
   /// Non-null means the watch answered and said it has no such group — its
-  /// firmware predates the Health Store, and the right response is to prompt for
+  /// firmware predates the Healthy Store, and the right response is to prompt for
   /// a firmware update. A **timeout** never sets this: an unanswered probe is
   /// not a verdict, and is rethrown from [connect] instead. See [_probeHello].
   int? helloRc;
 
   /// The device answered, and said it does not implement HPI_HS. Distinct from
   /// "we could not reach it", which is an exception, not a state.
-  bool get firmwarePredatesHealthStore => helloRc != null;
+  bool get firmwarePredatesHealthyStore => helloRc != null;
 
   int? get maxWriteLength => _transport?.maxWriteLength;
 
@@ -138,13 +138,13 @@ class HealthStoreClient {
     if (manageConnection) {
       if (connHoldsThisDevice) {
         throw StateError(
-            'HealthStoreClient(manageConnection: true) would open a second BLE '
+            'HealthyStoreClient(manageConnection: true) would open a second BLE '
             'connection to $deviceId, which ConnectionManager already holds. '
             'Use manageConnection: false to ride the existing link.');
       }
     } else if (!connHoldsThisDevice) {
       throw StateError(
-          'HealthStoreClient(manageConnection: false) rides the '
+          'HealthyStoreClient(manageConnection: false) rides the '
           'ConnectionManager link, but it is not connected to $deviceId '
           '(current: ${_conn.deviceId ?? 'none'}). Call '
           'ConnectionManager.instance.connect(deviceId) first, or pass '
@@ -172,8 +172,8 @@ class HealthStoreClient {
   /// this used to do:
   ///
   ///  - **The device answered, with an error `rc`** — there is no such group.
-  ///    Its firmware predates the Health Store. That is a verdict: disable the
-  ///    Health Store and let the caller take the legacy path.
+  ///    Its firmware predates the Healthy Store. That is a verdict: disable the
+  ///    Healthy Store and let the caller take the legacy path.
   ///  - **The request got no answer** (timeout, dropped link, framing failure).
   ///    We learned *nothing* about the firmware. Rethrow, so the caller retries.
   ///
@@ -187,12 +187,12 @@ class HealthStoreClient {
     } on SmpException catch (e) {
       if (e.rc == null) {
         // No rc means no reply — a timeout or transport failure, not a verdict
-        // on the firmware. Do not let it disable the Health Store.
-        debugPrint('[HealthStore] HELLO did not complete: $e — will retry');
+        // on the firmware. Do not let it disable the Healthy Store.
+        debugPrint('[HealthyStore] HELLO did not complete: $e — will retry');
         rethrow;
       }
-      debugPrint('[HealthStore] HELLO refused (rc=${e.rc}): no HPI_HS group — '
-          'firmware predates the Health Store');
+      debugPrint('[HealthyStore] HELLO refused (rc=${e.rc}): no HPI_HS group — '
+          'firmware predates the Healthy Store');
       helloRc = e.rc;
       hs = null;
       hello = null;

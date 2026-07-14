@@ -84,7 +84,7 @@ class HsRecordDownload {
 }
 
 /// Client for the **custom HPI_HS MCUmgr group** (id `0x1000`) — the ProtoCentral
-/// Health Store. Full contract in the HealthyPi Move `docs/HPI_HS_API.md`.
+/// Healthy Store. Full contract in the HealthyPi Move `docs/HPI_HS_API.md`.
 /// Gated: only surfaced when [hello] succeeds against a device that implements it.
 class HpiHs {
   HpiHs(this.client, {HpiHsLog? log}) : _log = log;
@@ -96,7 +96,7 @@ class HpiHs {
 
   void _logMsg(String m) => _log?.call(m);
 
-  /// Vendor-range group id for the Health Store.
+  /// Vendor-range group id for the Healthy Store.
   static const int group = 0x1000;
 
   // Command ids (§6).

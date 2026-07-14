@@ -1,6 +1,6 @@
-# hpi_health_store
+# healthypi_healthy_store
 
-Pure-Dart client for the **ProtoCentral Health Store** (`HPI_HS`) — the vendor
+Pure-Dart client for the **ProtoCentral Healthy Store** (`HPI_HS`) — the vendor
 MCUmgr group `0x1000` implemented by [HealthyPi Move](https://github.com/Protocentral/healthypi-move-fw)
 firmware.
 
@@ -27,7 +27,7 @@ This package speaks SMP but does not own a link. It builds on
 Supply any transport — BLE, serial, TCP.
 
 ```dart
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 
 final client = SmpClient(myTransport);   // your SmpTransport

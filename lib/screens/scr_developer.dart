@@ -10,9 +10,9 @@ import '../ui/components/hpi_components.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
-import '../utils/health_store_client.dart';
-import '../utils/health_store_probe.dart';
-import '../utils/health_store_sync_manager.dart';
+import '../utils/healthy_store_client.dart';
+import '../utils/healthy_store_probe.dart';
+import '../utils/healthy_store_sync_manager.dart';
 
 /// The single developer surface. Everything behind the developer-mode toggle
 /// lives here — nothing developer-facing is left scattered through Settings.
@@ -27,7 +27,7 @@ import '../utils/health_store_sync_manager.dart';
 ///  - **Local store** — what is actually on the phone: cursor, head, per-type
 ///    sample counts. These decide every sync's behaviour and until now existed
 ///    only in `debugPrint` output, which is useless on a user's device.
-///  - **Health Store** — the HELLO probe and the raw TYPES / SUMMARY capture.
+///  - **Healthy Store** — the HELLO probe and the raw TYPES / SUMMARY capture.
 ///  - **GATT** — the app's UUID table.
 ///  - **Live log** — connection events.
 ///
@@ -104,13 +104,13 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() => _includeSynthetic =
-        prefs.getBool(HealthStoreSyncManager.includeSyntheticPrefKey) ?? false);
+        prefs.getBool(HealthyStoreSyncManager.includeSyntheticPrefKey) ?? false);
   }
 
   Future<void> _loadStore() async {
     setState(() => _loadingStore = true);
     final db = DatabaseHelper.instance;
-    final device = await db.getHealthStoreDeviceKey();
+    final device = await db.getHealthyStoreDeviceKey();
     if (device == null) {
       if (mounted) {
         setState(() {
@@ -165,10 +165,10 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
   /// it is deliberately loud about what it's showing.
   Future<void> _setIncludeSynthetic(bool v) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(HealthStoreSyncManager.includeSyntheticPrefKey, v);
+    await prefs.setBool(HealthyStoreSyncManager.includeSyntheticPrefKey, v);
     // Raise the app-wide banner (HpiSyntheticBanner) before the rebuild, so the
     // charts never repaint with fabricated data ahead of the warning.
-    HealthStoreSyncManager.instance.syntheticIncluded.value = v;
+    HealthyStoreSyncManager.instance.syntheticIncluded.value = v;
     if (!mounted) return;
     setState(() => _includeSynthetic = v);
     await _rebuildTrends();
@@ -185,7 +185,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     setState(() => _rebuilding = true);
     try {
       final db = DatabaseHelper.instance;
-      final device = await db.getHealthStoreDeviceKey();
+      final device = await db.getHealthyStoreDeviceKey();
       if (device == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -258,16 +258,16 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
       _push('TX', 'SYNTH days=${opts.days} wipe=${opts.wipe}');
     });
 
-    HealthStoreClient? client;
+    HealthyStoreClient? client;
     try {
       if (!_cm.isConnected || _cm.deviceId != device.macAddress) {
         await _cm.connect(device.macAddress);
       }
-      client = HealthStoreClient(device.macAddress,
+      client = HealthyStoreClient(device.macAddress,
           requestTimeout: const Duration(seconds: 20));
       await client.connect();
-      if (!client.hasHealthStore) {
-        throw StateError('device did not answer HELLO — no Health Store');
+      if (!client.hasHealthyStore) {
+        throw StateError('device did not answer HELLO — no Healthy Store');
       }
 
       final rsp = await client.hs!.synth(days: opts.days, wipe: opts.wipe);
@@ -334,7 +334,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     ));
   }
 
-  /// The Health Store capability check: HELLO *is* the probe (design doc §6).
+  /// The Healthy Store capability check: HELLO *is* the probe (design doc §6).
   /// Read-only — it never acks, so it cannot drop device data.
   Future<void> _runProbe() async {
     final device = await DeviceManager.getPairedDevice();
@@ -348,7 +348,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     });
 
     final result =
-        await HealthStoreProbe.probe(device.macAddress, name: device.displayName);
+        await HealthyStoreProbe.probe(device.macAddress, name: device.displayName);
 
     if (!mounted) return;
     setState(() {
@@ -371,7 +371,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
         _push(
             'WARN',
             result.error ??
-                'no HPI_HS group — firmware predates the Health Store');
+                'no HPI_HS group — firmware predates the Healthy Store');
       }
     });
   }
@@ -641,9 +641,9 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                   p == null
                       ? 'Not probed yet'
                       : p.supported
-                          ? 'Health Store supported'
+                          ? 'Healthy Store supported'
                           : (p.reachable
-                              ? 'Health Store not available'
+                              ? 'Healthy Store not available'
                               : 'Could not reach the watch'),
                   style: HpiText.cardTitle.copyWith(
                     color: p == null
@@ -677,7 +677,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
           else if (!p.supported && !p.reachable)
             Text(
               'The probe got no answer — a timeout or a dropped link. This says '
-              'nothing about the firmware: do not read it as "no Health Store". '
+              'nothing about the firmware: do not read it as "no Healthy Store". '
               'Check the link and probe again.\n\n${p.error ?? ""}',
               style: HpiText.supporting.copyWith(color: HpiColors.temp),
             )
@@ -685,7 +685,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
             Text(
               p.error ??
                   'The device answered, and has no HPI_HS group. Its firmware '
-                      'predates the Health Store; the app will use the legacy '
+                      'predates the Healthy Store; the app will use the legacy '
                       'sync path.',
               style: HpiText.supporting.copyWith(color: HpiColors.error),
             )

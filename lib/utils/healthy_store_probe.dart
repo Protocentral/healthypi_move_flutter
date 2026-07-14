@@ -1,9 +1,9 @@
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 
 import 'connection_manager.dart';
-import 'health_store_client.dart';
+import 'healthy_store_client.dart';
 
-/// Result of a Health Store capability check.
+/// Result of a Healthy Store capability check.
 ///
 /// [supported] is the answer to "does this device speak HPI_HS?" — it is set by
 /// the `HELLO` handshake, which *is* the capability probe (design doc §6). No
@@ -30,11 +30,11 @@ class HsProbeResult {
   /// Whether we got an answer at all.
   ///
   /// `supported: false, reachable: true` is a **verdict**: the watch replied and
-  /// said it has no such group, so its firmware predates the Health Store.
+  /// said it has no such group, so its firmware predates the Healthy Store.
   ///
   /// `supported: false, reachable: false` is **not** a verdict: the probe timed
   /// out or the link dropped, and we learned nothing about the firmware.
-  /// Reporting that as "no Health Store" is how a flaky link gets mistaken for
+  /// Reporting that as "no Healthy Store" is how a flaky link gets mistaken for
   /// an old watch — the bug this field exists to prevent (roadmap phase 6).
   final bool reachable;
 
@@ -67,15 +67,15 @@ class HsProbeResult {
   bool get mtuOk => (maxWriteLength ?? 0) > 20;
 }
 
-/// Probes a paired device for Health Store support.
+/// Probes a paired device for Healthy Store support.
 ///
 /// Ownership: rides the [ConnectionManager] link (connecting it first if
-/// needed), and [HealthStoreClient] brackets the whole thing with
+/// needed), and [HealthyStoreClient] brackets the whole thing with
 /// `acquireSmp`/`releaseSmp`, so this can never interleave with a running sync,
 /// records pull, or DFU — it throws `SmpBusyException` instead.
 ///
 /// This is read-only. It never acks, so it cannot destroy device data.
-class HealthStoreProbe {
+class HealthyStoreProbe {
   /// Run the capability check against [deviceId].
   ///
   /// Returns `supported: false` (not a throw) when the device simply doesn't
@@ -84,17 +84,17 @@ class HealthStoreProbe {
   static Future<HsProbeResult> probe(String deviceId, {String? name}) async {
     final conn = ConnectionManager.instance;
 
-    // HealthStoreClient(manageConnection: false) rides the shared link, so it
+    // HealthyStoreClient(manageConnection: false) rides the shared link, so it
     // must be up and pointed at this device first.
     if (!conn.isConnected || conn.deviceId != deviceId) {
       await conn.connect(deviceId, name: name);
     }
 
-    final client = HealthStoreClient(deviceId, name: name);
+    final client = HealthyStoreClient(deviceId, name: name);
     try {
       await client.connect();
 
-      if (!client.hasHealthStore) {
+      if (!client.hasHealthyStore) {
         // We got here, so the device answered — it just refused HELLO. That is a
         // real answer: old firmware.
         return HsProbeResult(
@@ -102,7 +102,7 @@ class HealthStoreProbe {
           reachable: true,
           maxWriteLength: client.maxWriteLength,
           error: 'Device refused HELLO (rc=${client.helloRc}) — firmware '
-              'predates the Health Store.',
+              'predates the Healthy Store.',
         );
       }
 

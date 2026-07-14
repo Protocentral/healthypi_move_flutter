@@ -1,7 +1,7 @@
 import 'dart:collection';
 import 'dart:convert';
 
-import 'package:hpi_health_store/hpi_health_store.dart'
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart'
     show HsQuality, HsRecordHeader;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -141,16 +141,16 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_research_files_session ON research_files(session_timestamp)');
     await db.execute('CREATE INDEX idx_research_files_signal ON research_files(signal_type)');
 
-    await _createHealthStoreTables(db);
+    await _createHealthyStoreTables(db);
 
     print('DatabaseHelper: Tables created with indexes');
   }
 
-  /// Health Store (HPI_HS) raw sample store — the system of record once a Move
+  /// Healthy Store (HPI_HS) raw sample store — the system of record once a Move
   /// running HPI_HS firmware syncs. `health_trends` becomes a derived cache
   /// aggregated from `hs_samples`. Additive; see docs/HEALTH_STORE_SYNC_DESIGN.md
   /// §5 and docs/REDESIGN_PLAN.md. Shared by _createDB (fresh) and _onUpgrade.
-  Future<void> _createHealthStoreTables(Database db) async {
+  Future<void> _createHealthyStoreTables(Database db) async {
     // Raw samples — the source of truth. `seq` is device-monotonic and doubles
     // as the sync cursor and the dedup key. `value` is fixed-point; the real
     // value is value / hs_types.scale.
@@ -314,17 +314,17 @@ class DatabaseHelper {
     }
 
     if (oldVersion < 6) {
-      // v6: Health Store raw sample store + a derived median column on trends.
+      // v6: Healthy Store raw sample store + a derived median column on trends.
       // ADD COLUMN cannot use a non-constant default, so no default is given;
       // existing rows get NULL median (legacy sync never computed one).
       await db.execute('ALTER TABLE health_trends ADD COLUMN value_median INTEGER');
-      await _createHealthStoreTables(db);
+      await _createHealthyStoreTables(db);
     }
 
     if (oldVersion < 7) {
-      // v7: local index for HPI_HS RECORDS downloads. _createHealthStoreTables is
+      // v7: local index for HPI_HS RECORDS downloads. _createHealthyStoreTables is
       // IF NOT EXISTS-safe for the v6 tables already present on upgrade from 6.
-      await _createHealthStoreTables(db);
+      await _createHealthyStoreTables(db);
       print('DatabaseHelper: Upgraded to version 7 - hs_records index');
     }
 
@@ -1219,9 +1219,9 @@ class DatabaseHelper {
   }
 
   // ---------------------------------------------------------------------------
-  // Health Store (HPI_HS) raw sample store — see docs/HEALTH_STORE_SYNC_DESIGN.md
+  // Healthy Store (HPI_HS) raw sample store — see docs/HEALTH_STORE_SYNC_DESIGN.md
   // §5. `health_trends` remains a derived cache aggregated from `hs_samples`.
-  // These are the seams the (not-yet-wired) HealthStoreSyncManager writes to and
+  // These are the seams the (not-yet-wired) HealthyStoreSyncManager writes to and
   // HealthRepository reads from; safe to call today, they simply stay empty until
   // a Move running HPI_HS firmware syncs.
   // ---------------------------------------------------------------------------
@@ -1422,7 +1422,7 @@ class DatabaseHelper {
     });
   }
 
-  /// Re-key the Health Store tables from [oldKey] to [newKey].
+  /// Re-key the Healthy Store tables from [oldKey] to [newKey].
   ///
   /// Early builds keyed the raw store on `HELLO.dev`, which turned out to be a
   /// model string (`"healthypi-move"`) that is identical on every watch — two
@@ -1432,7 +1432,7 @@ class DatabaseHelper {
   /// Idempotent, and a no-op when nothing was ever stored under [oldKey].
   /// Conflicts are ignored rather than overwritten: if a row already exists
   /// under [newKey] for a seq, the already-correct row wins.
-  Future<void> rekeyHealthStoreDevice(String oldKey, String newKey) async {
+  Future<void> rekeyHealthyStoreDevice(String oldKey, String newKey) async {
     if (oldKey.isEmpty || newKey.isEmpty || oldKey == newKey) return;
     final db = await database;
     await db.transaction((txn) async {
@@ -1484,10 +1484,10 @@ class DatabaseHelper {
     return {for (final r in rows) r['type'] as int: r['n'] as int};
   }
 
-  /// The Health Store device key (HELLO.uid) we hold samples for, or null when
+  /// The Healthy Store device key (HELLO.uid) we hold samples for, or null when
   /// nothing has synced. Used by tools that need to act on "the" store without
   /// a live connection to ask HELLO.
-  Future<String?> getHealthStoreDeviceKey() async {
+  Future<String?> getHealthyStoreDeviceKey() async {
     final db = await database;
     final rows = await db.rawQuery(
         'SELECT device, COUNT(*) AS n FROM hs_samples '
@@ -1570,7 +1570,7 @@ class DatabaseHelper {
   /// The cached `SUMMARY` of the most recently synced device.
   ///
   /// Read-side callers (the dashboard) key off the platform BLE id, not the
-  /// HELLO `uid` that the Health Store tables are keyed on, and they have no way
+  /// HELLO `uid` that the Healthy Store tables are keyed on, and they have no way
   /// to resolve one to the other without a live connection. Since the app pairs
   /// one watch at a time, "the device we synced last" is that device.
   Future<Map<String, Object?>?> latestHsSummary() async {
@@ -1841,7 +1841,7 @@ class DatabaseHelper {
 
   /// Delete every health record the app holds, in one transaction.
   ///
-  /// Wipes the raw Health Store (`hs_samples` / `hs_types` / `hs_sync_state`),
+  /// Wipes the raw Healthy Store (`hs_samples` / `hs_types` / `hs_sync_state`),
   /// the derived `health_trends` cache, the legacy `synced_sessions` dedup, the
   /// research-recording index, and the sync metadata.
   ///

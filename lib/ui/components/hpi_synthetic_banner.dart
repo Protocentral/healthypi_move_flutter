@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../theme/hpi_colors.dart';
-import '../../utils/health_store_sync_manager.dart';
+import '../../utils/healthy_store_sync_manager.dart';
 
 /// A persistent strip shown across the whole app whenever the developer opt-in
 /// "Include synthetic data" is on.
@@ -28,7 +28,7 @@ class HpiSyntheticBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
-      valueListenable: HealthStoreSyncManager.instance.syntheticIncluded,
+      valueListenable: HealthyStoreSyncManager.instance.syntheticIncluded,
       builder: (context, on, _) {
         if (!on) return child;
         return Column(

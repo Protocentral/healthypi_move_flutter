@@ -13,14 +13,14 @@ import '../ui/charts/hpi_spark_bars.dart';
 import '../ui/charts/hpi_sparkline.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
-import '../utils/health_store_sync_manager.dart';
+import '../utils/healthy_store_sync_manager.dart';
 import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
 /// Redesigned Home (handoff 2a list + 1a grid, with the 4a tablet two-pane).
 /// Reads [HealthRepository] and renders honest zero-states for metrics with no
 /// producing code (stress, EDA) — see docs/REDESIGN_PLAN.md. Sync is delegated
-/// to [HealthStoreSyncManager], which falls back to the legacy path only on
+/// to [HealthyStoreSyncManager], which falls back to the legacy path only on
 /// pre-HPI_HS firmware.
 class ScrHome extends StatefulWidget {
   const ScrHome({super.key});
@@ -86,7 +86,7 @@ class _ScrHomeState extends State<ScrHome> {
       _syncProgress = 0;
       _syncMessage = '';
     });
-    _syncSub = HealthStoreSyncManager.instance.progressStream.listen((p) {
+    _syncSub = HealthyStoreSyncManager.instance.progressStream.listen((p) {
       if (mounted && p.metric == 'all') {
         setState(() {
           _syncProgress = p.progress;
@@ -95,7 +95,7 @@ class _ScrHomeState extends State<ScrHome> {
       }
     });
     try {
-      final result = await HealthStoreSyncManager.instance.syncData(
+      final result = await HealthyStoreSyncManager.instance.syncData(
         deviceMacAddress: device.macAddress,
         onProgress: (metric, progress) {},
         onStatus: (status) {},
@@ -609,7 +609,7 @@ class _ScrHomeState extends State<ScrHome> {
             // A big backlog can't drain in one pass, so the sync must always be
             // interruptible — everything already stored is kept.
             onTap: _syncing
-                ? () => HealthStoreSyncManager.instance.cancel()
+                ? () => HealthyStoreSyncManager.instance.cancel()
                 : _sync,
             child: Text(_syncing ? 'Stop' : 'Sync now',
                 style: HpiText.cardTitle

@@ -1,15 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'background_sync_manager.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
-import 'health_store_client.dart';
+import 'healthy_store_client.dart';
 
-/// Sync over the ProtoCentral **Health Store** (HPI_HS group 0x1000).
+/// Sync over the ProtoCentral **Healthy Store** (HPI_HS group 0x1000).
 ///
 /// This replaces the legacy dual-channel sync (custom `0x50`/`0x54` cmd/data
 /// packets + `FsMgmt` pulls of whole `/lfs/tr*` files). Firmware 2.1.x no longer
@@ -37,9 +37,9 @@ import 'health_store_client.dart';
 /// transaction and returns the highest seq it actually stored. We never ack
 /// `hello.head`, and we never use `syncAll()` (it buffers pages in memory, so
 /// its cursor is not durable).
-class HealthStoreSyncManager {
-  HealthStoreSyncManager._();
-  static final HealthStoreSyncManager instance = HealthStoreSyncManager._();
+class HealthyStoreSyncManager {
+  HealthyStoreSyncManager._();
+  static final HealthyStoreSyncManager instance = HealthyStoreSyncManager._();
 
   final _progressController = StreamController<SyncProgress>.broadcast();
   Stream<SyncProgress> get progressStream => _progressController.stream;
@@ -236,7 +236,7 @@ class HealthStoreSyncManager {
     Function(String message) onStatus,
   ) async {
     final conn = ConnectionManager.instance;
-    HealthStoreClient? client;
+    HealthyStoreClient? client;
 
     try {
       onStatus('Connecting…');
@@ -246,11 +246,11 @@ class HealthStoreSyncManager {
       }
 
       // Claims the SMP wire (acquireSmp), settles the MTU, probes HELLO.
-      client = HealthStoreClient(deviceMacAddress,
+      client = HealthyStoreClient(deviceMacAddress,
           requestTimeout: _syncTimeout);
       await client.connect();
 
-      if (!client.hasHealthStore) {
+      if (!client.hasHealthyStore) {
         // Older firmware: hand off to the legacy path. Release our SMP session
         // first — the legacy manager opens its own.
         await client.disconnect();
@@ -350,7 +350,7 @@ class HealthStoreSyncManager {
   /// whether it reached `head`; a mid-drain failure is reported, not thrown,
   /// because the cursor is already persisted and the caller can resume.
   Future<_SessionOutcome> _drain(
-    HealthStoreClient client,
+    HealthyStoreClient client,
     DateTime deadline,
     Function(String metric, double progress) onProgress,
     Function(String message) onStatus,
@@ -367,7 +367,7 @@ class HealthStoreSyncManager {
 
     // Re-key anything stored under the old model-string key (pre-uid builds).
     if (hello.uid.isNotEmpty && hello.dev.isNotEmpty && hello.dev != device) {
-      await db.rekeyHealthStoreDevice(hello.dev, device);
+      await db.rekeyHealthyStoreDevice(hello.dev, device);
     }
 
     onStatus('Reading registry…');

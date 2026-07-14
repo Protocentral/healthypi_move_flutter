@@ -1,4 +1,4 @@
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 
 /// One episodic raw-signal session from HPI_HS `RECORDS list`, plus local
 /// download state for the Recordings library UI.

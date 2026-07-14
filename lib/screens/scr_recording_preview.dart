@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -10,7 +10,7 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
-import '../utils/health_store_records_manager.dart';
+import '../utils/healthy_store_records_manager.dart';
 
 /// Recording preview + CSV export (handoff 2d) for HPI_HS **RECORDS** payloads.
 ///
@@ -61,7 +61,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   Future<void> _exportCsv() async {
     setState(() => _exporting = true);
     final device = await DeviceManager.getPairedDevice();
-    final m = HealthStoreRecordsManager(device?.macAddress ?? '');
+    final m = HealthyStoreRecordsManager(device?.macAddress ?? '');
     try {
       final file = await m.exportCsv(widget.recording, widget.payload);
       if (!mounted) return;

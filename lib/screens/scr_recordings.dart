@@ -9,7 +9,7 @@ import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
-import '../utils/health_store_records_manager.dart';
+import '../utils/healthy_store_records_manager.dart';
 import 'scr_recording_preview.dart';
 
 /// Recordings library (handoff 2c). Lists episodic sessions via HPI_HS
@@ -42,13 +42,13 @@ class _ScrRecordingsState extends State<ScrRecordings> {
   }
 
   Future<T?> _withManager<T>(
-      Future<T> Function(HealthStoreRecordsManager m) action) async {
+      Future<T> Function(HealthyStoreRecordsManager m) action) async {
     final device = await DeviceManager.getPairedDevice();
     if (device == null) {
       if (mounted) setState(() => _error = 'No device paired.');
       return null;
     }
-    final manager = HealthStoreRecordsManager(device.macAddress);
+    final manager = HealthyStoreRecordsManager(device.macAddress);
     try {
       return await action(manager);
     } on SmpBusyException catch (e) {

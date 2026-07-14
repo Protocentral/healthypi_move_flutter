@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'utils/trends_data_manager.dart';
-import 'utils/health_store_sync_manager.dart';
+import 'utils/healthy_store_sync_manager.dart';
 import 'utils/device_manager.dart';
 import 'utils/database_helper.dart';
 import 'package:move/screens/scr_device_mgmt.dart';
@@ -518,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Sync through HealthStoreSyncManager even on this legacy screen. It probes
+    // Sync through HealthyStoreSyncManager even on this legacy screen. It probes
     // HELLO and only falls back to BackgroundSyncManager on pre-HPI_HS
     // firmware; calling BackgroundSyncManager directly (as this used to) took
     // the legacy path unconditionally, skipping the SYNTHETIC filter and the
@@ -535,7 +535,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Listen to progress updates
-    _syncProgressSubscription = HealthStoreSyncManager.instance.progressStream.listen(
+    _syncProgressSubscription = HealthyStoreSyncManager.instance.progressStream.listen(
       (progress) {
         if (mounted && progress.metric == 'all') {
           setState(() {
@@ -547,7 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     // Start sync - pass only MAC address string
-    final result = await HealthStoreSyncManager.instance.syncData(
+    final result = await HealthyStoreSyncManager.instance.syncData(
       deviceMacAddress: deviceInfo.macAddress,
       onProgress: (metric, progress) {
         // Progress updates handled via stream

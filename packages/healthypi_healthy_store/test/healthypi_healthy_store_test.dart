@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:test/test.dart';
 
 /// Build one packed 18-byte SYNC record:

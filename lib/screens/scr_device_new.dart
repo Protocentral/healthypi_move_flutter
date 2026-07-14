@@ -9,7 +9,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
-import '../utils/health_store_sync_manager.dart';
+import '../utils/healthy_store_sync_manager.dart';
 import 'scr_dfu_new.dart';
 import 'scr_recordings.dart';
 import 'scr_settings_new.dart';
@@ -77,13 +77,13 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     final device = _device;
     if (device == null || _syncing) return;
     setState(() => _syncing = true);
-    _syncSub = HealthStoreSyncManager.instance.progressStream.listen((p) {
+    _syncSub = HealthyStoreSyncManager.instance.progressStream.listen((p) {
       if (mounted && p.metric == 'all') {
         setState(() => _syncStatus = p.message ?? '');
       }
     });
     try {
-      final result = await HealthStoreSyncManager.instance.syncData(
+      final result = await HealthyStoreSyncManager.instance.syncData(
         deviceMacAddress: device.macAddress,
         onProgress: (metric, progress) {},
         onStatus: (status) {},
@@ -306,7 +306,7 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
                   icon: _syncing ? Symbols.stop : Symbols.sync,
                   color: _syncing ? HpiColors.error : HpiColors.hr,
                   onPressed: _syncing
-                      ? () => HealthStoreSyncManager.instance.cancel()
+                      ? () => HealthyStoreSyncManager.instance.cancel()
                       : _sync,
                 ),
               ),

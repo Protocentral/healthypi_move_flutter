@@ -1,5 +1,5 @@
 import '../globals.dart';
-import 'package:hpi_health_store/hpi_health_store.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import '../utils/database_helper.dart';
 
 /// Whether a metric can be shown, and if not, why. Drives the redesign's
@@ -159,7 +159,7 @@ class HomeDashboard {
 /// The single read path the redesigned screens use. Composes the existing
 /// derived `health_trends` store (via [DatabaseHelper]) into typed view models,
 /// and is the one place that decides data availability. It reads only; the write
-/// side (`HealthStoreSyncManager`, which derives `health_trends` from the raw
+/// side (`HealthyStoreSyncManager`, which derives `health_trends` from the raw
 /// `hs_samples` store) is unchanged.
 class HealthRepository {
   HealthRepository({DatabaseHelper? db})
