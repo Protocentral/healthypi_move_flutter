@@ -11,6 +11,7 @@ import 'health_store_client.dart';
 class HsProbeResult {
   const HsProbeResult({
     required this.supported,
+    this.reachable = true,
     this.schema,
     this.group,
     this.dev,
@@ -25,6 +26,17 @@ class HsProbeResult {
 
   /// Device implements the HPI_HS group (HELLO answered).
   final bool supported;
+
+  /// Whether we got an answer at all.
+  ///
+  /// `supported: false, reachable: true` is a **verdict**: the watch replied and
+  /// said it has no such group, so its firmware predates the Health Store.
+  ///
+  /// `supported: false, reachable: false` is **not** a verdict: the probe timed
+  /// out or the link dropped, and we learned nothing about the firmware.
+  /// Reporting that as "no Health Store" is how a flaky link gets mistaken for
+  /// an old watch — the bug this field exists to prevent (roadmap phase 6).
+  final bool reachable;
 
   /// HELLO fields.
   final int? schema;
@@ -83,9 +95,14 @@ class HealthStoreProbe {
       await client.connect();
 
       if (!client.hasHealthStore) {
+        // We got here, so the device answered — it just refused HELLO. That is a
+        // real answer: old firmware.
         return HsProbeResult(
           supported: false,
+          reachable: true,
           maxWriteLength: client.maxWriteLength,
+          error: 'Device refused HELLO (rc=${client.helloRc}) — firmware '
+              'predates the Health Store.',
         );
       }
 
@@ -120,7 +137,9 @@ class HealthStoreProbe {
         maxWriteLength: client.maxWriteLength,
       );
     } catch (e) {
-      return HsProbeResult(supported: false, error: '$e');
+      // We never reached a verdict. Say so, rather than reporting "no Health
+      // Store" — a timeout is not evidence about the firmware.
+      return HsProbeResult(supported: false, reachable: false, error: '$e');
     } finally {
       // Always release the SMP wire, even on an early return or throw.
       await client.disconnect();

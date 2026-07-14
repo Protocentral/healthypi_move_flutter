@@ -458,10 +458,21 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
       stat('MAX WRITE', mtu?.toString() ?? '—',
           (mtu != null && mtu <= 20) ? HpiColors.error : HpiColors.onSurface),
       const SizedBox(width: 10),
-      stat('HPI_HS', _probe == null ? '—' : (_probe!.supported ? 'YES' : 'NO'),
+      // "NO" and "UNREACHABLE" are different answers: the first is a verdict on
+      // the firmware, the second means the probe never got a reply and says
+      // nothing about it at all.
+      stat(
+          'HPI_HS',
+          _probe == null
+              ? '—'
+              : _probe!.supported
+                  ? 'YES'
+                  : (_probe!.reachable ? 'NO' : 'UNREACH'),
           _probe == null
               ? HpiColors.onSurface
-              : (_probe!.supported ? HpiColors.steps : HpiColors.error)),
+              : _probe!.supported
+                  ? HpiColors.steps
+                  : (_probe!.reachable ? HpiColors.error : HpiColors.temp)),
       const SizedBox(width: 10),
       stat('STATE', _cm.state.name.toUpperCase(), HpiColors.spo2),
     ]);
@@ -631,11 +642,17 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                       ? 'Not probed yet'
                       : p.supported
                           ? 'Health Store supported'
-                          : 'Health Store not available',
+                          : (p.reachable
+                              ? 'Health Store not available'
+                              : 'Could not reach the watch'),
                   style: HpiText.cardTitle.copyWith(
                     color: p == null
                         ? HpiColors.onSurfaceVariant
-                        : (p.supported ? HpiColors.steps : HpiColors.error),
+                        : p.supported
+                            ? HpiColors.steps
+                            : (p.reachable
+                                ? HpiColors.error
+                                : HpiColors.temp),
                   ),
                 ),
               ),
@@ -657,11 +674,19 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
               'it never acks, so it cannot drop data.',
               style: HpiText.body.copyWith(fontSize: 11.5),
             )
+          else if (!p.supported && !p.reachable)
+            Text(
+              'The probe got no answer — a timeout or a dropped link. This says '
+              'nothing about the firmware: do not read it as "no Health Store". '
+              'Check the link and probe again.\n\n${p.error ?? ""}',
+              style: HpiText.supporting.copyWith(color: HpiColors.temp),
+            )
           else if (!p.supported)
             Text(
               p.error ??
-                  'The device did not answer HELLO. Its firmware predates the '
-                      'Health Store; the app will keep using the legacy sync path.',
+                  'The device answered, and has no HPI_HS group. Its firmware '
+                      'predates the Health Store; the app will use the legacy '
+                      'sync path.',
               style: HpiText.supporting.copyWith(color: HpiColors.error),
             )
           else ...[

@@ -77,6 +77,18 @@ class HealthStoreClient {
   /// True once a HELLO handshake succeeds (i.e. the device implements HPI_HS).
   bool get hasHealthStore => hs != null && hello != null;
 
+  /// The `rc` the device returned when it *refused* HELLO, or null.
+  ///
+  /// Non-null means the watch answered and said it has no such group — its
+  /// firmware predates the Health Store, and the right response is to prompt for
+  /// a firmware update. A **timeout** never sets this: an unanswered probe is
+  /// not a verdict, and is rethrown from [connect] instead. See [_probeHello].
+  int? helloRc;
+
+  /// The device answered, and said it does not implement HPI_HS. Distinct from
+  /// "we could not reach it", which is an exception, not a state.
+  bool get firmwarePredatesHealthStore => helloRc != null;
+
   int? get maxWriteLength => _transport?.maxWriteLength;
 
   /// Connect, bring up the SMP client + group facades, settle the MTU, and probe
@@ -153,13 +165,35 @@ class HealthStoreClient {
     }
   }
 
-  /// HELLO handshake; sets [hello]/[hasHealthStore] on success, else leaves the
-  /// Health Store unavailable (device firmware predates HPI_HS).
+  /// HELLO handshake — and the app's capability gate: a working HELLO *is* the
+  /// proof that the device implements HPI_HS (design doc §6).
+  ///
+  /// The two ways it can fail are **not** the same, and conflating them is what
+  /// this used to do:
+  ///
+  ///  - **The device answered, with an error `rc`** — there is no such group.
+  ///    Its firmware predates the Health Store. That is a verdict: disable the
+  ///    Health Store and let the caller take the legacy path.
+  ///  - **The request got no answer** (timeout, dropped link, framing failure).
+  ///    We learned *nothing* about the firmware. Rethrow, so the caller retries.
+  ///
+  /// Swallowing both identically meant one flaky moment was indistinguishable
+  /// from old firmware, and the app then fell back to the legacy sync path
+  /// forever — on a watch that supports HPI_HS perfectly well. (Roadmap phase 6.)
   Future<void> _probeHello() async {
     try {
       hello = await hs!.hello();
-    } catch (e) {
-      debugPrint('[HealthStore] HELLO failed (no HPI_HS group?): $e');
+      helloRc = null;
+    } on SmpException catch (e) {
+      if (e.rc == null) {
+        // No rc means no reply — a timeout or transport failure, not a verdict
+        // on the firmware. Do not let it disable the Health Store.
+        debugPrint('[HealthStore] HELLO did not complete: $e — will retry');
+        rethrow;
+      }
+      debugPrint('[HealthStore] HELLO refused (rc=${e.rc}): no HPI_HS group — '
+          'firmware predates the Health Store');
+      helloRc = e.rc;
       hs = null;
       hello = null;
     }
