@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/health_repository.dart';
+import '../globals.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
+import '../ui/charts/hpi_sparkline.dart';
 import '../ui/charts/hpi_trend_charts.dart';
 import '../ui/components/hpi_components.dart';
 
@@ -69,6 +71,11 @@ class TrendDetailView extends StatefulWidget {
 
 class _TrendDetailViewState extends State<TrendDetailView> {
   MetricDetail? _detail;
+
+  /// HRV rides along on the HR screen (handoff 3a) — it is a second metric, so
+  /// it needs its own load rather than being read off [_detail].
+  MetricDetail? _hrv;
+
   TrendRange _range = TrendRange.day;
   final _repo = HealthRepository();
 
@@ -92,7 +99,17 @@ class _TrendDetailViewState extends State<TrendDetailView> {
 
   Future<void> _load() async {
     final d = await _repo.loadMetricDetail(widget.metricKey);
-    if (mounted) setState(() => _detail = d);
+    // The HR screen also hosts the HRV card, and HRV is its own metric with its
+    // own trend rows — so it needs its own read.
+    final hrv = widget.metricKey == 'hr'
+        ? await _repo.loadMetricDetail(hPi4Global.PREFIX_HRV)
+        : null;
+    if (mounted) {
+      setState(() {
+        _detail = d;
+        _hrv = hrv;
+      });
+    }
   }
 
   String _fmt(double? v) {
@@ -289,7 +306,7 @@ class _TrendDetailViewState extends State<TrendDetailView> {
   List<Widget> _secondary(MetricDetail d, TrendMetricStyle style) {
     switch (widget.metricKey) {
       case 'hr':
-        return [_baselineDeviationCard(d, style), const SizedBox(height: 12), _hrvZeroState()];
+        return [_baselineDeviationCard(d, style), const SizedBox(height: 12), _hrvCard()];
       case 'temp':
         return [_baselineDeviationCard(d, style)];
       default:
@@ -324,28 +341,104 @@ class _TrendDetailViewState extends State<TrendDetailView> {
     );
   }
 
-  /// HRV needs beat-to-beat intervals the app can't yet produce — honest
-  /// zero-state instead of a fabricated Poincaré plot (handoff 3a).
-  Widget _hrvZeroState() {
+  /// HRV on the HR screen (handoff 3a).
+  ///
+  /// Real data since firmware P3: continuous RMSSD from gated wrist R-R
+  /// intervals, in 5-minute windows, whole ms. This used to be a hardcoded
+  /// zero-state that said "no producing code" — it kept saying that after the
+  /// producer arrived, which is why HRV synced but appeared nowhere.
+  ///
+  /// Falls back to the zero-state only when there genuinely is no HRV: a watch
+  /// on pre-P3 firmware, or one that has not synced any window yet.
+  Widget _hrvCard() {
+    final h = _hrv;
+    final supported = h != null &&
+        h.availability == MetricAvailability.available;
+
+    // "Supported but nothing today" is a real, common state — HRV only accrues
+    // from still, on-skin, high-confidence beats, so a restless day can produce
+    // none. Rendering the usual layout with "--" in every slot would look like a
+    // bug; say what actually happened instead.
+    final hasToday = supported && h.daily.isNotEmpty;
+
     return HpiCard(
       highlightColor: HpiMetricColors.tint(HpiColors.stress, 0.25),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            const Icon(Symbols.self_improvement, size: 18, color: HpiColors.stress),
+            const Icon(Symbols.ecg_heart, size: 18, color: HpiColors.stress),
             const SizedBox(width: 6),
             Text('HRV · TODAY', style: HpiText.sectionLabel),
             const Spacer(),
-            const HpiPill(label: 'NOT YET AVAILABLE', color: HpiColors.stress),
+            HpiPill(
+                label: hasToday
+                    ? 'RMSSD'
+                    : (supported ? 'NONE TODAY' : 'NOT YET AVAILABLE'),
+                color: HpiColors.stress),
           ]),
           const SizedBox(height: 12),
-          Text(
-            'HRV (RMSSD, SDNN, Poincaré) is derived from overnight beat-to-beat '
-            'intervals. It appears here once your watch firmware reports the '
-            'beat data — no estimate is shown in the meantime.',
-            style: HpiText.body.copyWith(fontSize: 12),
-          ),
+          if (!supported)
+            Text(
+              'HRV (RMSSD) is computed on the watch from gated beat-to-beat '
+              'intervals in 5-minute windows. It appears here once your watch '
+              'reports them — no estimate is shown in the meantime.',
+              style: HpiText.body.copyWith(fontSize: 12),
+            )
+          else if (!hasToday)
+            Text(
+              'No HRV windows today yet. A window only counts when the watch is '
+              'on-skin and still with confident beat detection, so an active day '
+              'can produce none.',
+              style: HpiText.body.copyWith(fontSize: 12),
+            )
+          else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(h.latest?.round().toString() ?? '--',
+                    style: HpiText.cardValue.copyWith(
+                        fontSize: 30, color: HpiColors.stress)),
+                const SizedBox(width: 3),
+                Text('ms', style: HpiText.mono.copyWith(fontSize: 11)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: SizedBox(
+                    height: 34,
+                    child: HpiSparkline(
+                      values: [for (final p in h.daily) p.avg],
+                      color: HpiColors.stress,
+                      strokeWidth: 1.8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Low RMSSD is the signal that matters (suppressed HRV), so min is
+            // as interesting as max here — show the range, not just an average.
+            Row(children: [
+              _hrvStat('MIN', h.min),
+              _hrvStat('AVG', h.avg),
+              _hrvStat('MAX', h.max),
+              _hrvStat('BASELINE', h.baseline),
+            ]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _hrvStat(String label, double? v) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: HpiText.sectionLabel.copyWith(fontSize: 8.5)),
+          const SizedBox(height: 2),
+          Text(v == null ? '--' : '${v.round()} ms',
+              style: HpiText.mono.copyWith(fontSize: 11.5)),
         ],
       ),
     );
