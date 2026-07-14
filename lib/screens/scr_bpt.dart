@@ -1,8 +1,10 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/trends_data_manager.dart';
 import 'package:move/screens/showTrendsAlert.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'scr_main_shell.dart';
 import '../utils/sizeConfig.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';

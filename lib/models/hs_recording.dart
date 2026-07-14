@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 
 /// One episodic raw-signal session from HPI_HS `RECORDS list`, plus local

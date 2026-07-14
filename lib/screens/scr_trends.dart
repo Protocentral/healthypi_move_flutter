@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/material.dart';
 import 'scr_hr.dart';
 import 'scr_spo2.dart';

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';

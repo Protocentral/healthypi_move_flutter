@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 // Generic CSV Data Manager class for HR, SpO2, Temp, Steps, etc.
 // This class is kept for backward compatibility with home.dart and scr_bpt.dart
 // New trend screens (scr_hr, scr_spo2, scr_activity, scr_skin_temp) use TrendsDataManager instead

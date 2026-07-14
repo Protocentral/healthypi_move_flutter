@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/widgets.dart';
 
 /// M3 window-size classes for the adaptive layout (docs/REDESIGN_PLAN.md).

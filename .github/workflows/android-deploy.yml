@@ -94,7 +94,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: 'com.protocentral.healthypi_move'
+          packageName: 'com.protocentral.move'
           releaseFiles: |
             bundle/release/*.aab
           track: internal

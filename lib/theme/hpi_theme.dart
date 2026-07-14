@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 // CupertinoPageTransitionsBuilder moved out of material.dart in Flutter 3.44;
 // importing it explicitly from cupertino.dart works on both old and new SDKs.
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;

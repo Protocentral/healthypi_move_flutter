@@ -1,9 +1,11 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../globals.dart';
-import '../utils/sizeConfig.dart';
 
 Widget displayValuesAlert() {
   return Row(

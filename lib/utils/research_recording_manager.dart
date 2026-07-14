@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -710,9 +713,6 @@ class ResearchRecordingManager {
 
     // Create ZIP
     final zipData = ZipEncoder().encode(archive);
-    if (zipData == null) {
-      throw Exception('Failed to create ZIP archive');
-    }
 
     final directory = await getApplicationDocumentsDirectory();
     final fileName = 'research_recording_${session.sessionTimestamp}.zip';

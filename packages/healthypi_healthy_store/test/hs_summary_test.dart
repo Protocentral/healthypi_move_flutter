@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:test/test.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/firmware_release.dart';

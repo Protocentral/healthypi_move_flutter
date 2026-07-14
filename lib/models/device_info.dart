@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 /// Device information model for paired HealthyPi Move devices
 /// Provides structured storage for device metadata, connection history,
 /// and hardware information.

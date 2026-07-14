@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:convert/convert.dart';
@@ -303,22 +306,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       default:
         return Colors.white70;
     }
-  }
-
-  void _startPreCalibration() {
-    setState(() {
-      _currentState = CalibrationState.preCalibration;
-      _currentPointIndex = 0;
-      _calibrationPoints.clear();
-    });
-  }
-
-  void _startCalibrationInput() {
-    setState(() {
-      _currentState = CalibrationState.readyForInput;
-      _systolicController.clear();
-      _diastolicController.clear();
-    });
   }
 
   void _completeCurrentPoint() {

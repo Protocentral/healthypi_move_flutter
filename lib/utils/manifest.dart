@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:json_annotation/json_annotation.dart';
 
 part 'manifest.g.dart';

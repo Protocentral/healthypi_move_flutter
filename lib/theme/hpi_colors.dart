@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/material.dart';
 
 /// The redesign's fixed color tokens. Dark is the only theme for v1.

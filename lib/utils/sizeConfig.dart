@@ -1,7 +1,9 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/cupertino.dart';
 
 class SizeConfig {
-  static late MediaQueryData _mediaQueryData;
   static late double screenWidth;
   static late double screenHeight;
   static late double blockSizeHorizontal;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 /// Represents a GitHub firmware release for HealthyPi Move
 class FirmwareRelease {
   final String version;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;

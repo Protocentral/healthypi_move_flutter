@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';

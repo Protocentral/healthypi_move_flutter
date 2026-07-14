@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
 import 'package:flutter/material.dart';
 
 /// A compact hourly bar chart — the Steps row/tile mini-chart. Rounded-cap
