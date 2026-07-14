@@ -276,19 +276,50 @@ class HpiHs {
     return rsp.payload;
   }
 
-  /// `RECORDS list` — list episodic raw-signal sessions from [since].
-  Future<List<HsRecordHeader>> recordsList({int since = 0}) async {
-    final rsp = _check(await client.send(
-      op: SmpOp.readReq,
-      group: group,
-      id: cmdRecords,
-      payload: {'op': 'list', 'since': since},
-    ));
-    final arr = (rsp.payload['recs'] as List?) ?? const [];
-    return arr
-        .whereType<Map>()
-        .map((e) => HsRecordHeader.fromMap(e.cast<Object?, Object?>()))
-        .toList();
+  /// `RECORDS list` — every episodic raw-signal session on the device.
+  ///
+  /// **Paged, and the cursor is an INDEX, not a record id.** The device serves
+  /// `HS_REC_LIST_PAGE` (6) headers per call and answers
+  /// `{next: from + n, total: <record count>, recs: [...]}`; loop `from := next`
+  /// until `next >= total`.
+  ///
+  /// This previously sent `{'op':'list','since':…}` and read a single page. The
+  /// firmware decodes `from`, not `since`, so the cursor was silently ignored —
+  /// and without the loop only the first 6 records were ever visible, no matter
+  /// how many the watch held.
+  ///
+  /// [from] is the index to start at; the default walks the whole list.
+  Future<List<HsRecordHeader>> recordsList({int from = 0}) async {
+    final out = <HsRecordHeader>[];
+    var cursor = from;
+
+    // The device bounds the page, so the loop is bounded too — but guard anyway
+    // rather than trust a device to terminate our loop for us.
+    for (var guard = 0; guard < 512; guard++) {
+      final rsp = _check(await client.send(
+        op: SmpOp.readReq,
+        group: group,
+        id: cmdRecords,
+        payload: {'op': 'list', 'from': cursor},
+      ));
+
+      final recs = (rsp.payload['recs'] as List?) ?? const [];
+      for (final e in recs.whereType<Map>()) {
+        out.add(HsRecordHeader.fromMap(e.cast<Object?, Object?>()));
+      }
+
+      final total = (rsp.payload['total'] as num?)?.toInt() ?? out.length;
+      final next = (rsp.payload['next'] as num?)?.toInt() ?? cursor;
+
+      // Terminate on an empty page or a cursor that didn't advance, before
+      // trusting `total` — a device that answers oddly must not spin us forever.
+      if (recs.isEmpty || next <= cursor) break;
+      cursor = next;
+      if (cursor >= total) break;
+    }
+
+    _logMsg('RECORDS list → ${out.length} header(s)');
+    return out;
   }
 
   /// `RECORDS get` — fetch a chunk of a record's raw payload.

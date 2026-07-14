@@ -81,9 +81,10 @@ class HealthStoreRecordsManager {
     final hs = _client!.hs!;
     final device = _client!.hello!.storeKey;
 
-    // Full inventory for the library UI. Incremental `since` is for background
-    // discovery; on-demand download needs every header still on the device.
-    final headers = await hs.recordsList(since: 0);
+    // Full inventory for the library UI — recordsList pages internally until the
+    // device's `total`, so this is every header still on the watch, not the
+    // first six.
+    final headers = await hs.recordsList();
     debugPrint('[HS-Records] list → ${headers.length} header(s)');
 
     // Advance the list cursor to the highest id we have *seen* (not necessarily
@@ -148,9 +149,11 @@ class HealthStoreRecordsManager {
     final hs = _client!.hs!;
     final device = _client!.hello!.storeKey;
 
-    // Chunk off the live ATT MTU (minus a little headroom for SMP/CBOR).
+    // Chunk off the live ATT MTU (minus a little headroom for SMP/CBOR), capped
+    // at the device's own per-chunk limit (HS_REC_GET_MAX = 512). Asking for
+    // more just wastes a round-trip's worth of expectation.
     final mtu = _client!.maxWriteLength ?? 512;
-    final chunk = (mtu - 32).clamp(64, 1024);
+    final chunk = (mtu - 32).clamp(64, 512);
 
     final dl = await hs.downloadRecord(
       header,

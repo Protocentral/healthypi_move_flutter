@@ -2,8 +2,16 @@ import 'dart:typed_data';
 
 /// Header of an episodic raw-signal **record** session (`RECORDS list`).
 ///
-/// The exact CBOR key names are not fully pinned in the public contract, so
-/// [fromMap] accepts several candidates per field and never throws.
+/// Key names are now **pinned against the firmware** (`hpi_hs_mgmt.c`, and
+/// `HPI_HS_API.md` §RECORDS): the device emits
+/// `{id, sig, fmt, ch, rate, ns, len, crc, flags, ts}`. [fromMap] still accepts
+/// the historical candidates first-match-wins and never throws, but the real key
+/// is listed first in each group.
+///
+/// The `ns` key used to be missing from the candidate list entirely, so every
+/// header parsed `nSamples = 0` — which made [HsRecordSamples.decode] infer
+/// bytes-per-sample from `len / (0 × ch)` and blow up. That is why this is
+/// pinned now rather than guessed.
 class HsRecordHeader {
   const HsRecordHeader({
     required this.id,
@@ -29,9 +37,25 @@ class HsRecordHeader {
   final int crc32;
   final int flags; // e.g. PARTIAL
 
-  /// PARTIAL flag (interrupted session — usable, not truncated). Bit 0 by
-  /// convention; adjust if the firmware differs.
-  bool get isPartial => (flags & 0x01) != 0;
+  // Record flag bits — `HPI_HS_REC_F_*` in the firmware's hpi_hs_types.h.
+  static const int flagComplete = 1 << 0; // session closed cleanly
+  static const int flagPartial = 1 << 1; // interrupted (reset/battery) — usable
+  static const int flagCompressed = 1 << 2; // payload is compressed
+
+  /// Session closed cleanly.
+  bool get isComplete => (flags & flagComplete) != 0;
+
+  /// Interrupted by a reset or a flat battery. **Usable, not truncated** — store
+  /// and mark it; don't discard.
+  ///
+  /// This used to test bit 0, which is `COMPLETE` — so it reported every clean
+  /// recording as partial and every partial one as clean, exactly backwards.
+  bool get isPartial => (flags & flagPartial) != 0;
+
+  /// The payload is compressed. Nothing here decompresses it, and decoding it as
+  /// raw samples would yield plausible-looking noise — so callers must check
+  /// this before trusting [HsRecordSamples.decode].
+  bool get isCompressed => (flags & flagCompressed) != 0;
 
   static int _i(Map m, List<String> keys) {
     for (final k in keys) {
@@ -41,14 +65,16 @@ class HsRecordHeader {
     return 0;
   }
 
+  /// The firmware's key is listed **first** in each group; the rest are legacy
+  /// candidates kept so an older device still parses.
   factory HsRecordHeader.fromMap(Map<Object?, Object?> m) => HsRecordHeader(
         id: _i(m, ['id']),
-        startTs: _i(m, ['start_ts', 'ts', 'start', 'start_utc']),
-        signal: _i(m, ['signal', 'sig', 'type']),
+        startTs: _i(m, ['ts', 'start_ts', 'start', 'start_utc']),
+        signal: _i(m, ['sig', 'signal', 'type']),
         sampleFormat: _i(m, ['fmt', 'sample_format', 'format']),
         channels: _i(m, ['ch', 'channels', 'nch']),
-        sampleRate: _i(m, ['sr', 'sample_rate', 'rate', 'fs']),
-        nSamples: _i(m, ['n', 'n_samples', 'nsamp', 'samples']),
+        sampleRate: _i(m, ['rate', 'sr', 'sample_rate', 'fs']),
+        nSamples: _i(m, ['ns', 'n', 'n_samples', 'nsamp', 'samples']),
         byteLen: _i(m, ['len', 'byte_len', 'bytes', 'size']),
         crc32: _i(m, ['crc', 'crc32']),
         flags: _i(m, ['flags', 'flag']),
@@ -77,10 +103,16 @@ String hsSignalName(int code) {
 
 /// Decoded raw-record samples, split per channel.
 ///
-/// The wire sample encoding isn't fully specified, so we **infer bytes-per-
-/// sample from the header** (`byteLen / (nSamples × channels)`) rather than
-/// trust the format code, and decode signed little-endian integers. [assumed]
-/// is true when we had to fall back to a default, so the UI can flag it.
+/// The encoding is **pinned** by the header's `fmt` (`enum hpi_hs_sfmt`):
+/// `0` int32-LE, `1` int16-LE, `2` **uint16**-LE (e.g. R-R intervals in ms).
+/// This used to ignore `fmt` and infer bytes-per-sample from
+/// `byteLen / (nSamples × channels)`, decoding everything as *signed* — which
+/// silently mis-sized an int32 record as int16 whenever the inference fell
+/// through to its default, and read unsigned R-R data as signed.
+///
+/// [assumed] stays, and is now only true when the device sends a `fmt` code we
+/// don't know — in which case we fall back to the old inference and the UI can
+/// flag the waveform as unverified rather than present it as fact.
 class HsRecordSamples {
   const HsRecordSamples({
     required this.channels,
@@ -96,17 +128,38 @@ class HsRecordSamples {
 
   int get sampleCount => data.isEmpty ? 0 : data.first.length;
 
+  // enum hpi_hs_sfmt (firmware hpi_hs_types.h).
+  static const int fmtI32 = 0;
+  static const int fmtI16 = 1;
+  static const int fmtU16 = 2;
+
   factory HsRecordSamples.decode(HsRecordHeader h, Uint8List payload) {
     final ch = h.effectiveChannels;
+
     int bps;
+    bool signed;
     bool assumed = false;
-    if (h.nSamples > 0 && ch > 0 && payload.isNotEmpty) {
-      final inferred = payload.length ~/ (h.nSamples * ch);
-      bps = (inferred == 1 || inferred == 2 || inferred == 4) ? inferred : 2;
-      if (inferred != bps) assumed = true;
-    } else {
-      bps = 2;
-      assumed = true;
+
+    switch (h.sampleFormat) {
+      case fmtI32:
+        bps = 4;
+        signed = true;
+      case fmtI16:
+        bps = 2;
+        signed = true;
+      case fmtU16:
+        // Unsigned on purpose: R-R intervals are milliseconds, never negative.
+        bps = 2;
+        signed = false;
+      default:
+        // Unknown format code — a firmware newer than this client. Fall back to
+        // the old inference and mark the result as not fully trustworthy.
+        signed = true;
+        assumed = true;
+        final inferred = (h.nSamples > 0 && ch > 0 && payload.isNotEmpty)
+            ? payload.length ~/ (h.nSamples * ch)
+            : 0;
+        bps = (inferred == 1 || inferred == 2 || inferred == 4) ? inferred : 2;
     }
 
     final bd = ByteData.sublistView(payload);
@@ -116,16 +169,20 @@ class HsRecordSamples {
       for (int c = 0; c < ch; c++) {
         final off = (i * ch + c) * bps;
         if (off + bps > payload.length) break;
-        double v;
+        final double v;
         switch (bps) {
           case 1:
-            v = bd.getInt8(off).toDouble();
-            break;
+            v = (signed ? bd.getInt8(off) : bd.getUint8(off)).toDouble();
           case 4:
-            v = bd.getInt32(off, Endian.little).toDouble();
-            break;
+            v = (signed
+                    ? bd.getInt32(off, Endian.little)
+                    : bd.getUint32(off, Endian.little))
+                .toDouble();
           default:
-            v = bd.getInt16(off, Endian.little).toDouble();
+            v = (signed
+                    ? bd.getInt16(off, Endian.little)
+                    : bd.getUint16(off, Endian.little))
+                .toDouble();
         }
         data[c].add(v);
       }
