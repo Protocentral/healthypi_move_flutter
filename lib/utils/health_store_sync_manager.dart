@@ -603,7 +603,7 @@ class HealthStoreSyncManager {
     // session, and never let a failure here fail the sync: the samples are the
     // system of record, this is a convenience read on top of them.
     try {
-      await db.setHsSummary(device, await hs.summary());
+      await db.setHsSummary(device, (await hs.summary()).raw);
     } catch (e) {
       debugPrint('[HS-Sync] SUMMARY refresh failed (non-fatal): $e');
     }

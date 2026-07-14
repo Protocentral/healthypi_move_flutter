@@ -5,6 +5,7 @@ import 'package:mcumgr_dart/mcumgr_dart.dart';
 import 'crc32.dart';
 import 'models/hs_record.dart';
 import 'models/hs_sample.dart';
+import 'models/hs_summary.dart';
 import 'models/hs_type.dart';
 
 /// Sink for diagnostics. Pure Dart by design — pass `print`, a `Logger`, or
@@ -266,14 +267,18 @@ class HpiHs {
     return all;
   }
 
-  /// `SUMMARY` — today card + baselines (resting HR, temp Δ, HRV, steps…).
-  Future<Map<String, Object?>> summary() async {
+  /// `SUMMARY` — today's card plus the device's own baselines (resting HR,
+  /// temp Δ, HRV, steps, and the P3 HRV-derived stress score).
+  ///
+  /// Returns the typed [HsSummary]; its [HsSummary.raw] is the response exactly
+  /// as sent, for callers that want to persist or dump it.
+  Future<HsSummary> summary() async {
     final rsp = _check(await client.send(
       op: SmpOp.readReq,
       group: group,
       id: cmdSummary,
     ));
-    return rsp.payload;
+    return HsSummary(rsp.payload);
   }
 
   /// `RECORDS list` — every episodic raw-signal session on the device.

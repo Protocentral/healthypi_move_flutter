@@ -1,5 +1,5 @@
 import '../globals.dart';
-import '../models/hs_summary.dart';
+import 'package:hpi_health_store/hpi_health_store.dart';
 import '../utils/database_helper.dart';
 
 /// Whether a metric can be shown, and if not, why. Drives the redesign's

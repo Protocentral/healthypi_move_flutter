@@ -44,4 +44,5 @@ export 'src/crc32.dart';
 export 'src/hpi_hs.dart';
 export 'src/models/hs_record.dart';
 export 'src/models/hs_sample.dart';
+export 'src/models/hs_summary.dart';
 export 'src/models/hs_type.dart';

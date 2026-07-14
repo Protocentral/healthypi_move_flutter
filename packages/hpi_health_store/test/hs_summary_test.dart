@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:move/models/hs_summary.dart';
+import 'package:test/test.dart';
+import 'package:hpi_health_store/hpi_health_store.dart';
 
 /// Firmware P3 (continuous HRV + HRV-derived stress), handoff §6.
 ///

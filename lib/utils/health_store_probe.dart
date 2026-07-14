@@ -121,7 +121,7 @@ class HealthStoreProbe {
         // a valid capability answer.
       }
       try {
-        summary = await hs.summary();
+        summary = (await hs.summary()).raw;
       } catch (_) {}
 
       return HsProbeResult(
