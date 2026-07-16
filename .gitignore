@@ -56,7 +56,6 @@ keystore.base64
 /healthypi_trends.db
 x
 /temp_docs
-CLAUDE.md
 # Design handoff zip is redundant with the extracted docs/design_handoff_* dir.
 docs/*.zip
 
