@@ -215,10 +215,13 @@ stack.
 
 Verified pre-existing; do not attribute them to recent work.
 
-- **`flutter test` fails.** `test/widget_test.dart` pumps `HealthyPiApp` and
-  `home.dart:297` overflows its `Column` at the 800×600 test viewport. A layout
-  assert, not a logic failure. Confirmed identical at base commit `ff105d3` via a
-  scratch worktree. `test/smp_lock_test.dart` passes.
+- **`flutter test` fails.** `test/widget_test.dart` pumps `HealthyPiApp`; its `/`
+  route is `ScrMainShell`, whose `ScrHome.initState` calls
+  `HealthRepository.loadHome`, which throws a `StateError` with no DB in the test
+  env. An environment/wiring failure, not a logic failure. (Before the legacy
+  screens were deleted this surfaced as a `home.dart` layout overflow instead.)
+  `test/smp_lock_test.dart`, `synthetic_banner_test.dart` and
+  `bpt_calibrator_test.dart` pass.
 - **`flutter analyze`: 445 issues, 0 errors.** All pre-existing lint
   (`avoid_print`, `withOpacity` deprecation). Use the count as a regression
   tripwire: it should not increase.
@@ -233,3 +236,24 @@ Verified pre-existing; do not attribute them to recent work.
   connection timeout and an unsupported-group `rc` both silently disable the
   Health Store, so a flaky link is indistinguishable from old firmware and the app
   quietly falls back to the legacy path forever. See Roadmap phase 6.
+  *(Resolved — timeout vs refusal now distinguished; kept here for history.)*
+
+## 13. BPT calibration: extracted behind a transport seam; HPI_HS move deferred
+
+The BPT finger-cuff calibration logic (custom CMD GATT: set-mode `0x60`,
+start-point `0x61`+`[sys,dia,index]`, end `0x62`, plus streamed `[status,
+progress]` feedback) is now a transport-agnostic `BptCalibrator`
+(`lib/ble/bpt_calibrator.dart`) behind a `BptCalTransport` interface, unit-tested
+with a fake transport. This is the first `healthypi_move` SDK brick (Roadmap
+Phase 8) and stays app-side only until the SDK package lands.
+
+**Why not move the commands into the HPI_HS MCUmgr group (0x1000) now**, for
+consistency with sync/records/summary: BPT is two things on the wire — *control*
+(the three opcodes, request/response, a clean SMP fit) and *feedback* (continuous
+contact-quality + progress, a server push). **SMP/mcumgr has no server push**, so
+even a full move leaves the feedback on a notify characteristic or forces the app
+to poll a status read during a point. So the move is a *later, firmware-coordinated*
+change (new cmd ids + handlers in `hpi_hs_mgmt.c`, capability-gating old firmware),
+and possibly belongs in a sibling `0x1001` device-control group rather than
+overloading the health *store*. The transport seam means that move is an adapter
+swap, not a rewrite of the screen or the state machine.

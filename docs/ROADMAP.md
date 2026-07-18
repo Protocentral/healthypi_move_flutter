@@ -149,8 +149,16 @@ Ready to start; no work done yet.
       (`scr_live_stream.dart` decodes inline in `setState`). Needs hardware
       validation: sample rates and scaling for the live characteristics are written
       down nowhere.
-- [ ] Extract the BPT calibration state machine (`0x60`–`0x62`), currently inline
-      in `scr_bpt_calibration.dart`.
+- [x] Extract the BPT calibration state machine (`0x60`–`0x62`) into
+      `lib/ble/bpt_calibrator.dart` — a transport-agnostic `ChangeNotifier`
+      (`foundation`-only, SDK-ready) behind a `BptCalTransport` seam. The screen
+      is now just its view; a `_ConnCmdBptTransport` adapter binds the custom CMD
+      GATT service. Unit-tested (`test/bpt_calibrator_test.dart`, 8 tests) with a
+      fake transport — impossible while the logic was welded into the widget.
+      **Open, firmware-coordinated:** moving the *control* commands into the HPI_HS
+      MCUmgr group (0x1000) for consistency is a later adapter swap — SMP has no
+      server push, so the continuous contact/progress feedback would stay on a
+      notify characteristic (or be polled) regardless. See DECISIONS (BPT/HPI_HS).
 - [ ] Wrap `ImgMgmt` + manifest into a `FirmwareUpdater`; the DFU protocol core is
       already outside the widget.
 - [ ] Ships as a Flutter package (`universal_ble` forces it) — one package, no

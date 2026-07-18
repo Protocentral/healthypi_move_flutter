@@ -3,10 +3,10 @@
 
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:convert/convert.dart';
 import 'package:flutter/material.dart';
 import 'package:move/utils/connection_manager.dart';
 
+import '../ble/bpt_calibrator.dart';
 import '../globals.dart';
 import 'scr_main_shell.dart';
 import '../utils/sizeConfig.dart';
@@ -16,29 +16,9 @@ import 'scr_device_scan.dart';
 import '../theme/hpi_legacy_theme.dart';
 import '../widgets/loading_indicator.dart';
 
-enum CalibrationState {
-  preCalibration,
-  readyForInput,
-  calibrating,
-  pointComplete,
-  allComplete
-}
-
-class CalibrationPoint {
-  final int pointNumber;
-  final int systolic;
-  final int diastolic;
-  final bool isComplete;        
-  final DateTime? timestamp;
-
-  CalibrationPoint({
-    required this.pointNumber,
-    required this.systolic,
-    required this.diastolic,
-    this.isComplete = false,
-    this.timestamp,
-  });
-}
+// CalibrationState + CalibrationPoint + the BptCalibrator state machine live in
+// ../ble/bpt_calibrator.dart (SDK-bound, transport-agnostic). This screen is now
+// just its view + input.
 
 class ScrBPTCalibration extends StatefulWidget {
   const ScrBPTCalibration({super.key});
@@ -54,28 +34,23 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   final ConnectionManager _conn = ConnectionManager.instance;
 
-  StreamSubscription<Uint8List>? _streamDataSubscription;
-
-  bool startListeningFlag = false;
+  /// The transport-agnostic BPT state machine. Bound to the custom CMD GATT
+  /// service today via [_ConnCmdBptTransport]; a future HPI_HS/SMP binding is an
+  /// adapter swap here, with no change to this screen or the calibrator.
+  late final BptCalibrator _cal;
 
   bool _isInitializing = true;
   String _statusMessage = "Connecting to device...";
-  
-  // New state management
-  CalibrationState _currentState = CalibrationState.preCalibration;
-  int _currentPointIndex = 0;
-  List<CalibrationPoint> _calibrationPoints = [];
-  int _progress = 0;
-  int _statusCode = 0;
-  String _statusString = "";
 
-  /// True once the finger PPG reports a good contact signal (status 1).
-  /// Used to guide the user before they start a calibration point.
-  bool _fingerSignalGood = false;
-
-  /// Last calibration point failed (status 6) — offer retry without losing
-  /// earlier completed points.
-  bool _pointFailed = false;
+  // --- calibrator state, surfaced as shims so the view code reads unchanged ---
+  CalibrationState get _currentState => _cal.phase;
+  int get _currentPointIndex => _cal.currentPointIndex;
+  List<CalibrationPoint> get _calibrationPoints => _cal.points;
+  int get _progress => _cal.progress;
+  int get _statusCode => _cal.statusCode;
+  String get _statusString => _cal.statusMessage;
+  bool get _fingerSignalGood => _cal.fingerSignalGood;
+  bool get _pointFailed => _cal.pointFailed;
 
   Future<void> _initializeConnection() async {
     try {
@@ -120,12 +95,9 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       // cuff readings. Waiting until "Begin" to listen is too late — by then
       // a bad finger placement just burns a calibration attempt.
       if (mounted) {
-        setState(() {
-          _isInitializing = false;
-          _currentState = CalibrationState.preCalibration;
-        });
-        await sendSetCalibrationCommand();
-        await _startListeningData();
+        setState(() => _isInitializing = false);
+        // Enter calibration mode and begin listening (0x60 + status subscribe).
+        await _cal.enterCalibrationMode();
       }
     } catch (e) {
       if (mounted) {
@@ -186,16 +158,27 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   @override
   void initState() {
     super.initState();
+    _cal = BptCalibrator(
+      _ConnCmdBptTransport(_conn),
+      log: logConsole,
+    )..addListener(_onCalChanged);
     _initializeConnection();
+  }
+
+  /// Rebuild whenever the calibrator's state changes (status packets, phase
+  /// transitions). All BPT state now lives in [_cal].
+  void _onCalChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
-    _streamDataSubscription?.cancel();
+    _cal.removeListener(_onCalChanged);
+    _cal.dispose(); // cancels the status subscription
     _systolicController.dispose();
     _diastolicController.dispose();
     // Leave the BLE link up — ConnectionManager owns it and Home/Device may
-    // still need it. Only drop the CMD_DATA subscription (done above).
+    // still need it.
     super.dispose();
   }
 
@@ -206,15 +189,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   void setStateIfMounted(f) {
     if (mounted) setState(f);
-  }
-
-
-
-  Future<void> sendSetCalibrationCommand() async {
-    List<int> commandPacket = [];
-    commandPacket.addAll(hPi4Global.SetBPTCalMode);
-    await _sendCommand(commandPacket);
-    logConsole(commandPacket.toString());
   }
 
   void showSuccessDialog(
@@ -272,34 +246,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     );
   }
 
-  int progress = 0;
-  int status = 0;
-  String statusString = "";
-
-  String _getStatusMessage(int statusCode) {
-    switch (statusCode) {
-      case 0:
-        return "No PPG signal — seat the finger sensor firmly";
-      case 1:
-        return "Good finger signal — ready to calibrate";
-      case 2:
-        return "Calibration point complete";
-      case 4:
-        return "Too much motion — rest your hand and stay still";
-      case 6:
-        return "Calibration failed — check finger contact and retry";
-      case 3:
-      case 16:
-      case 19:
-        return "Weak PPG — try a warmer finger, firmer contact, less pressure";
-      case 23:
-      case 24:
-        return "No finger contact — slide the sensor fully onto the fingertip";
-      default:
-        return statusCode == 0 ? "" : "Sensor status $statusCode";
-    }
-  }
-
   Color _getStatusColor(int statusCode) {
     switch (statusCode) {
       case 0:
@@ -320,119 +266,24 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
     }
   }
 
-  void _completeCurrentPoint() {
-    setState(() {
-      _calibrationPoints.add(CalibrationPoint(
-        pointNumber: _currentPointIndex + 1,
-        systolic: int.parse(_systolicController.text),
-        diastolic: int.parse(_diastolicController.text),
-        isComplete: true,
-        timestamp: DateTime.now(),
-      ));
-      
-      if (_calibrationPoints.length >= 3) {
-        _currentState = CalibrationState.allComplete;
-      } else {
-        _currentState = CalibrationState.pointComplete;
-      }
-    });
-  }
-
-  Future<void> _startListeningData() async {
-    if (startListeningFlag && _streamDataSubscription != null) {
-      // Already subscribed — keep the live finger-signal feed.
-      return;
-    }
-    logConsole("Started listening for BPT / finger PPG…");
-    startListeningFlag = true;
-    await _streamDataSubscription?.cancel();
-    _streamDataSubscription = _conn
-        .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
-        .listen((value) async {
-      if (value.isEmpty) return;
-      final bdata = Uint8List.fromList(value).buffer.asByteData();
-      if (bdata.lengthInBytes < 2) return;
-
-      final code = bdata.getUint8(0);
-      final progress = bdata.getUint8(1);
-      logConsole("BPT status=$code progress=$progress hex=${hex.encode(value)}");
-
-      if (!mounted) return;
-      setState(() {
-        _statusCode = code;
-        _progress = progress;
-        _statusString = _getStatusMessage(code);
-        // Status 1 = good contact; once seen, keep the "ready" flag until we
-        // lose contact (0/23/24) so a brief blip doesn't thrash the UI.
-        if (code == 1 || code == 2) {
-          _fingerSignalGood = true;
-        } else if (code == 0 || code == 23 || code == 24) {
-          _fingerSignalGood = false;
-        }
-        if (code == 6) {
-          _pointFailed = true;
-        }
-      });
-
-      if (code == 2 && _currentState == CalibrationState.calibrating) {
-        _pointFailed = false;
-        _completeCurrentPoint();
-      }
-    }, onError: (Object e) {
-      logConsole("BPT data stream error: $e");
-    });
-  }
-
+  /// Start the current point. Reads the cuff numbers, hands them to the
+  /// calibrator (which sends `0x61` + `[sys, dia, index]` and moves to
+  /// calibrating), and closes the loading dialog.
   Future<void> sendStartCalibration(BuildContext context) async {
-    logConsole("Send start calibration command initiated");
-    // Keep the existing subscription — re-subscribing mid-session drops the
-    // first few status packets and makes the finger sensor look dead.
-    await _startListeningData();
-
     final sys = int.tryParse(_systolicController.text.trim()) ?? 0;
     final dia = int.tryParse(_diastolicController.text.trim()) ?? 0;
-
-    final commandPacket = <int>[
-      ...hPi4Global.StartBPTCal,
-      sys & 0xFF,
-      dia & 0xFF,
-      _currentPointIndex & 0xFF,
-    ];
-
-    setState(() {
-      _currentState = CalibrationState.calibrating;
-      _progress = 0;
-      _pointFailed = false;
-      _statusString = _fingerSignalGood
-          ? 'Hold still — measuring finger PPG…'
-          : 'Seat the finger sensor, then hold still…';
-    });
 
     // Close the loading dialog if one is open.
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
 
-    await _sendCommand(commandPacket);
-    logConsole(commandPacket.toString());
+    await _cal.startPoint(systolic: sys, diastolic: dia);
   }
 
-  Future<void> _retryCurrentPoint() async {
-    setState(() {
-      _pointFailed = false;
-      _progress = 0;
-      _statusString = '';
-      _currentState = CalibrationState.readyForInput;
-    });
-  }
+  void _retryCurrentPoint() => _cal.retryPoint();
 
-  Future<void> sendEndCalibration(BuildContext context) async {
-    logConsole("Send end calibration command initiated");
-    List<int> commandPacket = [];
-    commandPacket.addAll(hPi4Global.EndBPTCal);
-    await _sendCommand(commandPacket);
-    logConsole(commandPacket.toString());
-  }
+  Future<void> sendEndCalibration(BuildContext context) => _cal.endCalibration();
 
   void showLoadingIndicator(String text, BuildContext context) {
     showDialog(
@@ -451,21 +302,6 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         );
       },
     );
-  }
-
-  Future<void> _sendCommand(List<int> commandList) async {
-    try {
-      if (!_conn.isConnected) {
-        logConsole("Device disconnected, skipping command");
-        return;
-      }
-      logConsole("Tx CMD $commandList 0x${hex.encode(commandList)}");
-      await _conn.write(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD,
-          Uint8List.fromList(commandList));
-    } catch (e) {
-      logConsole("Error sending command: $e");
-      // Silently handle error if device is disconnected
-    }
   }
 
   Future onDisconnectPressed() async {
@@ -589,11 +425,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _currentState = CalibrationState.readyForInput;
-                        });
-                      },
+                      onPressed: () => _cal.beginInput(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
@@ -1238,12 +1070,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _currentPointIndex++;
-                          _currentState = CalibrationState.readyForInput;
-                        });
-                      },
+                      onPressed: () => _cal.advanceToNextPoint(),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: HpiLegacyTheme.hpi4Color,
                         foregroundColor: Colors.white,
@@ -1462,4 +1289,26 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 }
 
+/// Binds [BptCalTransport] to today's transport: the custom CMD GATT service via
+/// [ConnectionManager]. This thin adapter is the *only* app-specific glue — when
+/// the calibrator moves into the `healthypi_move` SDK, the machine and interface
+/// go with it and this stays behind (or is replaced by an HPI_HS/SMP binding).
+class _ConnCmdBptTransport implements BptCalTransport {
+  _ConnCmdBptTransport(this._conn);
+
+  final ConnectionManager _conn;
+
+  @override
+  Stream<Uint8List> get statusStream => _conn.subscribe(
+      hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA);
+
+  @override
+  Future<void> sendCommand(List<int> bytes) => _conn.write(
+      hPi4Global.UUID_SERVICE_CMD,
+      hPi4Global.UUID_CHAR_CMD,
+      Uint8List.fromList(bytes));
+
+  @override
+  bool get isConnected => _conn.isConnected;
+}
 
