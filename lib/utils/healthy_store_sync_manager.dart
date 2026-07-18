@@ -233,7 +233,7 @@ class HealthyStoreSyncManager {
   static const Duration _syncTimeout = Duration(seconds: 25);
 
   /// Hard wall-clock budget for one "Sync now". The device's catch-up scan is
-  /// O(since) per page (see docs/HS_SYNC_FIRMWARE_BUG.md issue 2), so a large
+  /// O(since) per page (a firmware-side segment scan), so a large
   /// backlog cannot be drained in one go — without a budget the sync would run
   /// for many minutes and read as a hang. We stop, report what we stored, and
   /// resume from the persisted cursor on the next tap.

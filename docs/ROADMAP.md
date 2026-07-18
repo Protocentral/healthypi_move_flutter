@@ -1,9 +1,8 @@
 # Roadmap
 
-Sequenced work for the redesign. Rationale for each choice lives in
-[DECISIONS.md](DECISIONS.md); the protocol design lives in
-[HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md); the current
-resume-state in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
+Sequenced work for the redesign, with per-item status — **this is the resume
+doc**. Rationale for each choice lives in [DECISIONS.md](DECISIONS.md); the
+protocol design in [HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md).
 
 **Status (2026-07-18):** Phases 0–6 are **done and hardware-validated** — the
 Healthy Store sync, RECORDS, SUMMARY/trend derivation and the legacy-path
