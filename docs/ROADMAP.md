@@ -124,18 +124,28 @@ regression.
       (`rc` → prompt to update) from "transport failed" (timeout → retry). A flaky
       link no longer looks permanently like old firmware (commit `1f3d930`).
 
-## Phase 7 — Publish `healthypi_healthy_store` ⏳ not started (gate lifted)
+## Phase 7 — Publish `healthypi_healthy_store` ⏳ in progress (spun off, private)
 
-Was gated on Phases 2 and 4 — **now satisfied** (wire shapes validated against
-hardware). Ready to start; no work done yet.
+Hardware gate satisfied (Phases 2 + 4). The package now lives in its own repo;
+the remaining steps are held pending review and the repo going public.
 
-- [ ] `git subtree split --prefix=packages/healthypi_healthy_store` into
-      `Protocentral/healthypi_healthy_store`.
-- [ ] Swap the app's `path:` dep for a `git:` dep; migrate OpenView 3 off its six
-      duplicate copies to the same dep (one-line pubspec change + delete copies).
-- [ ] Publish `0.1.0` under the `protocentral.com` verified publisher.
+- [x] `git subtree split --prefix=packages/healthypi_healthy_store` into
+      **`Protocentral/healthypi_healthy_store`** — created **private**, default
+      branch `main`, real 4-commit history preserved. CHANGELOG updated for
+      `SYNTH` + `SET_TZ` before the split. The in-tree `packages/` copy is kept as
+      the working source (sync forward with another `subtree split`).
+- [ ] **Deferred — keep the app on the `path:` dep for now.** The `path:` → `git:`
+      swap is blocked while the repo is private: the deploy workflows
+      (`android-deploy.yml` / `ios-deploy.yml`, triggered on tag push) do a plain
+      `checkout` + `flutter pub get` with no cross-repo token, so a private `git:`
+      dep would fail `pub get` at release time. Do the swap once the repo is
+      **public** (post-review), or add a CI deploy token if it must stay private.
+- [ ] Migrate OpenView 3 off its six duplicate copies to the same dep (separate
+      repo, not in this workspace).
+- [ ] Publish `0.1.0` under the `protocentral.com` verified publisher (needs the
+      repo public + pub.dev verified-publisher login).
 - [ ] Fix OpenView's `hs.ack(head)` call (`device_manager_screen.dart:1273`) to
-      use `ackDurablyStored` with a persisted cursor.
+      use `ackDurablyStored` with a persisted cursor (separate repo).
 
 ## Phase 8 — `healthypi_move` SDK ⏳ not started
 
