@@ -57,6 +57,13 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   }
 
   void _open(String key) {
+    // Stress & EDA share a dedicated screen that shows the SUMMARY score,
+    // continuous series, and manual spot checks together.
+    if (key == 'stress' || key == 'eda') {
+      Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ScrStressEda()));
+      return;
+    }
     if (Breakpoints.isExpanded(context)) {
       setState(() => _selected = key);
     } else {
@@ -130,14 +137,13 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
                 ? 'from HRV · continuous'
                 : 'spot check on watch'),
         dim: true,
-        onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ScrStressEda())),
+        onTap: () => _open(key),
         trailing: Text('—',
             style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
       );
     }
 
-    final selected = expanded && _selected == key;
+    final selected = expanded && _selected == key && key != 'stress' && key != 'eda';
     return Container(
       color: selected ? HpiMetricColors.tint(HpiColors.hr, 0.08) : null,
       child: HpiListRow(

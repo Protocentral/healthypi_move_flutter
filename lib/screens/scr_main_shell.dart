@@ -22,12 +22,9 @@ class ScrMainShell extends StatefulWidget {
   /// Return to the app root from a terminal point in a pushed flow (DFU done,
   /// BPT calibration finished, device unpaired, back out of streaming).
   ///
-  /// Every such site used to `pushReplacement` a fresh legacy `HomePage`, which
-  /// syncs through `BackgroundSyncManager` — the pre-HPI_HS path, with no
-  /// SYNTHETIC filter and no `hr_max`. Finishing any of those flows therefore
-  /// stranded the user on the old data path for the rest of the session. Route
-  /// every "go home" through here so there is one way back and it lands on the
-  /// redesigned shell.
+  /// Every such site used to `pushReplacement` a fresh legacy `HomePage`.
+  /// Route every "go home" through here so there is one way back and it lands
+  /// on the redesigned shell (Healthy Store sync, not the retired custom path).
   static void returnToRoot(BuildContext context) {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const ScrMainShell()),

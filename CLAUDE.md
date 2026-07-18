@@ -82,7 +82,7 @@ There is **one physical BLE link** but two logical modes, and they must never ov
 
 ### Migration state (in flux)
 
-**The Healthy Store path is now live.** `HealthyStoreSyncManager` drives cursor-based `SYNC` into `hs_samples`, derives `health_trends`, fetches/caches `SUMMARY`, and `HealthyStoreRecordsManager` does `RECORDS` list/download/CRC/ack — all on the redesigned screens, selected by the `HELLO` capability probe. The legacy `background_sync_manager.dart` (custom `0x50`/`0x54` packets + `/lfs/tr*` `FsMgmt` pulls) remains **only as the pre-HPI_HS fallback** and for rollback; Phase 5 deletes it. The `hs_*` tables exist (schema v7). **What is NOT done: none of this is validated on real hardware yet** — see SESSION_HANDOFF.
+**The Healthy Store path is the only sync path.** `HealthyStoreSyncManager` drives cursor-based `SYNC` into `hs_samples`, derives `health_trends`, fetches/caches `SUMMARY`, and `HealthyStoreRecordsManager` does `RECORDS` list/download/CRC/ack. The legacy custom `0x50`/`0x54` + `/lfs/tr*` path (`background_sync_manager.dart`) has been **removed**. Device RTC is stamped via `DeviceTimeService` on every sync connect. The `hs_*` tables exist (schema v7). **What is NOT done: full device validation on a production fleet** — see SESSION_HANDOFF.
 
 **When migrating a flow, migrate the whole flow at once.** A screen that *uses* a connection cannot be migrated while the screen that *establishes* it is on a different plugin — each plugin holds its own OS-level connection, so the migrated screen sees no link at runtime. The flows are: scan/pair, streaming, sync, DFU, records.
 

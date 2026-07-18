@@ -4,7 +4,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart' show SmpException;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../globals.dart';
 import '../theme/hpi_colors.dart';
@@ -15,7 +14,6 @@ import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_client.dart';
 import '../utils/healthy_store_probe.dart';
-import '../utils/healthy_store_sync_manager.dart';
 
 /// The single developer surface. Everything behind the developer-mode toggle
 /// lives here — nothing developer-facing is left scattered through Settings.
@@ -26,7 +24,7 @@ import '../utils/healthy_store_sync_manager.dart';
 ///
 /// Sections, in the order you actually need them when something is wrong:
 ///  - **Link** — is there a connection, and did the MTU settle.
-///  - **Derivation** — the synthetic-data opt-in and a manual trend rebuild.
+///  - **Derivation** — rebuild trends (real samples only); optional SYNTH for FW load.
 ///  - **Local store** — what is actually on the phone: cursor, head, per-type
 ///    sample counts. These decide every sync's behaviour and until now existed
 ///    only in `debugPrint` output, which is useless on a user's device.
@@ -78,7 +76,6 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
   HsProbeResult? _probe;
   bool _probing = false;
 
-  bool _includeSynthetic = false;
   bool _rebuilding = false;
   bool _synthing = false;
   _StoreStats? _store;
@@ -93,7 +90,6 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
         _cm.isConnected
             ? 'link up · ${_cm.deviceName ?? _cm.deviceId ?? "device"}'
             : 'no active link');
-    _restore();
     _loadStore();
   }
 
@@ -101,13 +97,6 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
   void dispose() {
     _cm.removeListener(_onLink);
     super.dispose();
-  }
-
-  Future<void> _restore() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() => _includeSynthetic =
-        prefs.getBool(HealthyStoreSyncManager.includeSyntheticPrefKey) ?? false);
   }
 
   Future<void> _loadStore() async {
@@ -159,31 +148,13 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     });
   }
 
-  /// Toggle whether firmware-fabricated (SYNTHETIC) samples are derived into the
-  /// trends, then rebuild immediately so the change is visible without a sync.
-  ///
-  /// A bench device running CONFIG_HPI_HS_SYNTH generates its *entire* history as
-  /// synthetic data, so with the filter on (the correct production behaviour)
-  /// every screen renders empty and looks broken. This is the escape hatch — and
-  /// it is deliberately loud about what it's showing.
-  Future<void> _setIncludeSynthetic(bool v) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(HealthyStoreSyncManager.includeSyntheticPrefKey, v);
-    // Raise the app-wide banner (HpiSyntheticBanner) before the rebuild, so the
-    // charts never repaint with fabricated data ahead of the warning.
-    HealthyStoreSyncManager.instance.syntheticIncluded.value = v;
-    if (!mounted) return;
-    setState(() => _includeSynthetic = v);
-    await _rebuildTrends();
-  }
-
   /// Re-derive `health_trends` from samples already on the phone — no download.
   ///
   /// This is the repair for a metric that was synced but never showed up: if its
   /// type id wasn't in the cached registry when it arrived, derivation dropped
   /// it, and the raw sample sits in `hs_samples` invisible to every screen.
   /// Sync does this automatically when the registry grows; this is the manual
-  /// lever.
+  /// lever. Always excludes SYNTHETIC samples (QA opt-in removed).
   Future<void> _rebuildTrends() async {
     setState(() => _rebuilding = true);
     try {
@@ -197,21 +168,21 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
         return;
       }
       final rows =
-          await db.rebuildAllTrends(device, includeSynthetic: _includeSynthetic);
+          await db.rebuildAllTrends(device, includeSynthetic: false);
       final synthetic = await db.syntheticSampleCount(device);
       final total = (await db.sampleCountsByType(device))
           .values
           .fold<int>(0, (a, b) => a + b);
       if (mounted) {
-        // If everything on the device is synthetic and the filter is on, a "0
-        // rows" result is correct but reads as a failure. Say why.
-        final blocked = rows == 0 && synthetic > 0 && !_includeSynthetic;
+        // All stored samples may be firmware test data — charts stay empty by
+        // design. Say so rather than "0 rows" looking like a bug.
+        final blocked = rows == 0 && synthetic > 0;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(blocked
-              ? 'No trends: all $synthetic samples are synthetic test data. '
-                  'Turn on "Include synthetic data" to chart them.'
+              ? 'No trends: all $synthetic samples are synthetic test data '
+                  'and are filtered out of charts.'
               : 'Rebuilt $rows trend rows from $total stored samples'
-                  '${synthetic > 0 ? " ($synthetic synthetic)" : ""}'),
+                  '${synthetic > 0 ? " ($synthetic synthetic filtered out)" : ""}'),
           backgroundColor: blocked ? HpiColors.temp : HpiColors.steps,
           duration: const Duration(seconds: 5),
         ));
@@ -275,23 +246,19 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
 
       final rsp = await client.hs!.synth(days: opts.days, wipe: opts.wipe);
 
-      // Generating fabricated data and then filtering it out of every chart —
-      // the correct production behaviour — leaves the app looking broken. So
-      // turn the display opt-in on, and say so rather than doing it silently.
-      // The app-wide SYNTHETIC banner comes up with it.
-      if (!_includeSynthetic) await _setIncludeSynthetic(true);
-
       if (!mounted) return;
       setState(() {
         _push('RX', 'SYNTH accepted → $rsp');
         _push('OK',
             'generating ~${opts.days}d on-device (~${opts.days * 15}s) — poll Probe and watch head grow');
+        _push('WARN',
+            'SYNTHETIC samples are filtered out of charts — for firmware load tests only');
       });
       _snack(
-          'Generating ${opts.days} days on the watch. It runs in the background '
-          '(~${opts.days * 15}s) — hit Probe to watch head grow, then Sync. '
-          'Synthetic display was switched on.',
-          HpiColors.stress);
+          'Generating ${opts.days} days on the watch (~${opts.days * 15}s). '
+          'Probe to watch head grow. Sync will store samples but will not chart '
+          'synthetic test data.',
+          HpiColors.temp);
     } on SmpBusyException {
       // Our own lock: a sync or DFU owns the wire. Never tear the link down
       // here — that would kill the flow that legitimately holds it.
@@ -488,12 +455,13 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 HpiIconSquare(
                     icon: Symbols.science,
-                    color: HpiColors.stress,
+                    color: HpiColors.muted,
                     size: 34,
                     iconSize: 18),
                 const SizedBox(width: 12),
@@ -501,22 +469,16 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Include synthetic data', style: HpiText.cardTitle),
+                      Text('Synthetic data filtered', style: HpiText.cardTitle),
                       const SizedBox(height: 2),
                       Text(
-                        'Show firmware test data in charts. Never enable in '
-                        'production — it is fabricated, not measured. A banner '
-                        'stays up across the app while this is on.',
+                        'Firmware SYNTH samples stay in the local store for '
+                        'diagnostics but never enter charts or summaries. '
+                        'QA opt-in has been removed.',
                         style: HpiText.supporting,
                       ),
                     ],
                   ),
-                ),
-                Switch(
-                  value: _includeSynthetic,
-                  onChanged: _rebuilding ? null : _setIncludeSynthetic,
-                  activeThumbColor: HpiColors.onHr,
-                  activeTrackColor: HpiColors.stress,
                 ),
               ],
             ),
@@ -526,7 +488,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
             icon: Symbols.refresh,
             iconColor: HpiColors.steps,
             title: 'Rebuild trends',
-            supporting: 'Re-derive from stored samples · no download',
+            supporting: 'Re-derive real samples only · no download',
             showChevron: false,
             onTap: _rebuilding ? null : _rebuildTrends,
             trailing: _rebuilding
@@ -538,13 +500,13 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                 : null,
           ),
           const Divider(height: 1, color: HpiColors.divider, indent: 14),
-          // Writes to the WATCH, unlike everything above it, and wipes its log by
-          // default — hence the error colour and the confirm behind it.
+          // Writes to the WATCH. Kept for firmware load tests; results are not
+          // charted by the app.
           HpiListRow(
             icon: Symbols.experiment,
             iconColor: HpiColors.error,
             title: 'Generate synthetic data on watch',
-            supporting: 'SYNTH · test firmware only · wipes the watch log',
+            supporting: 'Firmware load test only · not charted · can wipe watch log',
             showChevron: false,
             onTap: _synthing ? null : _generateSynthetic,
             trailing: _synthing

@@ -7,10 +7,9 @@ import 'ble_manager.dart';
 
 /// Reads the standard Device Information Service.
 ///
-/// The firmware-revision read (DIS `0x180A` → `0x2A26`) was implemented three
-/// separate times — in `BackgroundSyncManager`, in `UpdateChecker`, and inline
-/// in the DFU screen — each with its own error handling and its own idea of what
-/// "unknown" means. Same two magic strings, three behaviours.
+/// The firmware-revision read (DIS `0x180A` → `0x2A26`) used to be reimplemented
+/// in sync, update-check, and DFU — each with its own error handling. Centralised
+/// here so "unknown" means one thing everywhere.
 class DeviceInfoService {
   /// Device Information Service.
   static const String disService = '180a';

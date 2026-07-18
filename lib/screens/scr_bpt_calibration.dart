@@ -28,7 +28,7 @@ class CalibrationPoint {
   final int pointNumber;
   final int systolic;
   final int diastolic;
-  final bool isComplete;
+  final bool isComplete;        
   final DateTime? timestamp;
 
   CalibrationPoint({
@@ -69,6 +69,14 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   int _statusCode = 0;
   String _statusString = "";
 
+  /// True once the finger PPG reports a good contact signal (status 1).
+  /// Used to guide the user before they start a calibration point.
+  bool _fingerSignalGood = false;
+
+  /// Last calibration point failed (status 6) — offer retry without losing
+  /// earlier completed points.
+  bool _pointFailed = false;
+
   Future<void> _initializeConnection() async {
     try {
       // Check for paired device
@@ -107,13 +115,17 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       // Update last connected time
       await DeviceManager.updateLastConnected();
 
-      // Set up calibration mode
+      // Enter BPT calibration mode and start the finger-signal stream so the
+      // user can seat the sensor and see contact quality *before* they enter
+      // cuff readings. Waiting until "Begin" to listen is too late — by then
+      // a bad finger placement just burns a calibration attempt.
       if (mounted) {
         setState(() {
           _isInitializing = false;
           _currentState = CalibrationState.preCalibration;
         });
         await sendSetCalibrationCommand();
+        await _startListeningData();
       }
     } catch (e) {
       if (mounted) {
@@ -179,13 +191,11 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   @override
   void dispose() {
-    // Dispose the controller when the widget is removed from the widget tree
-    Future.delayed(Duration.zero, () async {
-      _systolicController.dispose();
-      _diastolicController.dispose();
-      await onDisconnectPressed();
-    });
-
+    _streamDataSubscription?.cancel();
+    _systolicController.dispose();
+    _diastolicController.dispose();
+    // Leave the BLE link up — ConnectionManager owns it and Home/Device may
+    // still need it. Only drop the CMD_DATA subscription (done above).
     super.dispose();
   }
 
@@ -269,24 +279,24 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   String _getStatusMessage(int statusCode) {
     switch (statusCode) {
       case 0:
-        return "❌ No signal - Check finger placement";
+        return "No PPG signal — seat the finger sensor firmly";
       case 1:
-        return "✓ Good signal";
+        return "Good finger signal — ready to calibrate";
       case 2:
-        return "✓ Calibration complete!";
+        return "Calibration point complete";
       case 4:
-        return "⚠️ Too much movement - Stay still";
+        return "Too much motion — rest your hand and stay still";
       case 6:
-        return "❌ Calibration failed";
+        return "Calibration failed — check finger contact and retry";
       case 3:
       case 16:
       case 19:
-        return "⚠️ Weak signal - Adjust sensor position";
+        return "Weak PPG — try a warmer finger, firmer contact, less pressure";
       case 23:
       case 24:
-        return "⚠️ No finger contact - Reposition sensor";
+        return "No finger contact — slide the sensor fully onto the fingertip";
       default:
-        return "";
+        return statusCode == 0 ? "" : "Sensor status $statusCode";
     }
   }
 
@@ -329,67 +339,90 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 
   Future<void> _startListeningData() async {
-    logConsole("Started listening....");
+    if (startListeningFlag && _streamDataSubscription != null) {
+      // Already subscribed — keep the live finger-signal feed.
+      return;
+    }
+    logConsole("Started listening for BPT / finger PPG…");
     startListeningFlag = true;
+    await _streamDataSubscription?.cancel();
     _streamDataSubscription = _conn
         .subscribe(hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA)
         .listen((value) async {
-      ByteData bdata = Uint8List.fromList(value).buffer.asByteData();
-      logConsole("Data Rx: $value");
-      logConsole("Data Rx in hex: ${hex.encode(value)}");
+      if (value.isEmpty) return;
+      final bdata = Uint8List.fromList(value).buffer.asByteData();
+      if (bdata.lengthInBytes < 2) return;
 
+      final code = bdata.getUint8(0);
+      final progress = bdata.getUint8(1);
+      logConsole("BPT status=$code progress=$progress hex=${hex.encode(value)}");
+
+      if (!mounted) return;
       setState(() {
-        _statusCode = bdata.getUint8(0);
-        _progress = bdata.getUint8(1);
-        _statusString = _getStatusMessage(_statusCode);
+        _statusCode = code;
+        _progress = progress;
+        _statusString = _getStatusMessage(code);
+        // Status 1 = good contact; once seen, keep the "ready" flag until we
+        // lose contact (0/23/24) so a brief blip doesn't thrash the UI.
+        if (code == 1 || code == 2) {
+          _fingerSignalGood = true;
+        } else if (code == 0 || code == 23 || code == 24) {
+          _fingerSignalGood = false;
+        }
+        if (code == 6) {
+          _pointFailed = true;
+        }
       });
 
-      if (_statusCode == 2) {
-        // Calibration point complete
+      if (code == 2 && _currentState == CalibrationState.calibrating) {
+        _pointFailed = false;
         _completeCurrentPoint();
       }
+    }, onError: (Object e) {
+      logConsole("BPT data stream error: $e");
     });
   }
 
   Future<void> sendStartCalibration(BuildContext context) async {
     logConsole("Send start calibration command initiated");
-    if (startListeningFlag == true) {
-      _streamDataSubscription?.cancel();
-    }
+    // Keep the existing subscription — re-subscribing mid-session drops the
+    // first few status packets and makes the finger sensor look dead.
     await _startListeningData();
-    await Future.delayed(Duration.zero, () async {
-      List<int> commandPacket = [];
-      String userInput1 = _systolicController.text;
-      String userInput2 = _diastolicController.text;
-      List<int> userCommandData = [];
-      List<int> userCommandData1 = [];
-      List<int> calIndex = [];
-      calIndex = [_currentPointIndex];
-      // Convert the user input string to an integer list (if applicable)
-      if (userInput1.isNotEmpty) {
-        userCommandData =
-            userInput1.split(',').map((e) => int.parse(e.trim())).toList();
-      } else {
-        userCommandData = [0];
-      }
-      if (userInput2.isNotEmpty) {
-        userCommandData1 =
-            userInput2.split(',').map((e) => int.parse(e.trim())).toList();
-      } else {
-        userCommandData1 = [0];
-      }
 
-      commandPacket.addAll(hPi4Global.StartBPTCal);
-      commandPacket.addAll(userCommandData);
-      commandPacket.addAll(userCommandData1);
-      commandPacket.addAll(calIndex);
+    final sys = int.tryParse(_systolicController.text.trim()) ?? 0;
+    final dia = int.tryParse(_diastolicController.text.trim()) ?? 0;
 
-      await _sendCommand(commandPacket);
-      logConsole(commandPacket.toString());
-      setState(() {
-        _currentState = CalibrationState.calibrating;
-      });
-      Navigator.pop(context);
+    final commandPacket = <int>[
+      ...hPi4Global.StartBPTCal,
+      sys & 0xFF,
+      dia & 0xFF,
+      _currentPointIndex & 0xFF,
+    ];
+
+    setState(() {
+      _currentState = CalibrationState.calibrating;
+      _progress = 0;
+      _pointFailed = false;
+      _statusString = _fingerSignalGood
+          ? 'Hold still — measuring finger PPG…'
+          : 'Seat the finger sensor, then hold still…';
+    });
+
+    // Close the loading dialog if one is open.
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
+    await _sendCommand(commandPacket);
+    logConsole(commandPacket.toString());
+  }
+
+  Future<void> _retryCurrentPoint() async {
+    setState(() {
+      _pointFailed = false;
+      _progress = 0;
+      _statusString = '';
+      _currentState = CalibrationState.readyForInput;
     });
   }
 
@@ -529,16 +562,16 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
-                  _buildInfoTile(Icons.timer, 'Duration', '5-7 minutes'),
+                  _buildInfoTile(Icons.timer, 'Duration', '3–5 minutes'),
                   const SizedBox(height: 12),
-                  _buildInfoTile(Icons.sensors, 'Readings Required', '3 calibration points'),
+                  _buildInfoTile(Icons.sensors, 'Readings required', '3 points · finger PPG'),
                   const SizedBox(height: 12),
-                  _buildInfoTile(Icons.medical_services, 'You\'ll Need', 'BP monitor + Finger sensor'),
+                  _buildInfoTile(Icons.medical_services, 'You\'ll need', 'Cuff BP monitor + finger sensor'),
                   const SizedBox(height: 24),
                   const Divider(color: Colors.grey),
                   const SizedBox(height: 16),
                   const Text(
-                    'Important Tips:',
+                    'Finger sensor first',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -546,10 +579,13 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  _buildTipTile('Sit comfortably and stay still during measurement'),
-                  _buildTipTile('Ensure proper finger sensor placement'),
-                  _buildTipTile('Take BP readings at different times for best accuracy'),
-                  const SizedBox(height: 24),
+                  _buildTipTile('Slide the finger sensor fully onto the index fingertip (snug, not crushing)'),
+                  _buildTipTile('Rest your hand palm-up on a table; stay still during each point'),
+                  _buildTipTile('Warm hands help — cold fingers kill the PPG signal'),
+                  _buildTipTile('Measure cuff BP, enter the numbers, then start only when signal is green'),
+                  const SizedBox(height: 16),
+                  if (_statusString.isNotEmpty) _buildFingerSignalBanner(),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -574,6 +610,50 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFingerSignalBanner() {
+    final good = _fingerSignalGood || _statusCode == 1;
+    final color = good ? Colors.green[400]! : _getStatusColor(_statusCode);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            good ? Icons.check_circle : Icons.fingerprint,
+            color: color,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  good ? 'Finger sensor: good contact' : 'Finger sensor',
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+                if (_statusString.isNotEmpty)
+                  Text(
+                    _statusString,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+              ],
             ),
           ),
         ],
@@ -698,6 +778,8 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    _buildFingerSignalBanner(),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -706,10 +788,10 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       ),
                       child: const Column(
                         children: [
-                          Icon(Icons.info_outline, color: HpiLegacyTheme.hpi4Color, size: 32),
+                          Icon(Icons.fingerprint, color: HpiLegacyTheme.hpi4Color, size: 32),
                           SizedBox(height: 12),
                           Text(
-                            'Instructions',
+                            'Finger first, then cuff',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -718,9 +800,12 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            '1. Put on the finger sensor\n2. Measure your BP with standard monitor\n3. Enter the readings below',
+                            '1. Seat the finger sensor (wait for green signal)\n'
+                            '2. Take a cuff BP reading now\n'
+                            '3. Enter systolic / diastolic below\n'
+                            '4. Hold still until the point finishes',
                             style: TextStyle(color: Colors.white70, fontSize: 14),
-                            textAlign: TextAlign.center,
+                            textAlign: TextAlign.left,
                           ),
                         ],
                       ),
@@ -807,20 +892,33 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                       ),
                     ),
                     const SizedBox(height: 24),
+                    if (!_fingerSignalGood) ...[
+                      Text(
+                        'Tip: start only when the finger sensor shows good contact. '
+                        'You can still proceed, but failed points are usually a bad PPG signal.',
+                        style: TextStyle(color: Colors.orange[300], fontSize: 12),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () async {
                           FocusScope.of(context).unfocus();
-                          if (_formKey.currentState!.validate()) {
-                            showLoadingIndicator("Starting calibration...", context);
-                            Future.delayed(Duration.zero, () async {
-                              await sendStartCalibration(context);
-                            });
-                          }
+                          if (!_formKey.currentState!.validate()) return;
+                          showLoadingIndicator(
+                            _fingerSignalGood
+                                ? 'Starting point ${_currentPointIndex + 1}…'
+                                : 'Starting without strong finger signal…',
+                            context,
+                          );
+                          await sendStartCalibration(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: HpiLegacyTheme.hpi4Color,
+                          backgroundColor: _fingerSignalGood
+                              ? HpiLegacyTheme.hpi4Color
+                              : Colors.orange[800],
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -828,8 +926,11 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
                         child: Text(
-                          'Begin Calibration Point ${_currentPointIndex + 1}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          _fingerSignalGood
+                              ? 'Begin point ${_currentPointIndex + 1}'
+                              : 'Begin anyway · point ${_currentPointIndex + 1}',
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -925,6 +1026,35 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                         ],
                       ),
                     ),
+                  if (_pointFailed) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _retryCurrentPoint,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: HpiLegacyTheme.hpi4Color,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: const Text(
+                          'Retry this point',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Reseat the finger sensor, wait for a green signal, then retry. '
+                      'Earlier completed points are kept.',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
@@ -954,13 +1084,11 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                                 onPressed: () async {
                                   Navigator.pop(context); // Close dialog
                                   if (mounted) {
-                                    // Send end command before disconnecting
                                     try {
                                       await sendEndCalibration(context);
                                     } catch (e) {
                                       logConsole("Error ending calibration: $e");
                                     }
-                                    await onDisconnectPressed();
                                     if (mounted) {
                                       ScrMainShell.returnToRoot(context);
                                     }

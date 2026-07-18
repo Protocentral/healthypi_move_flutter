@@ -7,24 +7,28 @@ import 'package:flutter/foundation.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'background_sync_manager.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
+import 'device_time_service.dart';
 import 'healthy_store_client.dart';
+import 'sync_models.dart';
 
-/// Sync over the ProtoCentral **Healthy Store** (HPI_HS group 0x1000).
+export 'sync_models.dart';
+
+/// Sync over the ProtoCentral **Healthy Store** (HPI_HS group 0x1000) via the
+/// pure-Dart `mcumgr_dart` SMP client.
 ///
-/// This replaces the legacy dual-channel sync (custom `0x50`/`0x54` cmd/data
-/// packets + `FsMgmt` pulls of whole `/lfs/tr*` files). Firmware 2.1.x no longer
-/// exposes the legacy command characteristic at all, so on current devices the
-/// old path fails with `characteristicNotFound` — this is the path that works.
+/// This is the **only** sync path. The old custom `0x50`/`0x54` cmd/data
+/// protocol + `/lfs/tr*` `FsMgmt` pulls (`BackgroundSyncManager`) has been
+/// removed: current firmware no longer exposes that characteristic, and the
+/// HPI_HS wire is the system of record.
 ///
-/// Selection is by capability, not version string: `HELLO` **is** the probe
-/// (design doc §6). If it answers we sync here; if it doesn't, we delegate to
-/// [BackgroundSyncManager] so older firmware keeps working.
+/// Selection is by capability: `HELLO` **is** the probe (design doc §6). If the
+/// device refuses the Healthy Store group, sync fails with a clear "update
+/// firmware" message — there is no silent fallback to a dead protocol.
 ///
-/// Keeps the [SyncProgress] / [SyncResult] / [progressStream] surface of the
-/// legacy manager, so the Home and Device screens are unchanged.
+/// Exposes [SyncProgress] / [SyncResult] / [progressStream] for the Home and
+/// Device screens.
 ///
 /// ## ACK
 ///
@@ -67,31 +71,51 @@ class HealthyStoreSyncManager {
   static const int _deriveVersion = 3;
   static const String _deriveVersionKey = 'derive_version';
 
-  /// Developer opt-in: admit firmware-fabricated (SYNTHETIC) samples into the
-  /// derived trends. Off in production. See [ScrSettingsNew].
+  /// Legacy pref key — kept only so [ensureRealDataOnly] can clear installs that
+  /// still have the old developer "include synthetic" toggle set from bench QA.
+  @Deprecated('Synthetic samples are never derived into trends anymore')
   static const String includeSyntheticPrefKey = 'include_synthetic_data';
+
   static const String _syntheticModeKey = 'derive_included_synthetic';
 
-  /// Mirrors [includeSyntheticPrefKey] for the UI, so the app can say so on
-  /// screen whenever it is charting fabricated data.
-  ///
-  /// The firmware handoff is explicit that a synthetic sample must never be
-  /// *silently* mistaken for a measurement — that is the entire point of the
-  /// quality bit. Filtering it out satisfies that; charting it behind a
-  /// developer opt-in with no label does not. `HpiSyntheticBanner` watches this.
+  /// Always false. Kept so [HpiSyntheticBanner] and tests still compile; the
+  /// banner never shows because production never charts fabricated samples.
   final ValueNotifier<bool> syntheticIncluded = ValueNotifier<bool>(false);
 
-  /// Prime [syntheticIncluded] from storage. Call once during startup, before
-  /// the first frame, so the banner is correct on the very first paint rather
-  /// than appearing after the first sync.
-  Future<void> loadSyntheticFlag() => _includeSynthetic();
-
-  Future<bool> _includeSynthetic() async {
+  /// Call once at startup. Synthetic QA is over: clear any leftover opt-in and
+  /// re-derive trends **without** firmware-fabricated samples so charts never
+  /// keep showing test data from a previous session.
+  Future<void> ensureRealDataOnly() async {
     final prefs = await SharedPreferences.getInstance();
-    final v = prefs.getBool(includeSyntheticPrefKey) ?? false;
-    syntheticIncluded.value = v;
-    return v;
+    // ignore: deprecated_member_use_from_same_package
+    if (prefs.containsKey(includeSyntheticPrefKey)) {
+      // ignore: deprecated_member_use_from_same_package
+      await prefs.remove(includeSyntheticPrefKey);
+    }
+    syntheticIncluded.value = false;
+
+    final derivedWithSynthetic =
+        (await DatabaseHelper.instance.getMetadata<int>(_syntheticModeKey) ?? 0) ==
+            1;
+    if (!derivedWithSynthetic) {
+      await DatabaseHelper.instance.setMetadata(_syntheticModeKey, 0);
+      return;
+    }
+
+    debugPrint('[HS-Sync] purging synthetic-derived trends (QA mode was on)');
+    final device = await DatabaseHelper.instance.getHealthyStoreDeviceKey();
+    if (device != null) {
+      final rows = await DatabaseHelper.instance
+          .rebuildAllTrends(device, includeSynthetic: false);
+      debugPrint('[HS-Sync] rebuilt $rows real-only trend rows');
+    }
+    await DatabaseHelper.instance.setMetadata(_syntheticModeKey, 0);
   }
+
+  /// Synthetic samples are never admitted into derived trends. Stored raw rows
+  /// may still hold the bit (useful for LOCAL STORE diagnostics); they are not
+  /// charted, summarised, or exported as measurements.
+  Future<bool> _includeSynthetic() async => false;
 
   /// How many of the newest samples to fetch up-front, ahead of the backlog, so
   /// the UI has current data immediately. Sized to sit inside the device's RAM
@@ -146,8 +170,6 @@ class HealthyStoreSyncManager {
       for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
         final outcome = await _runSession(
             deviceMacAddress, deadline, onProgress, onStatus);
-
-        if (outcome.legacy != null) return outcome.legacy!;
 
         totalStored += outcome.stored;
         lastError = outcome.error;
@@ -253,24 +275,42 @@ class HealthyStoreSyncManager {
           requestTimeout: _syncTimeout);
       await client.connect();
 
+      // Standard MCUmgr OS datetime (group 0 / id 4) — not the old custom
+      // 0x41 CMD write. Without a correct RTC every HS sample ts is wrong.
+      onStatus('Setting device time…');
+      _emit(0.04, SyncState.connecting, 'Setting device time…');
+      final os = client.os;
+      if (os == null) {
+        debugPrint('[HS-Sync] WARNING: no OsMgmt — cannot set RTC');
+        onStatus('Device time not set — OS management unavailable');
+      } else {
+        // Ride the same session's HPI_HS facade to also push the UTC offset
+        // (SET_TZ). It is null when the watch predates HPI_HS, in which case
+        // setDeviceTime just sets the UTC RTC and skips the offset.
+        final timeOk = await DeviceTimeService.setDeviceTime(os, hs: client.hs);
+        if (!timeOk) {
+          onStatus('Device time not set — mcumgr datetime failed');
+          debugPrint(
+              '[HS-Sync] WARNING: OsMgmt.setDatetime failed; continuing sync');
+        } else {
+          debugPrint('[HS-Sync] device time set (mcumgr OS datetime)');
+        }
+      }
+
       if (!client.hasHealthyStore) {
-        // Older firmware: hand off to the legacy path. Release our SMP session
-        // first — the legacy manager opens its own.
+        // No silent fallback: the legacy custom protocol is gone. Tell the
+        // user what to do — a flaky link is reported as reachable:false by
+        // the probe (helloRc stays null); a real group refusal sets helloRc.
+        final rc = client.helloRc;
         await client.disconnect();
         client = null;
-        onStatus('Using legacy sync…');
-        final legacySub = BackgroundSyncManager.instance.progressStream
-            .listen(_progressController.add);
-        try {
-          final r = await BackgroundSyncManager.instance.syncData(
-            deviceMacAddress: deviceMacAddress,
-            onProgress: onProgress,
-            onStatus: onStatus,
-          );
-          return _SessionOutcome(legacy: r);
-        } finally {
-          await legacySub.cancel();
-        }
+        final msg = rc != null
+            ? 'This watch firmware does not support Healthy Store sync '
+                '(HELLO rc=$rc). Update the watch firmware and try again.'
+            : 'Healthy Store is not available on this watch. Update the '
+                'firmware and try again.';
+        onStatus(msg);
+        return _SessionOutcome(error: msg);
       }
 
       return await _drain(client, deadline, onProgress, onStatus);
@@ -631,10 +671,7 @@ class HealthyStoreSyncManager {
     final total = counts.values.fold<int>(0, (a, b) => a + b);
     if (synthetic > 0) {
       debugPrint('[HS-Sync] ⚠ $synthetic of $total stored samples are SYNTHETIC '
-          '(firmware test data). Currently '
-          '${includeSynthetic ? "INCLUDED in" : "EXCLUDED from"} trends'
-          '${includeSynthetic ? "" : " — enable Settings → Developer → "
-              "\"Include synthetic data\" to see them."}');
+          '(firmware test data) — excluded from trends and charts');
     }
 
     return _SessionOutcome(stored: stored, done: done, error: error);
@@ -647,7 +684,6 @@ class _SessionOutcome {
     this.stored = 0,
     this.done = false,
     this.error,
-    this.legacy,
   });
 
   /// Samples durably stored in this session.
@@ -657,7 +693,4 @@ class _SessionOutcome {
   final bool done;
 
   final String? error;
-
-  /// Set when the device predates HPI_HS and the legacy path ran instead.
-  final SyncResult? legacy;
 }

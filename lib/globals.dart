@@ -85,7 +85,9 @@ class hPi4Global {
   static const int CES_CMDIF_TYPE_DATA = 0x02;
   static const int CES_CMDIF_TYPE_CMD_RSP = 0x06;
 
-  static const List<int> WISER_CMD_SET_DEVICE_TIME = [0x41];
+  // Device RTC is set via standard MCUmgr OS datetime (OsMgmt.setDatetime),
+  // not a custom CMD opcode. The old 0x41 WISER_CMD_SET_DEVICE_TIME path is gone
+  // with the legacy CMD GATT service.
 
   static const List<int> StartBPTCal = [0x61];
   static const List<int> SetBPTCalMode = [0x60];

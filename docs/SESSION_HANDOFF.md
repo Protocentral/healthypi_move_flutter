@@ -35,6 +35,7 @@ first on a new machine.
 
 | Commit | What |
 |---|---|
+| *(uncommitted)* | **Retire legacy sync.** Delete `background_sync_manager.dart`. HS-only path; auto `DeviceTimeService.setDeviceTime` on every sync connect; wire `ScrStressEda` + EDA spot checks; BPT finger-sensor flow (live PPG before cuff entry, retry on fail). |
 | `47d1e76` | **Phase 1 refactors.** Split `globals.dart` (554→176 lines, now imports no Flutter): `lib/theme/hpi_legacy_theme.dart` (legacy TextStyles/Colors), `lib/models/trend_models.dart`, `lib/widgets/{battery_level_painter,loading_indicator}.dart`. Collapsed the triplicated DIS `0x180A/0x2A26` firmware-version read into `lib/utils/device_info_service.dart`. |
 | `112334f` | **Hygiene.** MIT SPDX headers on all 85 files that lacked them (`*.g.dart` skipped). Fixed `android-deploy.yml` `packageName` → `com.protocentral.move`. Removed real dead code. |
 | `76f2caa` | **Rename** `hpi_health_store` → `healthypi_healthy_store`, `HealthStore*` → `HealthyStore*` (app-facing only). `HpiHs`/`Hs*` wire models deliberately unchanged (firmware `HPI_HS` contract, shared with OpenView 3). |
@@ -82,10 +83,11 @@ These are **true now** and may contradict older prose in DECISIONS/ROADMAP:
    HRV chart on the HR screen, the stress card leaving `baselining`, RECORDS
    list/download/CSV, and the LOCAL STORE diagnostics. The synthetic path exists
    specifically so this needs no week-long wear.
-2. **Phase 5 — retire the legacy path.** The legacy ECG/GSR/HRV recording
-   screens and `background_sync_manager.dart` remain for rollback. The 11
-   remaining `flutter analyze` warnings all live in those legacy screens;
-   deleting them clears the warnings too. Gate on device-validated RECORDS.
+2. **Legacy custom sync path is gone.** `background_sync_manager.dart` has been
+   deleted; `HealthyStoreSyncManager` is the only sync entry point. Device RTC is
+   stamped via `DeviceTimeService` on every sync connect. Legacy *UI* screens
+   (ECG/GSR/HRV FS recordings, old home) still exist as rollback chrome only —
+   they no longer drive the old protocol.
 3. **Phase 7 — publish `healthypi_healthy_store`.** Gated on hardware-validated
    SYNC + RECORDS (now pinned to firmware, but unproven on a device). `git subtree
    split`, swap OpenView 3 onto the shared dep, publish `0.1.0`.

@@ -342,8 +342,10 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
         icon: Symbols.schedule,
         iconColor: HpiColors.onSurfaceVariant,
         title: 'Set device time',
+        supporting: 'mcumgr OS datetime · every sync',
         trailing: Text('Auto', style: HpiText.body.copyWith(fontSize: 12)),
-        onTap: () {},
+        showChevron: false,
+        onTap: null,
       ),
     ]);
   }

@@ -53,8 +53,8 @@ class TrendMetricStyle {
 /// The redesigned trend detail (handoff 1d/3a Heart rate, 3b Steps, 3c SpO₂,
 /// 3d Wrist temp), body-only so it embeds in the tablet two-pane (4a) right
 /// pane, a compact pushed route ([TrendDetailScreen]), and the Trends hub.
-/// Charts render from real `health_trends` data; HR additionally shows the HRV
-/// card as an honest zero-state (no RR/HRV producing code yet).
+/// Charts render from real `health_trends` data; HR also hosts the continuous
+/// HRV (RMSSD) card when samples exist.
 class TrendDetailView extends StatefulWidget {
   const TrendDetailView({
     super.key,

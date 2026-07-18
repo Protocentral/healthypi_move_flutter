@@ -110,6 +110,7 @@ class HpiHs {
   static const int cmdRecords = 4;
   static const int cmdAck = 5;
   static const int cmdSynth = 6;
+  static const int cmdSetTz = 7;
 
   SmpMessage _check(SmpMessage rsp) {
     final code = rsp.rc;
@@ -446,5 +447,26 @@ class HpiHs {
     ));
     _logMsg('SYNTH days=$days wipe=$wipe → ${rsp.payload}');
     return rsp.payload;
+  }
+
+  /// `SET_TZ` — tell the device its UTC offset, in **seconds east of UTC**.
+  ///
+  /// The device RTC holds **UTC** (set via the stock MCUmgr OS datetime write);
+  /// this offset is what the watch adds to render wall-clock local time. It is
+  /// separate from the clock itself, so DST transitions cost only a re-send of
+  /// this offset — the RTC never has to be rewritten.
+  ///
+  /// Pass the phone's current offset straight from
+  /// `DateTime.now().timeZoneOffset.inSeconds`, which already reflects DST
+  /// (India → 19800, US-Eastern EST → -18000, EDT → -14400). Re-send on every
+  /// connect / time sync so the watch always carries the live DST state.
+  Future<void> setTimezone(int offsetSeconds) async {
+    _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdSetTz,
+      payload: {'off': offsetSeconds},
+    ));
+    _logMsg('SET_TZ off=${offsetSeconds}s');
   }
 }

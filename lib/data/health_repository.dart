@@ -151,12 +151,50 @@ class HomeDashboard {
   final MetricTrend spo2;
   final MetricTrend temp;
   final MetricTrend steps;
-  final MetricTrend stress; // always unsupported in this build
-  final MetricTrend eda; // always unsupported in this build
+  final MetricTrend stress; // HRV-derived continuous score from SUMMARY
+  final MetricTrend eda; // manual EDA spot-check stress (or unsupported)
   final DateTime? lastSync;
 
   bool get anyData =>
-      hr.hasData || spo2.hasData || temp.hasData || steps.hasData;
+      hr.hasData ||
+      spo2.hasData ||
+      temp.hasData ||
+      steps.hasData ||
+      stress.hasData;
+}
+
+/// One manual EDA / GSR spot check, derived from the MANUAL-bit `stress`
+/// samples (`PREFIX_STRESS_EDA`).
+class EdaSpotCheck {
+  const EdaSpotCheck({required this.at, required this.score});
+  final DateTime at;
+  final double score;
+}
+
+/// Everything the Stress & EDA screen needs in one load.
+class StressEdaView {
+  const StressEdaView({
+    required this.stress,
+    required this.hrv,
+    required this.spotChecks,
+    this.rmssdBaselineMs,
+    this.hrvWindows,
+  });
+
+  /// Continuous HRV-derived stress (SUMMARY headline + trend samples).
+  final MetricTrend stress;
+
+  /// Today's continuous stress series for a sparkline (may be empty).
+  final MetricDetail hrv;
+
+  /// Recent manual EDA spot checks (stress_eda), newest first.
+  final List<EdaSpotCheck> spotChecks;
+
+  /// User's 7-day RMSSD baseline in ms, when known.
+  final double? rmssdBaselineMs;
+
+  /// How many 5-min windows back the stress baseline.
+  final int? hrvWindows;
 }
 
 /// The single read path the redesigned screens use. Composes the existing
@@ -185,6 +223,7 @@ class HealthRepository {
       _loadMetric(hPi4Global.PREFIX_ACTIVITY, cumulative: true),
       _db.getLastSyncTime(),
       _loadHrvStress(),
+      _loadEdaSpotMetric(),
     ]);
     return HomeDashboard(
       hr: results[0] as MetricTrend,
@@ -192,9 +231,80 @@ class HealthRepository {
       temp: results[2] as MetricTrend,
       steps: results[3] as MetricTrend,
       stress: results[5] as MetricTrend,
-      eda: MetricTrend.unsupportedEda,
+      eda: results[6] as MetricTrend,
       lastSync: results[4] as DateTime?,
     );
+  }
+
+  /// Full Stress & EDA screen payload: SUMMARY stress + continuous series +
+  /// recent manual EDA spot checks.
+  Future<StressEdaView> loadStressEda() async {
+    final results = await Future.wait([
+      _loadHrvStress(),
+      loadMetricDetail(hPi4Global.PREFIX_STRESS),
+      _loadEdaSpotChecks(limit: 12),
+      _db.latestHsSummary(),
+    ]);
+    final stress = results[0] as MetricTrend;
+    final detail = results[1] as MetricDetail;
+    final spots = results[2] as List<EdaSpotCheck>;
+    final raw = results[3] as Map<String, Object?>?;
+    final summary = raw == null ? null : HsSummary.fromMap(raw);
+    return StressEdaView(
+      stress: stress,
+      hrv: detail,
+      spotChecks: spots,
+      rmssdBaselineMs: summary?.rmssdBaselineMs ?? stress.baseline,
+      hrvWindows: summary?.hrvWindows,
+    );
+  }
+
+  /// Latest manual EDA spot-check metric for the home / trends cards.
+  Future<MetricTrend> _loadEdaSpotMetric() async {
+    final latest =
+        await _db.getLatestHourlyTrend(hPi4Global.PREFIX_STRESS_EDA, withinDays: 30);
+    if (latest == null) {
+      // EDA remains a manual action — no samples means "measure on watch",
+      // not "unsupported firmware". Use noData once we know HPI_HS works;
+      // fall back to unsupported only when we have never synced anything.
+      final lastSync = await _db.getLastSyncTime();
+      if (lastSync == null) return MetricTrend.unsupportedEda;
+      return const MetricTrend(
+          key: 'eda', availability: MetricAvailability.noData);
+    }
+    final score = (latest['avg_value'] as num).toDouble();
+    final at = DateTime.fromMillisecondsSinceEpoch(
+        (latest['hour_start'] as int) * 1000,
+        isUtc: false);
+    return MetricTrend(
+      key: 'eda',
+      availability: MetricAvailability.available,
+      latest: score,
+      latestAt: at,
+    );
+  }
+
+  Future<List<EdaSpotCheck>> _loadEdaSpotChecks({int limit = 12}) async {
+    // Walk recent days of derived hourly stress_eda rows and flatten to
+    // individual spot-check-like points (one per hour that has a reading).
+    final now = DateTime.now();
+    final checks = <EdaSpotCheck>[];
+    for (var back = 0; back < 14 && checks.length < limit; back++) {
+      final day = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: back));
+      final hourly =
+          await _db.getHourlyTrends(hPi4Global.PREFIX_STRESS_EDA, day);
+      for (final row in hourly.reversed) {
+        checks.add(EdaSpotCheck(
+          at: DateTime.fromMillisecondsSinceEpoch(
+              (row['hour_start'] as int) * 1000,
+              isUtc: false),
+          score: (row['avg_value'] as num).toDouble(),
+        ));
+        if (checks.length >= limit) break;
+      }
+    }
+    return checks;
   }
 
   /// Stress, read from the device's own `SUMMARY` rather than derived here.
@@ -336,17 +446,40 @@ class HealthRepository {
 
   /// Load the full trend detail for one metric. All values are in display units.
   ///
-  /// `stress` and `hrv` used to short-circuit to an unsupported zero-state
-  /// because nothing produced them. Firmware P3 does: both are now derived into
-  /// `health_trends` from the sample stream (continuous HRV RMSSD, and the
-  /// non-MANUAL `stress` samples), so they read like any other metric — and a
-  /// device that hasn't sent any yet falls out as [MetricAvailability.noData]
-  /// rather than being declared impossible.
+  /// `stress` and `hrv` are derived into `health_trends` from the sample stream
+  /// (continuous HRV RMSSD, and the non-MANUAL `stress` samples). For stress,
+  /// when the derived series is empty we still honour SUMMARY baselining so the
+  /// detail screen never shows a fake 0 while the watch is learning the user.
   ///
-  /// EDA still short-circuits: it is a manual spot check with no producing code.
+  /// EDA (`eda`) maps to the manual `stress_eda` trend (MANUAL-bit spot checks).
   Future<MetricDetail> loadMetricDetail(String key) async {
     if (key == 'eda') {
-      return MetricDetail(key: key, availability: MetricAvailability.unsupported);
+      // Reuse the stress_eda derived rows under the UI key "eda".
+      final detail =
+          await loadMetricDetail(hPi4Global.PREFIX_STRESS_EDA);
+      if (detail.availability == MetricAvailability.noData) {
+        final lastSync = await _db.getLastSyncTime();
+        if (lastSync == null) {
+          return const MetricDetail(
+              key: 'eda', availability: MetricAvailability.unsupported);
+        }
+      }
+      return MetricDetail(
+        key: 'eda',
+        availability: detail.availability,
+        latest: detail.latest,
+        latestAt: detail.latestAt,
+        min: detail.min,
+        max: detail.max,
+        avg: detail.avg,
+        baseline: detail.baseline,
+        daily: detail.daily,
+        weekly: detail.weekly,
+        monthly: detail.monthly,
+      );
+    }
+    if (key == hPi4Global.PREFIX_STRESS_EDA) {
+      // Fall through to the generic loader with the real trend key.
     }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -372,6 +505,30 @@ class HealthRepository {
     final monthly = map(results[2], 'day_start');
 
     if (daily.isEmpty && weekly.isEmpty && monthly.isEmpty) {
+      // Stress: prefer SUMMARY baselining over a blank "no data" when the
+      // watch is still learning the user's RMSSD baseline.
+      if (key == hPi4Global.PREFIX_STRESS) {
+        final headline = await _loadHrvStress();
+        if (headline.availability == MetricAvailability.baselining) {
+          return const MetricDetail(
+              key: hPi4Global.PREFIX_STRESS,
+              availability: MetricAvailability.baselining);
+        }
+        if (headline.availability == MetricAvailability.available &&
+            headline.latest != null) {
+          return MetricDetail(
+            key: hPi4Global.PREFIX_STRESS,
+            availability: MetricAvailability.available,
+            latest: headline.latest,
+            baseline: headline.baseline,
+          );
+        }
+        if (headline.availability == MetricAvailability.unsupported) {
+          return const MetricDetail(
+              key: hPi4Global.PREFIX_STRESS,
+              availability: MetricAvailability.unsupported);
+        }
+      }
       return MetricDetail(key: key, availability: MetricAvailability.noData);
     }
 

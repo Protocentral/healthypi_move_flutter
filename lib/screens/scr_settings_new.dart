@@ -238,7 +238,7 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
               iconColor: HpiColors.hr,
               title: 'Developer tools',
               supporting:
-                  'Link · store · HPI_HS probe · GATT · log · synthetic data',
+                  'Link · store · HPI_HS probe · GATT · log',
               trailing: Text('DEV',
                   style:
                       HpiText.mono.copyWith(color: HpiColors.hr, fontSize: 10)),

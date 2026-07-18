@@ -522,12 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    // Sync through HealthyStoreSyncManager even on this legacy screen. It probes
-    // HELLO and only falls back to BackgroundSyncManager on pre-HPI_HS
-    // firmware; calling BackgroundSyncManager directly (as this used to) took
-    // the legacy path unconditionally, skipping the SYNTHETIC filter and the
-    // true hr_min/hr_max peaks. This screen is rollback-only, but it must not
-    // be a way to silently land on the old data pipeline.
+    // Healthy Store (HPI_HS) only — the legacy custom sync path is retired.
     debugPrint('Home: Starting sync for device: ${deviceInfo.macAddress}');
 
     if (mounted) {
