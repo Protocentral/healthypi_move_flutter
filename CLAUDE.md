@@ -8,10 +8,11 @@ This is **`healthypi_move_flutter_next`**, the redesign fork of `healthypi_move_
 
 Read these before making decisions, in this order:
 
-- **[docs/ROADMAP.md](docs/ROADMAP.md)** — *start here.* The sequenced work (phases 0–8) with per-item status, the live baseline tripwires, and what remains.
+- **[docs/SESSION_HANDOFF.md](docs/SESSION_HANDOFF.md)** — *start here to resume.* The current tree state, live baselines, what was just done, and the recommended next step. The short-lived "where were we" note.
+- **[docs/ROADMAP.md](docs/ROADMAP.md)** — the sequenced work (phases 0–8) with per-item status and what remains.
 - **[docs/DECISIONS.md](docs/DECISIONS.md)** — what was decided and *why*, including several non-obvious traps and a list of known-broken things that are **not** regressions.
 
-Both are tracked (this `CLAUDE.md` too, so it travels between machines) — put lasting decisions in DECISIONS, sequenced work + current status in ROADMAP, and durable repo guidance here.
+All three are tracked (this `CLAUDE.md` too, so it travels between machines) — put lasting decisions in DECISIONS, sequenced work in ROADMAP, resume-state in SESSION_HANDOFF, and durable repo guidance here.
 
 Two rules that override convenience:
 
@@ -89,7 +90,7 @@ There is **one physical BLE link** but two logical modes, and they must never ov
 
 [lib/utils/database_helper.dart](lib/utils/database_helper.dart) — sqflite, schema **version 5**, tables `health_trends` (hourly/daily aggregates the trend UI reads), `synced_sessions` (dedup), `research_sessions`/`research_files`, `app_metadata`. Bump the version and extend `_onUpgrade` additively; the design doc's plan treats `health_trends` as a *derived* cache once raw `hs_samples` land.
 
-[lib/utils/trends_data_manager.dart](lib/utils/trends_data_manager.dart) is the only read path the trend screens use, so `health_trends` is the seam that keeps the UI stable across the sync rewrite.
+[lib/data/health_repository.dart](lib/data/health_repository.dart) is the read path the redesigned trend screens use, so `health_trends` is the seam that keeps the UI stable across the sync rewrite. (The old `trends_data_manager.dart` was deleted with the legacy screens.)
 
 ### Everything else
 

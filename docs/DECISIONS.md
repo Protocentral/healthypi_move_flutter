@@ -101,7 +101,7 @@ Three properties that are load-bearing, each learned the hard way:
   happens in `finally`, because the `totalSessions == 0` early-return path skips
   `_safeDisconnect()` entirely and would strand the lock permanently.
 
-## 7. Health Store protocol extracted to `packages/hpi_health_store`
+## 7. Health Store protocol extracted to `packages/healthypi_healthy_store`
 
 OpenView 3 and this app carried **six byte-identical copies** of the HPI_HS
 protocol code with no shared source. They had not drifted yet, but nothing
@@ -153,9 +153,10 @@ designed). Two consequences, and they point in opposite directions:
   already committed to SQLite. Getting this wrong is unrecoverable; getting it
   needlessly right is free.
 
-## 9. Package naming (decided, **not yet applied**)
+## 9. Package naming (applied)
 
-Rename `hpi_health_store` → **`healthypi_health_store`**.
+Rename `hpi_health_store` → **`healthypi_healthy_store`** (landed in commit
+`76f2caa`; the earlier draft name in this section was `healthypi_health_store`).
 
 `mcumgr_dart` is published under the verified publisher `protocentral.com`, so
 the brand is already carried by the publisher badge and a `protocentral_` prefix

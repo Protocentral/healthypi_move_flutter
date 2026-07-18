@@ -1,8 +1,9 @@
 # Roadmap
 
-Sequenced work for the redesign, with per-item status — **this is the resume
-doc**. Rationale for each choice lives in [DECISIONS.md](DECISIONS.md); the
-protocol design in [HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md).
+Sequenced work for the redesign, with per-item status. For a quick "where were
+we" snapshot start with [SESSION_HANDOFF.md](SESSION_HANDOFF.md); rationale for
+each choice lives in [DECISIONS.md](DECISIONS.md); the protocol design in
+[HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md).
 
 **Status (2026-07-18):** Phases 0–6 are **done and hardware-validated** — the
 Healthy Store sync, RECORDS, SUMMARY/trend derivation and the legacy-path
@@ -59,7 +60,9 @@ regression.
       the legacy in-transaction 16-byte parse, which is dead with the legacy path
       gone.
 - [x] **Collapse the triplicated firmware-version read** (DIS `0x180A`/`0x2A26`)
-      into `lib/utils/device_info_service.dart` (commit `47d1e76`).
+      into `lib/utils/device_info_service.dart` (commit `47d1e76`). *(Later removed
+      as orphaned when the legacy screens were deleted — see the Phase 8
+      device-info note; the SDK will need a DIS read reconstituted.)*
 - [x] **Promote `setDeviceTime`** out of `BackgroundSyncManager` into the shared
       `lib/utils/device_time_service.dart`. (Now also pushes the UTC offset via
       HPI_HS `SET_TZ`, cmd 7.)
@@ -147,15 +150,17 @@ the remaining steps are held pending review and the repo going public.
 - [ ] Fix OpenView's `hs.ack(head)` call (`device_manager_screen.dart:1273`) to
       use `ackDurablyStored` with a persisted cursor (separate repo).
 
-## Phase 8 — `healthypi_move` SDK ⏳ not started
+## Phase 8 — `healthypi_move` SDK ⏳ in progress (1 of 4 done)
 
 Both preconditions — Phase 5 deleting the legacy protocol (DECISIONS §11) and
-hardware validation — are **now met**. The durable surface is: transport +
+hardware validation — are **met**. The durable surface is: transport +
 connection + SMP lock, live streaming, DFU, device info, re-exported Health Store.
-Ready to start; no work done yet.
+BPT is extracted (below); the rest is pending.
 
-- [ ] Write the live-stream decoders and sample models that **do not exist today**
-      (`scr_live_stream.dart` decodes inline in `setState`). Needs hardware
+- [ ] Write the live-stream decoders and sample models. Partly done: the inline
+      `setState` decode is now a `LiveSignal` enum with a `decode()` method in
+      `lib/screens/scr_live.dart` (the old `scr_live_stream.dart` was deleted) —
+      what remains is promoting it + sample models into the SDK. Needs hardware
       validation: sample rates and scaling for the live characteristics are written
       down nowhere.
 - [x] Extract the BPT calibration state machine (`0x60`–`0x62`) into
@@ -172,6 +177,9 @@ Ready to start; no work done yet.
       already outside the widget.
 - [ ] Ships as a Flutter package (`universal_ble` forces it) — one package, no
       `_ble` companion.
+- [ ] **Device-info gap:** `device_info_service.dart` (the consolidated DIS read)
+      was deleted as orphaned in the legacy-screen cleanup. The SDK's "device info"
+      surface needs a DIS read reconstituted before packaging.
 
 ---
 
@@ -180,8 +188,9 @@ Ready to start; no work done yet.
 - `database_helper.dart` schema is at **v7**; `health_trends` has
   `UNIQUE(timestamp, trend_type, device_mac)` and `session_id INTEGER NOT NULL`.
   Raw `hs_samples` / `hs_types` / `hs_sync_state` / `hs_records` all exist.
-- `trends_data_manager.dart` is the **only** read path the trend screens use, so
-  `health_trends` is the seam that keeps the UI stable across the sync rewrite.
+- `lib/data/health_repository.dart` is the read path the redesigned trend screens
+  use, so `health_trends` is the seam that keeps the UI stable across the sync
+  rewrite. (`trends_data_manager.dart` was deleted with the legacy screens.)
 - `healthypi_healthy_store` is a pure-Dart, no-Flutter path dependency, all MIT or
   BSD-3.
 - `HpiHs` is **live** — it drives sample sync, RECORDS, SUMMARY, `SYNTH` and
