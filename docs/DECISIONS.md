@@ -256,4 +256,6 @@ to poll a status read during a point. So the move is a *later, firmware-coordina
 change (new cmd ids + handlers in `hpi_hs_mgmt.c`, capability-gating old firmware),
 and possibly belongs in a sibling `0x1001` device-control group rather than
 overloading the health *store*. The transport seam means that move is an adapter
-swap, not a rewrite of the screen or the state machine.
+swap, not a rewrite of the screen or the state machine. The firmware-facing spec
+for the move — proposed command set, the push constraint, capability gating — is
+[FIRMWARE_HANDOFF_BPT_HS.md](FIRMWARE_HANDOFF_BPT_HS.md).
