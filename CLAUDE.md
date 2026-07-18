@@ -19,7 +19,7 @@ Two rules that override convenience:
 1. **Migrate per *flow*, not per *file*.** Each BLE plugin holds its own OS-level connection, so a screen that *uses* a link can't move while the screen that *establishes* it hasn't.
 2. **`HpiHs.ackDurablyStored()` and `recordsAck()` are destructive.** The device drops the acked data. Commit to SQLite and persist the cursor first — never ack `hello.head`, never ack an unpersisted `syncAll()` cursor.
 
-Before claiming you broke something, check DECISIONS §12: `flutter test` already fails (a layout overflow in `home.dart:297`), and `flutter analyze` reports pre-existing lint with 0 errors. The count is a tripwire — it should **not increase**. It is currently **434** (was 445; the split of `globals.dart` and dead-code removal lowered it). See SESSION_HANDOFF for the full baseline table.
+Before claiming you broke something, check DECISIONS §12: `flutter test` already fails (the `widget_test.dart` smoke test pumps the app and hits a `StateError` in `HealthRepository.loadHome` with no DB in the test env — the shell is the `/` entry), and `flutter analyze` reports pre-existing lint with 0 errors. The count is a tripwire — it should **not increase**. It is currently **185** (was 434 before the legacy-screen deletion removed ~250 lint infos; 445 before that). See SESSION_HANDOFF for the full baseline table.
 
 ## Repository layout
 
@@ -32,7 +32,7 @@ The SMP/MCUmgr core is the published [`mcumgr_dart`](https://pub.dev/packages/mc
 ```bash
 flutter pub get
 flutter run                       # attach a real device; the app is useless in a simulator (needs BLE)
-flutter analyze                   # ~434 pre-existing lint infos/warnings, 0 errors
+flutter analyze                   # ~185 pre-existing lint infos/warnings, 0 errors
 flutter test                      # see caveat below
 flutter build bundle              # quickest full-app Dart compile, no platform SDK needed
 
@@ -48,7 +48,7 @@ flutter build apk --release --no-shrink
 flutter build ipa --release --export-method app-store
 ```
 
-**`flutter test` currently fails**, and did before any recent changes: the single smoke test in [test/widget_test.dart](test/widget_test.dart) pumps `HealthyPiApp` and `home.dart` overflows its `Column` at the 800x600 test viewport. It is a layout assert, not a logic failure. Don't treat a red `flutter test` as evidence your change broke something — confirm against `git stash` first.
+**`flutter test` currently fails**, and did before any recent changes: the single smoke test in [test/widget_test.dart](test/widget_test.dart) pumps `HealthyPiApp`, whose `/` route is the redesigned `ScrMainShell`; `ScrHome.initState` calls `HealthRepository.loadHome`, which throws a `StateError` with no database in the test env. It is an environment/wiring failure, not a logic failure in your change. (Before the legacy screens were deleted this surfaced instead as a `home.dart` layout overflow — same "smoke test is red for a pre-existing reason" caveat.) Don't treat a red `flutter test` as evidence your change broke something — confirm against `git stash` first.
 
 Version/build number live in [pubspec.yaml](pubspec.yaml) (`version: 2.1.0+87`). App id is `com.protocentral.move`. iOS deployment target is pinned to 13.1 and Android `minSdk` 21 — both are `universal_ble` requirements; don't lower them.
 

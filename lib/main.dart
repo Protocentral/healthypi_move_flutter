@@ -4,13 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'home.dart';
 import 'screens/scr_main_shell.dart';
-import 'screens/scr_trends.dart';
 import 'screens/scr_device_scan.dart';
-import 'screens/scr_device_mgmt.dart';
-import 'screens/scr_device_settings.dart';
-import 'screens/scr_settings.dart';
 import 'screens/scr_bpt_calibration.dart';
 import 'theme/hpi_theme.dart';
 import 'ui/components/hpi_synthetic_banner.dart';
@@ -50,20 +45,12 @@ class HealthyPiApp extends StatelessWidget {
       // Named routes for major screens
       initialRoute: '/',
       routes: {
-        // The redesigned 4-tab shell is the app entry; the pre-redesign home
-        // stays reachable at /home_legacy for quick rollback during migration.
+        // The redesigned 4-tab shell is the app entry. The pre-redesign screens
+        // (legacy home / trends / device / settings) have been deleted; all
+        // in-app navigation now goes through the shell and MaterialPageRoutes.
         '/': (context) => UpgradeAlert(child: const ScrMainShell()),
-        '/home_legacy': (context) => UpgradeAlert(child: HomePage()),
         '/scan': (context) => const ScrDeviceScan(),
-        '/trends': (context) => const ScrTrends(),
-        '/trends/hr': (context) => const ScrTrends(initialMetric: 'hr'),
-        '/trends/spo2': (context) => const ScrTrends(initialMetric: 'spo2'),
-        '/trends/temp': (context) => const ScrTrends(initialMetric: 'temp'),
-        '/trends/activity': (context) => const ScrTrends(initialMetric: 'activity'),
-        '/device': (context) => const ScrDeviceMgmt(),
-        '/device/settings': (context) => const ScrDeviceSettings(),
         '/device/bpt-calibration': (context) => const ScrBPTCalibration(),
-        '/settings': (context) => ScrSettings(),
       },
       // Fallback for an unregistered route name — always the redesigned shell.
       onUnknownRoute: (settings) {

@@ -135,23 +135,21 @@ class _ScrHomeState extends State<ScrHome> {
   _MetricStyle _styleFor(String key) {
     switch (key) {
       case 'hr':
-        return const _MetricStyle(Symbols.favorite, HpiColors.hr, 'Heart rate',
-            'bpm', '/trends/hr');
+        return const _MetricStyle(
+            Symbols.favorite, HpiColors.hr, 'Heart rate', 'bpm');
       case 'spo2':
-        return const _MetricStyle(Symbols.spo2, HpiColors.spo2, 'SpO₂', '%',
-            '/trends/spo2');
+        return const _MetricStyle(Symbols.spo2, HpiColors.spo2, 'SpO₂', '%');
       case 'temp':
-        return const _MetricStyle(Symbols.device_thermostat, HpiColors.temp,
-            'Wrist temp', '°', '/trends/temp');
+        return const _MetricStyle(
+            Symbols.device_thermostat, HpiColors.temp, 'Wrist temp', '°');
       case 'activity':
-        return const _MetricStyle(Symbols.steps, HpiColors.steps, 'Steps', '',
-            '/trends/activity');
+        return const _MetricStyle(Symbols.steps, HpiColors.steps, 'Steps', '');
       case 'stress':
-        return const _MetricStyle(Symbols.self_improvement, HpiColors.stress,
-            'Stress', '', null);
+        return const _MetricStyle(
+            Symbols.self_improvement, HpiColors.stress, 'Stress', '');
       default:
         return const _MetricStyle(
-            Symbols.water_drop, HpiColors.eda, 'EDA · GSR', '', null);
+            Symbols.water_drop, HpiColors.eda, 'EDA · GSR', '');
     }
   }
 
@@ -670,10 +668,9 @@ class _ScrHomeState extends State<ScrHome> {
 }
 
 class _MetricStyle {
-  const _MetricStyle(this.icon, this.color, this.title, this.unit, this.route);
+  const _MetricStyle(this.icon, this.color, this.title, this.unit);
   final IconData icon;
   final Color color;
   final String title;
   final String unit;
-  final String? route;
 }

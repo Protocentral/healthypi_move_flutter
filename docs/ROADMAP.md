@@ -2,7 +2,15 @@
 
 Sequenced work for the redesign. Rationale for each choice lives in
 [DECISIONS.md](DECISIONS.md); the protocol design lives in
-[HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md).
+[HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md); the current
+resume-state in [SESSION_HANDOFF.md](SESSION_HANDOFF.md).
+
+**Status (2026-07-18):** Phases 0–6 are **done and hardware-validated** — the
+Healthy Store sync, RECORDS, SUMMARY/trend derivation and the legacy-path
+retirement have all been driven on a real Move, and the pre-redesign UI screens
+have now been deleted. What remains is Phases 7–8 (publish the package, extract
+the SDK); their hardware gate is lifted but the work has not started. This doc
+stays until those close out.
 
 **Two rules that govern everything below.**
 
@@ -14,141 +22,135 @@ Sequenced work for the redesign. Rationale for each choice lives in
 2. **`ACK` is destructive.** Commit to SQLite, persist the cursor, *then* ack.
    Never ack `hello.head`. Never ack an unpersisted `syncAll()` cursor.
 
-Regression tripwires: `flutter analyze` → **0 errors, 445 issues** (should not
+Regression tripwires (current baselines): `flutter analyze` → **0 errors, 185
+issues** (was 434; the legacy-screen deletion removed ~250 lint infos — should not
 increase). `flutter build bundle` → exit 0. `flutter test test/smp_lock_test.dart`
-→ 6 pass. `cd packages/hpi_health_store && dart test` → 12 pass.
-`flutter test` as a whole **fails for a pre-existing reason** — see DECISIONS §12.
+→ 6 pass. `flutter test test/synthetic_banner_test.dart` → 2 pass.
+`cd packages/healthypi_healthy_store && dart test` → 30 pass.
+`flutter test` as a whole has one failing test — the `widget_test.dart` smoke test,
+which pumps the app and hits a `StateError` in `HealthRepository.loadHome` with no
+DB in the test env. Pre-existing (the shell was always the `/` entry); **not** a
+regression.
 
 ---
 
-## Phase 0 — Repo hygiene (do first, cheap)
+## Phase 0 — Repo hygiene (do first, cheap) ✅ done
 
-- [ ] **Commit the ~305 pending changes as a baseline** so the redesign has a
-      clean point to diff against when copying back. Nothing is committed yet.
-- [ ] **Untrack the 78 committed build artifacts** under `android/build/` and
-      `ios/build/` (Xcode `XCBuildData/PIFCache`), and add ignore rules.
-      `git rm -r --cached android/build ios/build`.
-- [ ] **Apply the package rename** `hpi_health_store` → `healthypi_health_store`
-      (DECISIONS §9). Touches: package `pubspec.yaml` name, barrel file
-      `lib/hpi_health_store.dart` → `lib/healthypi_health_store.dart` and its
-      `library` directive, the app's dep + the single `import` in
-      `lib/utils/health_store_client.dart`, README, CHANGELOG. Class names stay.
-- [ ] Decide `android-deploy.yml`'s `packageName` (currently wrong — DECISIONS §12).
+- [x] **Commit the pending changes as a baseline** so the redesign has a clean
+      point to diff against when copying back.
+- [x] **Untrack committed build artifacts** under `android/build/` and
+      `ios/build/`; ignore rules added (`git ls-files android/build ios/build`
+      is now empty).
+- [x] **Apply the package rename.** Landed as `hpi_health_store` →
+      `healthypi_healthy_store` (and `HealthStore*` → `HealthyStore*` on the
+      app-facing API); `HpiHs`/`Hs*` wire models deliberately unchanged. Barrel
+      file, `pubspec.yaml` name, dep, and imports all updated (commit `76f2caa`).
+- [x] Decide `android-deploy.yml`'s `packageName` → `com.protocentral.move`
+      (commit `112334f`).
 
-## Phase 1 — Prerequisite refactors (improve the app regardless of packaging)
+## Phase 1 — Prerequisite refactors ✅ done (one item superseded)
 
-These delete real duplication, create testable seams, and are prerequisites for
-*any* future SDK extraction. None depend on hardware.
-
-- [ ] **Split `lib/globals.dart`.** `hPi4Global` mixes GATT UUIDs and command
-      opcodes (lines 111–253) with ~20 `TextStyle`/`Color` constants (255–385),
-      and the same file defines `BatteryLevelPainter extends CustomPainter` and
-      `LoadingIndicator extends StatelessWidget`. Split into protocol constants,
-      an app theme, and `lib/widgets/`. Touches ~30 files. **Do this first** —
-      everything else in this phase waits on it.
-- [ ] **Extract `parseTrendRecords()` out of the database.** The 16-byte record
-      decode is fused *inside* the `db.transaction` loop in
-      `database_helper.dart:254-333`, interleaved with `txn.insert`. Factor the
-      parse into a pure function returning DTOs; the DB helper then only inserts.
-      This is the seam Phase 3 needs.
-- [ ] **Collapse the triplicated firmware-version read** (DIS `0x180A`/`0x2A26`),
-      currently reimplemented in `BackgroundSyncManager._readFirmwareVersion`,
-      `UpdateChecker._readFirmwareVersion`, and inline in `scr_dfu_new.dart`.
-- [ ] **Promote `setDeviceTime` (`0x41`)** out of being a private method on
-      `BackgroundSyncManager` into a shared device service.
+- [x] **Split `lib/globals.dart`** (554→176 lines, now imports no Flutter):
+      `lib/theme/hpi_legacy_theme.dart`, `lib/models/trend_models.dart`,
+      `lib/widgets/{battery_level_painter,loading_indicator}.dart` (commit
+      `47d1e76`).
+- [~] **Extract `parseTrendRecords()` out of the database** — *superseded, not
+      needed.* The seam this was meant to create for Phase 3 is now the package's
+      `HsSample.listFromBytes` decode; trend derivation runs off `hs_samples`, not
+      the legacy in-transaction 16-byte parse, which is dead with the legacy path
+      gone.
+- [x] **Collapse the triplicated firmware-version read** (DIS `0x180A`/`0x2A26`)
+      into `lib/utils/device_info_service.dart` (commit `47d1e76`).
+- [x] **Promote `setDeviceTime`** out of `BackgroundSyncManager` into the shared
+      `lib/utils/device_time_service.dart`. (Now also pushes the UTC offset via
+      HPI_HS `SET_TZ`, cmd 7.)
 - [ ] Optional: de-duplicate the log-index protocol re-inlined in
-      `scr_{ecg,gsr,hrv}_recordings.dart`. Note much of this dies in Phase 4 —
-      don't over-invest.
+      `scr_{ecg,gsr,hrv}_recordings.dart`. **Deferred** — these legacy screens are
+      retired in Phase 4's last item; not worth investing in.
 
-## Phase 2 — Sample-tier sync (design doc Stage 2)
+## Phase 2 — Sample-tier sync (design doc Stage 2) ✅ done, hardware-validated
 
-**Start by pinning the wire shapes.** Design doc §10 items are still open: log
-the first raw `TYPES`, `SUMMARY` and `RECORDS` response from a real Move and
-confirm them before building on the current defensive guesses.
+- [x] Schema bumped to **v7** (past the planned v6); `hs_samples`, `hs_types`,
+      `hs_sync_state` added additively (plus `hs_records` from Phase 4). `_onUpgrade`
+      extended; `health_trends` untouched.
+- [x] `HealthyStoreSyncManager` written, reusing the existing
+      `SyncProgress`/`SyncResult`/`progressStream` surface so home and sync UI are
+      unchanged.
+- [x] **Drives the paged `sync()` directly**, committing each page and persisting
+      the cursor before advancing; acks only the persisted cursor.
+- [x] All SMP work bracketed with `ConnectionManager.acquireSmp` / `releaseSmp`,
+      released in a `finally`.
+- [x] **Verified on hardware:** full drain, link-kill mid-sync with resume from
+      cursor, and re-run as a no-op (`seq` is cursor and dedup key).
 
-- [ ] Bump `database_helper.dart` to **v6** (currently v5); add `hs_samples`,
-      `hs_types`, `hs_sync_state` additively per design doc §5. Extend
-      `_onUpgrade`; no destructive change to `health_trends`.
-- [ ] Write `HealthStoreSyncManager`, reusing the existing
-      `SyncProgress`/`SyncResult`/`progressStream` surface so the home and sync UI
-      are unchanged.
-- [ ] **Drive the paged `sync()` directly, not `syncAll()`.** Commit each page to
-      SQLite and persist the cursor before advancing; ack only the persisted
-      cursor. `syncAll()` buffers everything in memory and must never feed an ack.
-- [ ] Bracket all SMP work with `ConnectionManager.acquireSmp` / `releaseSmp`
-      (DECISIONS §6). Release in a `finally`; never tear down the shared link on a
-      failed acquire.
-- [ ] Verify: full drain, then kill the link mid-sync and confirm resume from
-      cursor. `seq` is both cursor and dedup key, so re-running must be a no-op.
+## Phase 3 — Trend derivation (Stage 3) ✅ done, hardware-validated
 
-## Phase 3 — Trend derivation (Stage 3)
+- [x] **Fixed-point units are per-metric** (not `TYPES.scale`) — handled at each
+      metric's existing convention (skin temp in centi-degrees ÷100 at read, HR /
+      SpO₂ raw).
+- [x] **`session_id NOT NULL`** — derived rows use a synthetic id; upsert stays
+      idempotent under `UNIQUE(timestamp, trend_type, device_mac)`.
+- [x] Aggregates incrementally over touched hours; min/avg/max for `discrete`, sum
+      for `cumulative` (per `HsClass`).
+- [x] Feature-gated on `HELLO`. **Note:** the legacy fallback this item mentions
+      was *removed* in Phase 5 — a HELLO refusal now prompts a firmware update
+      rather than delegating to a dead protocol.
 
-Aggregate `hs_samples` → `health_trends` so `TrendsDataManager` and the trend
-screens keep working unchanged. **Two verified traps:**
-
-- [ ] **Fixed-point units are per-metric and are *not* `TYPES.scale`.**
-      `health_trends.value_*` are `INTEGER`. Skin temp is stored in
-      centi-degrees and `scr_skin_temp.dart:350-352` divides by 100 at read time;
-      HR and SpO₂ are stored raw. Convert into each metric's existing convention
-      or the charts silently go wrong by 100×.
-- [ ] **`session_id` is `NOT NULL`** and there is a
-      `UNIQUE(timestamp, trend_type, device_mac)` — good for idempotent upsert,
-      but derived rows need a synthetic `session_id` (legacy code uses `0`).
-- [ ] Aggregate incrementally over touched hours only. Group by `type` and
-      hour/day → min/avg/max for `discrete`, sum for `cumulative` (per `HsClass`).
-- [ ] Feature-gate on `HELLO`; keep the legacy path as fallback.
-
-## Phase 4 — Records tier (Stage 4)
+## Phase 4 — Records tier (Stage 4) ✅ done, hardware-validated
 
 - [x] Redesigned Recordings library uses HPI_HS `RECORDS` list/get/ack
-      (`HealthStoreRecordsManager` + `ScrRecordings` / `ScrRecordingPreview`).
+      (`HealthyStoreRecordsManager` + `ScrRecordings` / `ScrRecordingPreview`).
 - [x] Keep `research_sessions` / `research_files` tables (mirrored on download);
       additive `hs_records` index (schema **v7**).
 - [x] Download **on demand**, not eagerly on every sync.
 - [x] Check `HsRecordDownload.crcOk` before `recordsAck`. Store and mark
       `PARTIAL`-flagged sessions (interrupted, not truncated) — don't discard.
-- [ ] Retire legacy `scr_{ecg,gsr,hrv}_recordings.dart` + FS pulls once RECORDS
-      is device-validated (legacy screens still in tree for rollback).
+- [x] Retire legacy `scr_{ecg,gsr,hrv}_recordings.dart` + FS pulls. **Done** —
+      all 19 pre-redesign screens (recordings, old home/trends/device/settings and
+      their metric children) deleted, along with the 12 helper files they
+      transitively orphaned; `main.dart` routes trimmed to the shell + `/scan` +
+      `/device/bpt-calibration`.
 
-## Phase 5 — SUMMARY, retention, retire the legacy path (Stage 5)
+## Phase 5 — SUMMARY, retention, retire the legacy path (Stage 5) ✅ done
 
-- [ ] `SUMMARY` dashboard. `HsSummary` already renders unknown keys generically,
-      so this is mostly UI.
-- [ ] Retire `background_sync_manager.dart` once fleet firmware ships HPI_HS.
-      This deletes the custom `0x50`/`0x54` cmd/data protocol and the `/lfs/tr*`
-      pulls.
+- [x] `SUMMARY` dashboard — fetched/cached each sync; drives the P3 continuous-HRV
+      and HRV-derived stress card. `HsSummary` renders unknown keys generically.
+- [x] Retire `background_sync_manager.dart` — the custom `0x50`/`0x54` cmd/data
+      protocol and `/lfs/tr*` pulls are deleted. `HealthyStoreSyncManager` is the
+      only sync entry point.
 
-## Phase 6 — Fix the capability gate
+## Phase 6 — Fix the capability gate ✅ done
 
-- [ ] `HealthStoreClient._probeHello()` swallows every exception identically.
-      Distinguish "group unknown" (`rc` → legacy path, prompt to update) from
-      "transport failed" (timeout → retry). Today a flaky link permanently looks
-      like old firmware.
+- [x] `HealthyStoreClient._probeHello()` now distinguishes "group unknown"
+      (`rc` → prompt to update) from "transport failed" (timeout → retry). A flaky
+      link no longer looks permanently like old firmware (commit `1f3d930`).
 
-## Phase 7 — Publish `healthypi_health_store`
+## Phase 7 — Publish `healthypi_healthy_store` ⏳ not started (gate lifted)
 
-Gated on Phases 2 and 4 (wire shapes validated against hardware).
+Was gated on Phases 2 and 4 — **now satisfied** (wire shapes validated against
+hardware). Ready to start; no work done yet.
 
-- [ ] `git subtree split --prefix=packages/healthypi_health_store` into
-      `Protocentral/healthypi_health_store`.
+- [ ] `git subtree split --prefix=packages/healthypi_healthy_store` into
+      `Protocentral/healthypi_healthy_store`.
 - [ ] Swap the app's `path:` dep for a `git:` dep; migrate OpenView 3 off its six
       duplicate copies to the same dep (one-line pubspec change + delete copies).
 - [ ] Publish `0.1.0` under the `protocentral.com` verified publisher.
 - [ ] Fix OpenView's `hs.ack(head)` call (`device_manager_screen.dart:1273`) to
       use `ackDurablyStored` with a persisted cursor.
 
-## Phase 8 — `healthypi_move` SDK
+## Phase 8 — `healthypi_move` SDK ⏳ not started
 
-Only after Phase 5 deletes the legacy protocol (DECISIONS §11). The durable
-surface is: transport + connection + SMP lock, live streaming, DFU, device info,
-re-exported Health Store.
+Both preconditions — Phase 5 deleting the legacy protocol (DECISIONS §11) and
+hardware validation — are **now met**. The durable surface is: transport +
+connection + SMP lock, live streaming, DFU, device info, re-exported Health Store.
+Ready to start; no work done yet.
 
 - [ ] Write the live-stream decoders and sample models that **do not exist today**
-      (`scr_live_stream.dart:113-154` decodes inline in `setState`). Needs hardware
+      (`scr_live_stream.dart` decodes inline in `setState`). Needs hardware
       validation: sample rates and scaling for the live characteristics are written
       down nowhere.
 - [ ] Extract the BPT calibration state machine (`0x60`–`0x62`), currently inline
-      in `scr_bpt_calibration.dart:344-449`.
+      in `scr_bpt_calibration.dart`.
 - [ ] Wrap `ImgMgmt` + manifest into a `FirmwareUpdater`; the DFU protocol core is
       already outside the widget.
 - [ ] Ships as a Flutter package (`universal_ble` forces it) — one package, no
@@ -158,12 +160,16 @@ re-exported Health Store.
 
 ## Reference: verified facts worth not rediscovering
 
-- `database_helper.dart` schema is at **v5**; `health_trends` has
+- `database_helper.dart` schema is at **v7**; `health_trends` has
   `UNIQUE(timestamp, trend_type, device_mac)` and `session_id INTEGER NOT NULL`.
+  Raw `hs_samples` / `hs_types` / `hs_sync_state` / `hs_records` all exist.
 - `trends_data_manager.dart` is the **only** read path the trend screens use, so
   `health_trends` is the seam that keeps the UI stable across the sync rewrite.
-- `hpi_health_store` runtime closure is 9 packages, all MIT or BSD-3, no Flutter.
-- `HpiHs` is **dead code** in this app today — ported, compiling, never executed.
-- 33 of 47 files under `lib/` import Flutter; only 5 are *lightly* coupled
-  (`foundation` only): `ble_manager`, `connection_manager`,
-  `background_sync_manager`, `health_store_client`, `smp_ble_transport`.
+- `healthypi_healthy_store` is a pure-Dart, no-Flutter path dependency, all MIT or
+  BSD-3.
+- `HpiHs` is **live** — it drives sample sync, RECORDS, SUMMARY, `SYNTH` and
+  `SET_TZ` on the redesigned screens. (It was dead/ported code earlier in the
+  redesign.)
+- `background_sync_manager.dart` is **deleted**; the only lightly-Flutter-coupled
+  (`foundation`-only) files left are `ble_manager`, `connection_manager`,
+  `healthy_store_client`, and `smp_ble_transport`.

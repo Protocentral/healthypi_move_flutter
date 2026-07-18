@@ -1,6 +1,6 @@
 # Session handoff
 
-**Last updated:** 2026-07-14. **Branch:** `main`, pushed to `origin`
+**Last updated:** 2026-07-18. **Branch:** `main`, pushed to `origin`
 (`Protocentral/healthypi_move_flutter_next` — the private staging repo).
 
 A resume-from-anywhere snapshot: what state the tree is in, what was just done,
@@ -14,9 +14,9 @@ This file is the short-lived "where were we" note that those two aren't.
 
 | Check | Expected | Notes |
 |---|---|---|
-| `flutter analyze` | **434 issues, 0 errors** | Was 445 at session start. **434 is the new tripwire — it should not increase.** All 434 are pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
+| `flutter analyze` | **185 issues, 0 errors** | Was 434 before the legacy-screen deletion removed ~250 lint infos. **185 is the new tripwire — it should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
-| `flutter test` | **9 pass / 1 fail** | The 1 failure is the pre-existing `widget_test.dart` layout overflow (DECISIONS §12) — **not** a regression. |
+| `flutter test` | **8 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. (Was a `home.dart` layout overflow before the legacy screens were deleted.) |
 | `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
 | `flutter test test/smp_lock_test.dart` | 6 pass | SMP arbitration |
 
@@ -25,9 +25,7 @@ first on a new machine.
 
 ## Uncommitted working-tree change
 
-- `lib/screens/scr_bpt_calibration.dart` — a **one-line trailing-whitespace**
-  edit that predates this session. Trivial; left uncommitted. Not part of any
-  task.
+- None of substance — the tree is committed through the legacy-screen deletion.
 
 ---
 
@@ -35,7 +33,8 @@ first on a new machine.
 
 | Commit | What |
 |---|---|
-| *(uncommitted)* | **Retire legacy sync.** Delete `background_sync_manager.dart`. HS-only path; auto `DeviceTimeService.setDeviceTime` on every sync connect; wire `ScrStressEda` + EDA spot checks; BPT finger-sensor flow (live PPG before cuff entry, retry on fail). |
+| *(this session)* | **Delete the legacy UI.** Removed all 19 pre-redesign screens + `home.dart` and the 12 helper files they orphaned; trimmed `main.dart` routes to shell + `/scan` + `/device/bpt-calibration`. `flutter analyze` 434→185. |
+| `07458ef` | **HPI_HS `SET_TZ` (cmd 7)** + **retire legacy sync.** `DeviceTimeService` pushes the UTC offset alongside the RTC set. Deleted `background_sync_manager.dart`; HS-only path; `sync_models.dart` split out; plus the accompanying screen redesigns. |
 | `47d1e76` | **Phase 1 refactors.** Split `globals.dart` (554→176 lines, now imports no Flutter): `lib/theme/hpi_legacy_theme.dart` (legacy TextStyles/Colors), `lib/models/trend_models.dart`, `lib/widgets/{battery_level_painter,loading_indicator}.dart`. Collapsed the triplicated DIS `0x180A/0x2A26` firmware-version read into `lib/utils/device_info_service.dart`. |
 | `112334f` | **Hygiene.** MIT SPDX headers on all 85 files that lacked them (`*.g.dart` skipped). Fixed `android-deploy.yml` `packageName` → `com.protocentral.move`. Removed real dead code. |
 | `76f2caa` | **Rename** `hpi_health_store` → `healthypi_healthy_store`, `HealthStore*` → `HealthyStore*` (app-facing only). `HpiHs`/`Hs*` wire models deliberately unchanged (firmware `HPI_HS` contract, shared with OpenView 3). |
@@ -75,25 +74,28 @@ These are **true now** and may contradict older prose in DECISIONS/ROADMAP:
 
 ---
 
+## Done since this file was last written
+
+- **Healthy Store sync + RECORDS + SUMMARY are hardware-validated** on a real Move.
+- **Legacy custom sync path is gone.** `background_sync_manager.dart` deleted;
+  `HealthyStoreSyncManager` is the only sync entry point. Device RTC is stamped via
+  `DeviceTimeService` on every sync connect, which now also pushes the UTC offset
+  via HPI_HS `SET_TZ` (cmd 7).
+- **Legacy UI screens are gone.** All 19 pre-redesign screens (ECG/GSR/HRV FS
+  recordings, old home/trends/device/settings + metric children) and the 12 helper
+  files they orphaned have been deleted; `main.dart` routes are trimmed to the
+  shell, `/scan`, and `/device/bpt-calibration`. No rollback chrome remains.
+
 ## Not yet done, roughly in priority order
 
-1. **Nothing has been driven on real hardware this session.** The highest-value
-   next step is a bench Move (ideally a `CONFIG_HPI_HS_SYNTH=y` build): press
-   **Developer → Generate synthetic data**, then sync, and verify end-to-end —
-   HRV chart on the HR screen, the stress card leaving `baselining`, RECORDS
-   list/download/CSV, and the LOCAL STORE diagnostics. The synthetic path exists
-   specifically so this needs no week-long wear.
-2. **Legacy custom sync path is gone.** `background_sync_manager.dart` has been
-   deleted; `HealthyStoreSyncManager` is the only sync entry point. Device RTC is
-   stamped via `DeviceTimeService` on every sync connect. Legacy *UI* screens
-   (ECG/GSR/HRV FS recordings, old home) still exist as rollback chrome only —
-   they no longer drive the old protocol.
-3. **Phase 7 — publish `healthypi_healthy_store`.** Gated on hardware-validated
-   SYNC + RECORDS (now pinned to firmware, but unproven on a device). `git subtree
-   split`, swap OpenView 3 onto the shared dep, publish `0.1.0`.
-4. **Optional: a blanket `dart format`** — deliberately skipped this session so
-   real changes weren't buried under whitespace on a hand-copied-back branch. If
-   wanted, do it as its own isolated commit.
+1. **Phase 7 — publish `healthypi_healthy_store`.** Its hardware gate is now
+   lifted. `git subtree split`, swap OpenView 3 onto the shared dep, publish
+   `0.1.0`. See ROADMAP Phase 7.
+2. **Phase 8 — extract the `healthypi_move` SDK.** Live-stream decoders, the BPT
+   calibration state machine, a `FirmwareUpdater` wrapper. See ROADMAP Phase 8.
+3. **Optional: a blanket `dart format`** — deliberately skipped so real changes
+   weren't buried under whitespace on a hand-copied-back branch. If wanted, do it
+   as its own isolated commit.
 
 ## Rules that still override convenience
 
