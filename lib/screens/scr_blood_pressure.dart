@@ -344,7 +344,11 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   }
 
   Widget _calibrationFooter(DateTime? calibratedAt) {
-    final ago = calibratedAt == null ? '—' : _relTime(calibratedAt);
+    // calibratedAt is null when the watch was calibrated elsewhere / earlier —
+    // we're showing 6a on the strength of synced readings, not this local flag.
+    final title = calibratedAt == null
+        ? 'Calibrated on this watch'
+        : 'Calibrated ${_relTime(calibratedAt)}';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -360,7 +364,7 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Calibrated $ago',
+                Text(title,
                     style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
                 const SizedBox(height: 2),
                 Text('Recalibrate ~monthly for accuracy',
@@ -383,10 +387,14 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   // --- 6b — not calibrated (the gate) ---------------------------------------
 
   Widget _notCalibrated(BloodPressureView view) {
+    // Two sub-states behind the 6b gate: never calibrated (the design's gate),
+    // or this phone recorded a calibration but no reading has synced yet — don't
+    // nag "calibrate" in the latter; it's already done.
+    final awaitingReading = view.isCalibrated;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        _gateHero(),
+        _gateHero(awaitingReading ? 'NO READINGS YET' : 'NOT CALIBRATED'),
         const SizedBox(height: 14),
         HpiCard(
           padding: const EdgeInsets.all(20),
@@ -398,21 +406,24 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
                   size: 64,
                   iconSize: 34),
               const SizedBox(height: 16),
-              Text('Calibrate to enable BP',
+              Text(awaitingReading ? 'Waiting for a reading' : 'Calibrate to enable BP',
                   style: HpiText.screenTitle.copyWith(fontSize: 18),
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(
-                'The watch estimates blood pressure from finger PPG. It needs '
-                '3 reference cuff readings before it can produce a value — a '
-                'one-time setup, repeated roughly monthly.',
+                awaitingReading
+                    ? 'This watch is calibrated. Take a spot reading on the '
+                        'watch, then sync — your estimates will appear here.'
+                    : 'The watch estimates blood pressure from finger PPG. It '
+                        'needs 3 reference cuff readings before it can produce a '
+                        'value — a one-time setup, repeated roughly monthly.',
                 style: HpiText.body.copyWith(fontSize: 12.5, height: 1.45),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
               HpiFilledButton(
-                label: 'Calibrate now',
-                icon: Symbols.play_arrow,
+                label: awaitingReading ? 'Recalibrate' : 'Calibrate now',
+                icon: awaitingReading ? Symbols.tune : Symbols.play_arrow,
                 onPressed: _calibrate,
               ),
             ],
@@ -431,7 +442,7 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
     );
   }
 
-  Widget _gateHero() {
+  Widget _gateHero(String pillLabel) {
     return HpiCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -451,7 +462,7 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
               ],
             ),
           ),
-          const HpiPill(label: 'NOT CALIBRATED'),
+          HpiPill(label: pillLabel),
         ],
       ),
     );

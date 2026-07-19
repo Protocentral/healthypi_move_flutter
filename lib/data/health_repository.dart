@@ -217,25 +217,34 @@ class BpReading {
   final int? quality;
 }
 
-/// Everything the Blood-pressure screen (6a/6b) needs in one load. BP is gated
-/// on calibration state: 6a renders only when [isCalibrated] **and** there is
-/// at least one reading; otherwise the screen shows the 6b not-calibrated gate.
-/// It never fabricates a value — no readings means no numbers.
+/// Everything the Blood-pressure screen (6a/6b) needs in one load. BP is
+/// `HsClass.event` — sparse spot readings, listed with timestamps, never
+/// averaged. The screen never fabricates a value: no readings means no numbers.
 class BloodPressureView {
   const BloodPressureView({this.calibratedAt, this.readings = const []});
 
-  /// When BPT calibration last completed (persisted on 5b's completion), or null
-  /// if the watch has never been calibrated on this phone.
+  /// When BPT calibration last completed **on this phone** (persisted on 5b's
+  /// completion), or null. A *local hint only* — the watch is the real source of
+  /// truth and may be calibrated with this null (calibrated earlier, on another
+  /// phone, or before this flag existed). Drives the "Calibrated X ago" footer,
+  /// not the 6a/6b gate. See `docs/FIRMWARE_HANDOFF_BPT_HS.md` §12.
   final DateTime? calibratedAt;
 
   /// Spot readings, newest first.
   final List<BpReading> readings;
 
+  /// This phone saw the calibration complete. Informational — not the gate.
   bool get isCalibrated => calibratedAt != null;
   bool get hasReadings => readings.isNotEmpty;
 
-  /// True → render 6a; false → render 6b.
-  bool get showValues => isCalibrated && hasReadings;
+  /// True → render 6a (values); false → render 6b (gate).
+  ///
+  /// Gated on **device evidence, not the local flag**: the watch only emits
+  /// BP-spot readings *after* it is calibrated, so any synced reading proves
+  /// calibration — even when this phone never ran 5b. (Until firmware reports
+  /// calibration state directly — §12 of the handoff — a calibrated watch with
+  /// no readings synced yet still shows 6b, because there is nothing to display.)
+  bool get showValues => hasReadings;
 
   BpReading? get latest => readings.isEmpty ? null : readings.first;
 

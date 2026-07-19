@@ -70,7 +70,7 @@ these before either side ships.** CBOR keys are kept short to match the group.
 |---|---|---|---|---|---|
 | **8** | `HPI_HS_CMD_BPT_CAL_ENTER` | WRITE | `{}` | `{rc}` | `0x60` |
 | **9** | `HPI_HS_CMD_BPT_CAL_POINT` | WRITE | `{sys:<u8>, dia:<u8>, idx:<u8>}` | `{rc}` | `0x61,…` |
-| **10** | `HPI_HS_CMD_BPT_CAL_STATUS` | READ | `{}` | `{st:<u8>, prog:<u8>, idx:<u8>, run:<bool>}` | (poll path) |
+| **10** | `HPI_HS_CMD_BPT_CAL_STATUS` | READ | `{}` | `{st:<u8>, prog:<u8>, idx:<u8>, run:<bool>, cal:<bool>, cal_ts:<i64>}` | (poll path) |
 | **11** | `HPI_HS_CMD_BPT_CAL_END` | WRITE | `{}` | `{rc}` | `0x62` |
 
 Field semantics:
@@ -82,6 +82,10 @@ Field semantics:
 - **`st`** — current status code (§6). **`prog`** — 0–100. **`run`** — true while
   a point measurement is in flight (false before the first point and after a
   terminal `st` of 2/6).
+- **`cal`** — **true iff the device currently holds a valid completed BPT
+  calibration** (persistent, survives reboot/unpair-from-phone). This is the
+  field the app needs and does not have today — see **§12**. **`cal_ts`** — epoch
+  seconds (UTC) the calibration was last completed, or 0/absent if unknown.
 - **`rc`** — 0 on success; see §7.
 
 Notes:
@@ -107,6 +111,8 @@ one constant. Firmware's call; the app follows.
    vs `0x1001`).
 3. Whether `BPT_CAL_ENTER` implicitly resets any in-progress calibration, or
    errors if already in calibration mode.
+4. **Can `BPT_CAL_STATUS` report persistent calibration state (`cal`/`cal_ts`)?**
+   This is now the app's top ask — see **§12**.
 
 ## 6. Status code contract (unchanged from today — the app depends on these)
 
@@ -212,3 +218,55 @@ Roadmap Phase 8 entry.
 5. Any additional status codes the current firmware can emit that aren't in §6?
    The app tolerates unknown codes (renders a generic "sensor status N") but will
    not treat them as terminal.
+
+## 12. Requested: the device must report persistent calibration state
+
+**Why this matters.** The app now has a Blood-pressure *display* screen (handoff
+6a/6b) that must answer one question on entry: *is this watch calibrated?* There
+is currently **no way to ask the device that.** `BPT_CAL_STATUS` (cmd 10) reports
+only an *in-progress measurement* (`st/prog/idx/run`), not whether a completed
+calibration is on file. So the app is forced to guess, and guesses wrong.
+
+**What the app does today (interim, and its failure mode).** The app keeps a
+phone-local flag (`bp_calibrated_at` in `app_metadata`) that it sets only when the
+5b calibration flow completes *on that phone*. It also treats **any synced BP-spot
+reading as proof of calibration** (the watch only emits readings post-calibration),
+which is the primary gate. This means:
+
+- ✅ A watch calibrated *and* with ≥1 reading synced → shows values (6a). Correct.
+- ❌ A watch **calibrated but with no readings synced yet** (fresh calibration, or
+  the phone that calibrated it was reset / is a different phone) → the app cannot
+  tell it apart from *never calibrated*, so it shows the 6b gate and nudges the
+  user to calibrate **again**. This is the bug we want to remove.
+
+**The ask — add `cal` (+ `cal_ts`) to `BPT_CAL_STATUS`.** Firmware already owns
+the ground truth (the calibration coefficients are stored on the device). Surface
+it:
+
+- **`cal:<bool>`** — true iff the device currently holds a valid, completed BPT
+  calibration. Must be **persistent** — survive reboot, and survive the phone
+  unpairing/re-pairing (the calibration lives on the *watch*, not the phone).
+- **`cal_ts:<i64>`** — epoch seconds (UTC) of the last completed calibration, so
+  the app can show "Calibrated 12 days ago" and drive the ~monthly recalibration
+  nudge from the device's own date rather than a phone-local guess. `0`/absent ⇒
+  unknown (the app then just says "Calibrated", no date).
+
+This is a **read-only, additive** change to a command that already exists — no new
+command id, no new group, no wire-format churn for the other fields. Old app
+builds that don't read `cal`/`cal_ts` are unaffected.
+
+**How the app will use it.** On opening the BP screen (and it already opens an
+HPI_HS session for other reasons), the app will `BPT_CAL_STATUS`-read once and
+gate 6a/6b on `cal` — the device's answer, not the local flag or the presence of
+readings. `cal_ts` replaces the phone-local `bp_calibrated_at` as the calibration
+date. The readings-based heuristic and the local flag stay only as a fallback for
+firmware that predates this field (capability-gated the same way as §8: if `cal`
+is absent from the response, fall back to "readings ⇒ calibrated").
+
+**Open sub-questions for firmware:**
+1. Is `cal` a simple "coefficients present" boolean, or does firmware also expire
+   it (e.g. mark stale after N days)? The app is happy to own the "recalibrate
+   ~monthly" nudge from `cal_ts` — it does **not** need firmware to expire `cal`.
+2. Does a *partial* calibration (1–2 of 3 points) ever leave `cal == true`? It
+   should be **false** until all required points are in and the fit is committed.
+3. After `SYNTH`/wipe or a factory reset, is `cal` correctly cleared?
