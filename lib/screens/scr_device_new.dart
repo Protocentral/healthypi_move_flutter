@@ -347,6 +347,15 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
         showChevron: false,
         onTap: null,
       ),
+      HpiListRow(
+        icon: Symbols.monitor_heart,
+        iconColor: HpiColors.hr,
+        title: 'Blood pressure calibration',
+        supporting: '3 reference points · finger PPG',
+        trailing: const HpiPill(label: 'NOT SET'),
+        onTap: () =>
+            Navigator.of(context).pushNamed('/device/bpt-calibration'),
+      ),
     ]);
   }
 

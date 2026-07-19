@@ -13,7 +13,7 @@ the sequenced plan + per-phase status in [ROADMAP.md](ROADMAP.md).
 
 | Check | Expected | Notes |
 |---|---|---|
-| `flutter analyze` | **182 issues, 0 errors** | Was 434 before the legacy-screen deletion. **182 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
+| `flutter analyze` | **158 issues, 0 errors** | Was 182 before the 5a/5b/5c redesign retired the last legacy-themed screens' `withOpacity`/hardcoded-color lint. **158 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
 | `flutter test` | **33 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
 | `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
@@ -27,12 +27,13 @@ first on a new machine.
 
 ## Working-tree state
 
-Clean at handoff — the `FirmwareUpdater` extraction is committed to `main`. The 3
-device-management-flow screens (`scr_device_scan`, `scr_dfu_new`,
-`scr_bpt_calibration`) are still on `hpi_legacy_theme` — a redesign pass is coming
-(owner is doing the design handoff); **redesign the view only**, keeping each
-screen a thin view over its extracted state machine (`BptCalibrator` /
-`FirmwareUpdater`) and transport adapter.
+The 3 device-management-flow screens are now **redesigned onto the token system**
+(handoff 5a/5b/5c) — `hpi_legacy_theme` is gone from all of them (only `globals.dart`
+still imports it). Each stays a thin **view** over its extracted state machine:
+`scr_dfu_new` (5a) over `FirmwareUpdater`, `scr_bpt_calibration` (5b) over
+`BptCalibrator`, `scr_device_scan` (5c) restyled with a paired-device Connect/PAIRED
+distinction; `1h` device page gained the "Blood pressure calibration · NOT SET" row
+→ 5b. Logic untouched. Uncommitted until the commit below lands.
 
 ---
 

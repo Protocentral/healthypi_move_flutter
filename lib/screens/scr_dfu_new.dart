@@ -6,20 +6,23 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-
-import 'scr_main_shell.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
+
 import '../ble/device_info.dart';
 import '../ble/firmware_updater.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
+import '../theme/hpi_colors.dart';
+import '../theme/hpi_text.dart';
+import '../ui/components/hpi_components.dart';
 import '../utils/ble_dis_transport.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
 import '../utils/firmware_update_service.dart';
 import '../utils/manifest.dart';
 import '../utils/snackbar.dart';
-import '../theme/hpi_legacy_theme.dart';
+import 'scr_main_shell.dart';
 
 /// DFU Screen States
 enum DFUScreenState {
@@ -29,11 +32,15 @@ enum DFUScreenState {
   downloading,        // Downloading firmware
   readyToInstall,     // Firmware downloaded and ready
   installing,         // DFU in progress
+  completed,         // Install finished successfully
   upToDate,          // No update needed
   error,             // Error occurred
 }
 
-/// Modern DFU screen with automatic update detection
+/// DFU firmware-update screen (handoff 5a). Restyled to the redesign token
+/// system; the install flow itself is unchanged — the `DFUScreenState` machine
+/// here plus the extracted [FirmwareUpdater] (upload→confirm walk over
+/// `mcumgr_dart` `ImgMgmt`, confirm-only per image).
 class ScrDFUNew extends StatefulWidget {
   final String? deviceMacAddress;
 
@@ -312,8 +319,8 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _conn.releaseSmp(_smpToken);
       _smpToken = null;
 
-      if (mounted && context.mounted) {
-        _showCompletionDialog();
+      if (mounted) {
+        setState(() => _dfuState = DFUScreenState.completed);
       }
     } catch (e) {
       debugPrint('[DFU] Update error: $e');
@@ -346,38 +353,6 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _dfuProgress = u.currentImageProgress;
       _imageProgress[u.currentImageIndex] = u.currentImageProgress * 100;
     });
-  }
-
-  /// Show completion dialog
-  void _showCompletionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D2D2D),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: Colors.green[400], size: 28),
-            const SizedBox(width: 12),
-            const Text('Update Complete', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-        content: const Text(
-          'Firmware update completed successfully. The device will restart.',
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ScrMainShell.returnToRoot(context);
-            },
-            child: Text('OK', style: TextStyle(color: HpiLegacyTheme.hpi4Color)),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Manual firmware selection
@@ -437,192 +412,130 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     try {
       await FirmwareUpdateService.clearCache();
       await _loadCacheSize();
-
       Snackbar.show(ABC.c, 'Firmware cache cleared', success: true);
     } catch (e) {
       Snackbar.show(ABC.c, 'Failed to clear cache: $e', success: false);
     }
   }
 
+  bool get _installing => _dfuState == DFUScreenState.installing;
+
+  /// Installing or completed — a focused card with no device/advanced chrome.
+  bool get _terminal =>
+      _dfuState == DFUScreenState.installing ||
+      _dfuState == DFUScreenState.completed;
+
+  // --- Presentation: redesigned firmware-update flow (handoff 5a) -----------
+
   @override
   Widget build(BuildContext context) {
     return ScaffoldMessenger(
       key: Snackbar.snackBarKeyC,
       child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: HpiColors.background,
         appBar: AppBar(
           elevation: 0,
-          backgroundColor: HpiLegacyTheme.hpi4AppBarColor,
+          backgroundColor: HpiColors.background,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            // A close (not back) affordance while installing — leaving mid-flow
+            // is unsafe, so it stays a deliberate tap that tears the flow down.
+            icon: Icon(_installing ? Symbols.close : Symbols.arrow_back,
+                color: HpiColors.onSurfaceBright),
             onPressed: () async {
+              final nav = Navigator.of(context);
               await _conn.disconnect();
-              if (mounted) {
-                Navigator.of(context).pop();
-              }
+              if (mounted) nav.maybePop();
             },
           ),
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'assets/healthypi_move.png',
-                height: 28,
-                fit: BoxFit.contain,
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Firmware Update',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          centerTitle: true,
+          title: Text('Firmware update', style: HpiText.appBarTitle),
+          centerTitle: false,
         ),
-        body: _buildBody(),
+        body: SafeArea(child: _buildBody()),
       ),
     );
   }
 
   Widget _buildBody() {
-    if (_dfuState == DFUScreenState.initializing || _dfuState == DFUScreenState.checkingUpdates) {
-      return _buildLoadingState();
+    if (_dfuState == DFUScreenState.initializing ||
+        _dfuState == DFUScreenState.checkingUpdates) {
+      return _loadingState();
     }
 
     if (_dfuState == DFUScreenState.error && _deviceMac == null) {
-      return _buildErrorState();
+      return _fatalErrorState();
     }
 
     return RefreshIndicator(
+      color: HpiColors.hr,
+      backgroundColor: HpiColors.surfaceContainer,
       onRefresh: _forceRefreshUpdateCheck,
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
-          _buildDeviceInfoCard(),
-          const SizedBox(height: 16),
-          _buildMainSection(),
-          const SizedBox(height: 16),
-          _buildAdvancedOptionsSection(),
-          const SizedBox(height: 16),
-          _buildDisconnectButton(),
+          if (!_terminal) ...[
+            _deviceCard(),
+            const SizedBox(height: 12),
+          ],
+          _mainSection(),
+          if (!_terminal) ...[
+            const SizedBox(height: 12),
+            _advancedOptions(),
+          ],
         ],
       ),
     );
   }
 
-  /// Loading state
-  Widget _buildLoadingState() {
+  Widget _loadingState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
+          const SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(HpiColors.hr),
+            ),
           ),
           const SizedBox(height: 20),
           Text(
-            _dfuState == DFUScreenState.initializing ? 'Connecting to device...' : 'Checking for updates...',
-            style: const TextStyle(fontSize: 16, color: Colors.white),
+            _dfuState == DFUScreenState.initializing
+                ? 'Connecting to device…'
+                : 'Checking for updates…',
+            style: HpiText.cardTitle,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
-            _dfuState == DFUScreenState.checkingUpdates ? 'Fetching latest firmware from GitHub' : '',
-            style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            _dfuState == DFUScreenState.checkingUpdates
+                ? 'Fetching the latest firmware from GitHub'
+                : 'Reading firmware version',
+            style: HpiText.supporting,
           ),
         ],
       ),
     );
   }
 
-  /// Error state
-  Widget _buildErrorState() {
+  Widget _fatalErrorState() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
-            const SizedBox(height: 20),
-            Text(
-              _errorMessage ?? 'An error occurred',
-              style: const TextStyle(fontSize: 16, color: Colors.white),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: HpiLegacyTheme.hpi4Color,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 32),
-              ),
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Go Back'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Device info card
-  Widget _buildDeviceInfoCard() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: HpiLegacyTheme.hpi4Color.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.watch, color: HpiLegacyTheme.hpi4Color, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _deviceName,
-                    style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Firmware: v$_currentFWVersion',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.green[700]!.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.green[700]!, width: 1),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(color: Colors.green[400], shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 6),
-                  Text('Connected', style: TextStyle(color: Colors.green[400], fontSize: 12, fontWeight: FontWeight.w600)),
-                ],
+            const Icon(Symbols.error, size: 56, color: HpiColors.error),
+            const SizedBox(height: 18),
+            Text(_errorMessage ?? 'An error occurred',
+                style: HpiText.body.copyWith(fontSize: 13),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: 200,
+              child: HpiFilledButton(
+                label: 'Go back',
+                onPressed: () => Navigator.of(context).maybePop(),
               ),
             ),
           ],
@@ -631,469 +544,455 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     );
   }
 
-  /// Main section - shows different content based on state
-  Widget _buildMainSection() {
+  /// Connected-device summary card (watch tile · FW · MAC · CONNECTED pill).
+  Widget _deviceCard() {
+    return HpiCard(
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF2A333B), width: 4),
+            ),
+            child: const Icon(Symbols.watch, size: 20, color: HpiColors.hr),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_deviceName, style: HpiText.cardTitle.copyWith(fontSize: 14.5)),
+                const SizedBox(height: 3),
+                Text('FW $_currentFWVersion · ${_deviceMac ?? "—"}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HpiText.mono.copyWith(fontSize: 10.5)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          const HpiPill(label: 'CONNECTED', color: HpiColors.steps),
+        ],
+      ),
+    );
+  }
+
+  Widget _mainSection() {
     switch (_dfuState) {
       case DFUScreenState.updateAvailable:
       case DFUScreenState.downloading:
       case DFUScreenState.readyToInstall:
-        return _isManualMode ? _buildManualFirmwareCard() : _buildUpdateAvailableCard();
-
+        return _isManualMode ? _manualCard() : _updateAvailableCard();
       case DFUScreenState.installing:
-        return _buildInstallingCard();
-
+        return _installingCard();
+      case DFUScreenState.completed:
+        return _completeCard();
       case DFUScreenState.upToDate:
-        return _buildUpToDateCard();
-
+        return _upToDateCard();
       case DFUScreenState.error:
-        return _buildErrorCard();
-
+        return _errorCard();
       default:
-        return Container();
+        return const SizedBox.shrink();
     }
   }
 
-  /// Update available card
-  Widget _buildUpdateAvailableCard() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.green[700]!.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.system_update_alt, color: Colors.green[400], size: 28),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Update Available', style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('Version ${_latestRelease?.version ?? "Unknown"}', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Version comparison
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[850],
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey[800]!, width: 1),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Column(
-                    children: [
-                      Text('Current', style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 8),
-                      Text('v$_currentFWVersion', style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  Icon(Icons.arrow_forward, color: HpiLegacyTheme.hpi4Color, size: 24),
-                  Column(
-                    children: [
-                      Text('Latest', style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
-                      const SizedBox(height: 8),
-                      Text('v${_latestRelease?.version ?? "Unknown"}', style: TextStyle(fontSize: 18, color: Colors.green[400], fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Release notes (expandable)
-            if (_latestRelease?.body != null && _latestRelease!.body.isNotEmpty)
-              Theme(
-                data: ThemeData.dark(),
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: Text('What\'s New', style: TextStyle(color: HpiLegacyTheme.hpi4Color, fontSize: 15, fontWeight: FontWeight.w600)),
-                  iconColor: HpiLegacyTheme.hpi4Color,
-                  collapsedIconColor: HpiLegacyTheme.hpi4Color,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.grey[850], borderRadius: BorderRadius.circular(8)),
-                      child: Text(_latestRelease!.body, style: TextStyle(color: Colors.grey[300], fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 20),
-
-            // Download progress
-            if (_dfuState == DFUScreenState.downloading) ...[
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Downloading firmware...', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  Text('${(_downloadProgress * 100).toStringAsFixed(0)}%', style: TextStyle(color: HpiLegacyTheme.hpi4Color, fontSize: 14, fontWeight: FontWeight.w600)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: _downloadProgress,
-                  minHeight: 8,
-                  valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
-                  backgroundColor: Colors.grey[800],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            // Action button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _dfuState == DFUScreenState.readyToInstall ? HpiLegacyTheme.hpi4Color : Colors.grey[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: _dfuState == DFUScreenState.readyToInstall ? 3 : 1,
-                ),
-                onPressed: _dfuState == DFUScreenState.readyToInstall ? _startFirmwareUpdate : null,
-                icon: Icon(_dfuState == DFUScreenState.downloading ? Icons.cloud_download : Icons.upgrade, size: 22),
-                label: Text(_dfuState == DFUScreenState.downloading ? 'Preparing Update...' : 'Install Update', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Manual firmware card (when loaded from file)
-  Widget _buildManualFirmwareCard() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.orange[700]!.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.folder_special, color: Colors.orange[400], size: 28),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Manual Firmware Loaded', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text('${_manifest?.files.length ?? 0} firmware images ready', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            // Warning banner
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange[900]!.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange[700]!, width: 1),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber, color: Colors.orange[400], size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text('Advanced mode: Ensure firmware compatibility', style: TextStyle(color: Colors.orange[300], fontSize: 13, fontWeight: FontWeight.w500)),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Install button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange[700],
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  elevation: 3,
-                ),
-                onPressed: _startFirmwareUpdate,
-                icon: const Icon(Icons.upgrade, size: 22),
-                label: const Text('Install Manual Firmware', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Installing card (DFU in progress)
-  Widget _buildInstallingCard() {
-    final totalImages = _manifest?.files.length ?? 1;
-    final currentImage = _currentImageIndex + 1;
-
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            CircularProgressIndicator(
-              value: _dfuProgress,
-              valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
-              strokeWidth: 6,
-            ),
-            const SizedBox(height: 20),
-            const Text('Installing Firmware...', style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              'Image $currentImage of $totalImages - ${(_dfuProgress * 100).toStringAsFixed(0)}% complete',
-              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-            ),
-            const SizedBox(height: 16),
-            Text('Do not disconnect the device', style: TextStyle(fontSize: 13, color: Colors.red[300])),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Up to date card
-  Widget _buildUpToDateCard() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Icon(Icons.check_circle, size: 64, color: Colors.green[400]),
-            const SizedBox(height: 16),
-            const Text('Firmware Up to Date', style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('Version $_currentFWVersion', style: TextStyle(fontSize: 15, color: Colors.grey[400])),
-            if (_latestRelease != null) ...[
-              const SizedBox(height: 4),
-              Text('Latest available: ${_latestRelease!.version}', style: TextStyle(fontSize: 13, color: Colors.grey[500])),
-            ],
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange[900]!.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.orange[400], size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(_errorMessage!, style: TextStyle(color: Colors.orange[300], fontSize: 12))),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Error card
-  Widget _buildErrorCard() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.red[400]),
-            const SizedBox(height: 16),
-            const Text('Update Error', style: TextStyle(fontSize: 20, color: Colors.white, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(_errorMessage ?? 'An error occurred', style: TextStyle(fontSize: 14, color: Colors.grey[400]), textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: HpiLegacyTheme.hpi4Color,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-              ),
-              onPressed: _forceRefreshUpdateCheck,
-              icon: const Icon(Icons.refresh, size: 20),
-              label: const Text('Retry', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Advanced options section
-  Widget _buildAdvancedOptionsSection() {
-    return Card(
-      elevation: 2,
-      color: const Color(0xFF2D2D2D),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Theme(
-        data: ThemeData.dark(),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          title: Row(
+  /// Update-available / downloading / ready-to-install card.
+  Widget _updateAvailableCard() {
+    final ready = _dfuState == DFUScreenState.readyToInstall;
+    final downloading = _dfuState == DFUScreenState.downloading;
+    return HpiCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Icon(Icons.settings, color: Colors.grey[400], size: 20),
-              const SizedBox(width: 12),
-              const Text('Advanced Options', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+              HpiIconSquare(
+                  icon: Symbols.system_update_alt,
+                  color: HpiColors.steps,
+                  size: 40,
+                  iconSize: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Update available', style: HpiText.appBarTitle),
+                    const SizedBox(height: 2),
+                    Text('Version ${_latestRelease?.version ?? "—"}',
+                        style: HpiText.supporting),
+                  ],
+                ),
+              ),
             ],
           ),
-          iconColor: Colors.grey[400],
-          collapsedIconColor: Colors.grey[400],
-          children: [
-            // Description
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange[900]!.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange[800]!.withOpacity(0.3), width: 1),
+          const SizedBox(height: 16),
+          _versionCompare(_currentFWVersion, _latestRelease?.version ?? '—'),
+          if (_latestRelease?.body.isNotEmpty ?? false) ...[
+            const SizedBox(height: 14),
+            _whatsNew(_latestRelease!.body),
+          ],
+          const SizedBox(height: 14),
+          Text(
+            downloading
+                ? 'Downloading firmware…'
+                : '${_manifest?.files.length ?? "—"} images · '
+                    'ready to install',
+            style: HpiText.mono.copyWith(fontSize: 10.5),
+          ),
+          if (downloading) ...[
+            const SizedBox(height: 8),
+            _linearBar(_downloadProgress),
+            const SizedBox(height: 4),
+            Text('${(_downloadProgress * 100).toStringAsFixed(0)}%',
+                style: HpiText.mono.copyWith(color: HpiColors.hr)),
+          ],
+          const SizedBox(height: 16),
+          HpiFilledButton(
+            label: ready ? 'Install update' : 'Preparing update…',
+            icon: ready ? Symbols.upgrade : Symbols.cloud_download,
+            onPressed: ready ? _startFirmwareUpdate : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _versionCompare(String current, String latest) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      decoration: BoxDecoration(
+        color: HpiColors.chipBg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _versionCol('CURRENT', current, HpiColors.onSurface),
+          const Icon(Symbols.arrow_forward, size: 20, color: HpiColors.hr),
+          _versionCol('LATEST', latest, HpiColors.steps),
+        ],
+      ),
+    );
+  }
+
+  Widget _versionCol(String label, String value, Color valueColor) {
+    return Column(
+      children: [
+        Text(label, style: HpiText.sectionLabel.copyWith(fontSize: 9)),
+        const SizedBox(height: 8),
+        Text(value, style: HpiText.statChip.copyWith(color: valueColor)),
+      ],
+    );
+  }
+
+  /// Collapsible release-notes ("What's new").
+  Widget _whatsNew(String body) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        dividerColor: Colors.transparent,
+        splashColor: Colors.transparent,
+      ),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text("What's new",
+            style: HpiText.cardTitle.copyWith(color: HpiColors.hr)),
+        iconColor: HpiColors.hr,
+        collapsedIconColor: HpiColors.hr,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: HpiColors.chipBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(body,
+                style: HpiText.body
+                    .copyWith(fontSize: 11.5, color: HpiColors.onSurfaceVariant)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _manualCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              HpiIconSquare(
+                  icon: Symbols.folder_special,
+                  color: HpiColors.temp,
+                  size: 40,
+                  iconSize: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Manual firmware loaded', style: HpiText.appBarTitle),
+                    const SizedBox(height: 2),
+                    Text('${_manifest?.files.length ?? 0} images ready',
+                        style: HpiText.supporting),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.orange[400], size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text('For advanced users: Install custom or beta firmware', style: TextStyle(color: Colors.orange[300], fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _noticeBanner(
+            Symbols.warning_amber,
+            HpiColors.temp,
+            'Advanced mode — ensure firmware compatibility with this watch.',
+          ),
+          const SizedBox(height: 16),
+          HpiFilledButton(
+            label: 'Install manual firmware',
+            icon: Symbols.upgrade,
+            color: HpiColors.temp,
+            onPressed: _startFirmwareUpdate,
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// DFU in progress — amber ring, image counter, "do not disconnect".
+  Widget _installingCard() {
+    final total = _manifest?.files.length ?? 1;
+    final current = _currentImageIndex + 1;
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          SizedBox(
+            width: 120,
+            height: 120,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 120,
+                  height: 120,
+                  child: CircularProgressIndicator(
+                    value: _dfuProgress,
+                    strokeWidth: 8,
+                    backgroundColor: HpiColors.dividerStrong,
+                    valueColor:
+                        const AlwaysStoppedAnimation<Color>(HpiColors.hr),
                   ),
-                ],
-              ),
+                ),
+                Text('${(_dfuProgress * 100).toStringAsFixed(0)}%',
+                    style: HpiText.heroNumberSm.copyWith(fontSize: 30)),
+              ],
             ),
+          ),
+          const SizedBox(height: 20),
+          Text('Installing firmware', style: HpiText.appBarTitle),
+          const SizedBox(height: 6),
+          Text('Image $current of $total',
+              style: HpiText.mono.copyWith(fontSize: 11)),
+          const SizedBox(height: 16),
+          _linearBar(_dfuProgress),
+          const SizedBox(height: 18),
+          _noticeBanner(
+            Symbols.warning,
+            HpiColors.error,
+            'Do not disconnect the watch while installing.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Update complete — green check, WAS→NOW chip, Done → root.
+  Widget _completeCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Symbols.check_circle, size: 84, color: HpiColors.steps),
+          const SizedBox(height: 16),
+          Text('Update complete', style: HpiText.screenTitle.copyWith(fontSize: 20)),
+          const SizedBox(height: 8),
+          Text('The watch will restart and reconnect.',
+              style: HpiText.body.copyWith(fontSize: 12.5),
+              textAlign: TextAlign.center),
+          if (_latestRelease != null) ...[
             const SizedBox(height: 16),
+            _versionCompare(_currentFWVersion, _latestRelease!.version),
+          ],
+          const SizedBox(height: 20),
+          HpiFilledButton(
+            label: 'Done',
+            onPressed: () => ScrMainShell.returnToRoot(context),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Manual firmware selection button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: HpiLegacyTheme.hpi4Color,
-                  side: BorderSide(color: HpiLegacyTheme.hpi4Color, width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: _dfuState != DFUScreenState.installing ? _onLoadFirmwareManual : null,
-                icon: const Icon(Icons.folder_open, size: 20),
-                label: const Text('Select Firmware File (.zip)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ),
+  Widget _upToDateCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Symbols.check_circle, size: 64, color: HpiColors.steps),
+          const SizedBox(height: 14),
+          Text('Firmware up to date',
+              style: HpiText.screenTitle.copyWith(fontSize: 20)),
+          const SizedBox(height: 8),
+          Text('Version $_currentFWVersion',
+              style: HpiText.body.copyWith(fontSize: 13)),
+          if (_latestRelease != null) ...[
+            const SizedBox(height: 4),
+            Text('Latest available: ${_latestRelease!.version}',
+                style: HpiText.supporting),
+          ],
+          if (_errorMessage != null) ...[
+            const SizedBox(height: 16),
+            _noticeBanner(Symbols.info, HpiColors.temp, _errorMessage!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _errorCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Symbols.error, size: 64, color: HpiColors.error),
+          const SizedBox(height: 14),
+          Text('Update error', style: HpiText.screenTitle.copyWith(fontSize: 20)),
+          const SizedBox(height: 8),
+          Text(_errorMessage ?? 'An error occurred',
+              style: HpiText.body.copyWith(fontSize: 12.5),
+              textAlign: TextAlign.center),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: 180,
+            child: HpiFilledButton(
+              label: 'Retry',
+              icon: Symbols.refresh,
+              onPressed: _forceRefreshUpdateCheck,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Advanced options: manual .zip, force re-check, clear cache.
+  Widget _advancedOptions() {
+    return HpiCard(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          dividerColor: Colors.transparent,
+          splashColor: Colors.transparent,
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          leading: const Icon(Symbols.settings,
+              size: 20, color: HpiColors.onSurfaceVariant),
+          title: Text('Advanced options', style: HpiText.cardTitle),
+          iconColor: HpiColors.onSurfaceVariant,
+          collapsedIconColor: HpiColors.onSurfaceVariant,
+          children: [
+            _noticeBanner(Symbols.info, HpiColors.temp,
+                'For advanced users: install custom or beta firmware.'),
             const SizedBox(height: 12),
-
-            // Force re-check button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey[400],
-                  side: BorderSide(color: Colors.grey[700]!, width: 1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: _dfuState != DFUScreenState.installing ? _forceRefreshUpdateCheck : null,
-                icon: const Icon(Icons.refresh, size: 20),
-                label: const Text('Force Check for Updates', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Clear cache button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey[400],
-                  side: BorderSide(color: Colors.grey[700]!, width: 1),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: _dfuState != DFUScreenState.installing ? _clearFirmwareCache : null,
-                icon: const Icon(Icons.cleaning_services, size: 20),
-                label: Text(
-                  'Clear Cache (${FirmwareUpdateService.formatCacheSize(_cacheSize)})',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ),
-            ),
+            _outlinedAction(Symbols.folder_open, 'Select firmware file (.zip)',
+                _installing ? null : _onLoadFirmwareManual),
+            const SizedBox(height: 10),
+            _outlinedAction(Symbols.refresh, 'Force check for updates',
+                _installing ? null : _forceRefreshUpdateCheck),
+            const SizedBox(height: 10),
+            _outlinedAction(
+                Symbols.cleaning_services,
+                'Clear cache (${FirmwareUpdateService.formatCacheSize(_cacheSize)})',
+                _installing ? null : _clearFirmwareCache),
           ],
         ),
       ),
     );
   }
 
-  /// Disconnect button
-  Widget _buildDisconnectButton() {
+  // --- small shared pieces --------------------------------------------------
+
+  Widget _linearBar(double value) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: LinearProgressIndicator(
+        value: value,
+        minHeight: 6,
+        backgroundColor: HpiColors.dividerStrong,
+        valueColor: const AlwaysStoppedAnimation<Color>(HpiColors.hr),
+      ),
+    );
+  }
+
+  Widget _noticeBanner(IconData icon, Color color, String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: HpiMetricColors.tint(color, 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: HpiMetricColors.tint(color, 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text,
+                style: HpiText.body.copyWith(fontSize: 12, color: color)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _outlinedAction(IconData icon, String label, VoidCallback? onTap) {
+    final disabled = onTap == null;
+    final fg = disabled ? HpiColors.disabled : HpiColors.onSurfaceBright;
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red[400],
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          elevation: 2,
+      height: 46,
+      child: Material(
+        color: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: HpiColors.dividerStrong),
         ),
-        onPressed: () async {
-          await _conn.disconnect();
-          if (mounted) {
-            ScrMainShell.returnToRoot(context);
-          }
-        },
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.cancel_outlined, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Disconnect', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-          ],
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: fg),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Text(label,
+                        style: HpiText.cardTitle
+                            .copyWith(fontSize: 13, color: fg))),
+              ],
+            ),
+          ),
         ),
       ),
     );

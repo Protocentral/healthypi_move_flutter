@@ -13,7 +13,6 @@ import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/database_helper.dart';
-import '../theme/hpi_legacy_theme.dart';
 
 /// Clean, focused screen for BLE device scanning and pairing.
 /// Purpose: scan for HealthyPi Move devices and pair them. Can optionally connect
@@ -49,6 +48,10 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
   StreamSubscription<AvailabilityState>? _adapterStateSubscription;
   Timer? _scanTimeout;
 
+  /// The currently paired device's id, so the results list can mark it PAIRED
+  /// and offer "Connect" instead of "Pair" (the reconnect/switch surface, 5c).
+  String? _pairedDeviceId;
+
   static const String _nameMatch = 'healthypi move';
 
   List<BleDevice> get _scanResults {
@@ -66,6 +69,11 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
     });
     UniversalBle.getBluetoothAvailabilityState().then((state) {
       if (mounted) setState(() => _adapterState = state);
+    });
+
+    // Note the already-paired device so the list can mark it and offer Connect.
+    DeviceManager.getPairedDevice().then((d) {
+      if (mounted) setState(() => _pairedDeviceId = d?.macAddress);
     });
 
     // Start scanning immediately.
@@ -133,16 +141,14 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2D2D2D),
+        backgroundColor: HpiColors.surfaceContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            Icon(Icons.warning, color: Colors.orange, size: 28),
-            SizedBox(width: 12),
+            const Icon(Symbols.warning, color: HpiColors.temp, size: 26),
+            const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                'Replace Paired Device?',
-                style: TextStyle(color: Colors.white, fontSize: 18),
-              ),
+              child: Text('Replace paired device?', style: HpiText.appBarTitle),
             ),
           ],
         ),
@@ -150,72 +156,51 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'You are about to pair a new device.',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            SizedBox(height: 16),
+            Text('You are about to pair a new device.',
+                style: HpiText.body.copyWith(fontSize: 13, color: HpiColors.onSurface)),
+            const SizedBox(height: 16),
             Container(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
-                borderRadius: BorderRadius.circular(8),
+                color: HpiMetricColors.tint(HpiColors.error, 0.12),
+                border: Border.all(color: HpiMetricColors.tint(HpiColors.error, 0.35)),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.red, size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Data Loss Warning',
-                        style: TextStyle(
-                          color: Colors.red,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      const Icon(Symbols.info, color: HpiColors.error, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Data loss warning',
+                          style: HpiText.cardTitle.copyWith(color: HpiColors.error)),
                     ],
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
                     'All health data from "$existingDeviceName" will be permanently deleted.',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                    style: HpiText.body.copyWith(fontSize: 12.5),
                   ),
                 ],
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 14),
             Text(
-              'To keep this data, cancel and export it first from Settings > Export Data.',
-              style: TextStyle(
-                color: Colors.grey[400],
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-              ),
+              'To keep this data, cancel and export it first from Settings › Export data.',
+              style: HpiText.supporting,
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: Colors.grey[400], fontSize: 16),
-            ),
+            child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: Text(
-              'Delete & Pair New Device',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
+            child: const Text('Delete & pair new device',
+                style: TextStyle(color: HpiColors.error)),
           ),
         ],
       ),
@@ -232,27 +217,23 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Card(
-            color: Color(0xFF2D2D2D),
-            child: Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(HpiLegacyTheme.hpi4Color),
+        builder: (context) => Center(
+          child: HpiCard(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(HpiColors.hr),
                   ),
-                  SizedBox(height: 16),
-                  Text(
-                    'Connecting...',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                Text('Connecting…', style: HpiText.cardTitle),
+              ],
             ),
           ),
         ),
@@ -401,6 +382,8 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                               return _FoundDeviceCard(
                                 device: d,
                                 dfu: _isDfu(d),
+                                paired: _pairedDeviceId != null &&
+                                    d.deviceId == _pairedDeviceId,
                                 onPair: () => _connectToDevice(
                                     d.deviceId,
                                     (d.name?.isNotEmpty ?? false)
@@ -537,18 +520,23 @@ class _RadarPainter extends CustomPainter {
       old.t != t || old.active != active;
 }
 
-/// A discovered device (handoff 1g). Normal devices get the amber-bordered
-/// "Pair" card; a device advertising in bootloader mode is dimmed and labelled
-/// DFU instead of offering a pair action.
+/// A discovered device (handoff 1g / 5c). The already-paired watch gets a
+/// green-bordered card with a PAIRED chip + "Connect"; a new Move gets the
+/// amber-bordered "Pair" card; a device advertising in bootloader mode is
+/// dimmed and labelled DFU instead of offering an action.
 class _FoundDeviceCard extends StatelessWidget {
   const _FoundDeviceCard({
     required this.device,
     required this.dfu,
     required this.onPair,
+    this.paired = false,
   });
 
   final BleDevice device;
   final bool dfu;
+
+  /// True when this is the currently-paired device (reconnect/switch surface).
+  final bool paired;
   final VoidCallback onPair;
 
   @override
@@ -560,11 +548,12 @@ class _FoundDeviceCard extends StatelessWidget {
     final meta = dfu
         ? 'bootloader mode${rssi != null ? " · $rssi dBm" : ""}'
         : '${device.deviceId}${rssi != null ? " · $rssi dBm" : ""}';
+    final accent = paired ? HpiColors.steps : HpiColors.hr;
 
     return Opacity(
       opacity: dfu ? 0.55 : 1,
       child: HpiCard(
-        highlightColor: dfu ? null : HpiMetricColors.tint(HpiColors.hr, 0.35),
+        highlightColor: dfu ? null : HpiMetricColors.tint(accent, 0.35),
         child: Row(
           children: [
             Container(
@@ -573,13 +562,13 @@ class _FoundDeviceCard extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: HpiMetricColors.tint(
-                    dfu ? HpiColors.onSurfaceVariant : HpiColors.hr, 0.14),
+                    dfu ? HpiColors.onSurfaceVariant : accent, 0.14),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 dfu ? Symbols.system_update : Symbols.watch,
                 size: 20,
-                color: dfu ? HpiColors.onSurfaceVariant : HpiColors.hr,
+                color: dfu ? HpiColors.onSurfaceVariant : accent,
               ),
             ),
             const SizedBox(width: 12),
@@ -587,7 +576,20 @@ class _FoundDeviceCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: HpiText.cardTitle.copyWith(fontSize: 14.5)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: HpiText.cardTitle.copyWith(fontSize: 14.5)),
+                      ),
+                      if (paired && !dfu) ...[
+                        const SizedBox(width: 8),
+                        const HpiPill(label: 'PAIRED', color: HpiColors.steps),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 3),
                   Text(meta,
                       maxLines: 1,
@@ -603,17 +605,17 @@ class _FoundDeviceCard extends StatelessWidget {
               SizedBox(
                 height: 38,
                 child: Material(
-                  color: HpiColors.hr,
+                  color: accent,
                   borderRadius: BorderRadius.circular(999),
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
                     onTap: onPair,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 20),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Center(
                         child: Text(
-                          'Pair',
-                          style: TextStyle(
+                          paired ? 'Connect' : 'Pair',
+                          style: const TextStyle(
                             fontFamily: 'Manrope',
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
