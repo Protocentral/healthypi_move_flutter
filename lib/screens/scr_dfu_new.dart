@@ -9,10 +9,11 @@ import 'package:flutter/material.dart';
 
 import 'scr_main_shell.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
+import '../ble/device_info.dart';
 import '../ble/firmware_updater.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
-import '../utils/ble_manager.dart';
+import '../utils/ble_dis_transport.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
 import '../utils/firmware_update_service.dart';
@@ -185,18 +186,15 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     }
   }
 
-  /// Read current firmware version from device
+  /// Read current firmware version from device (DIS 0x180A → 0x2A26).
   Future<void> _readCurrentFirmwareVersion() async {
-    try {
-      // Device Information Service 0x180A → Firmware Revision String 0x2A26.
-      final fwVersion =
-          await BleManager.instance.read(_deviceMac!, "180a", "2a26");
-      _currentFWVersion = String.fromCharCodes(fwVersion).trim();
-      debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
-    } catch (e) {
-      debugPrint('[DFU] Failed to read firmware version: $e');
-      _currentFWVersion = "Unknown";
-    }
+    final reader = DeviceInfoReader(
+      BleDisTransport(_deviceMac!),
+      log: (m) => debugPrint('[DFU] $m'),
+    );
+    final version = await reader.readFirmwareVersion();
+    _currentFWVersion = version ?? 'Unknown';
+    debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
   }
 
   /// Download firmware in background

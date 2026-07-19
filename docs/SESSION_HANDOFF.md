@@ -15,11 +15,12 @@ the sequenced plan + per-phase status in [ROADMAP.md](ROADMAP.md).
 |---|---|---|
 | `flutter analyze` | **182 issues, 0 errors** | Was 434 before the legacy-screen deletion. **182 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
-| `flutter test` | **24 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
+| `flutter test` | **33 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
 | `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
 | `flutter test test/smp_lock_test.dart` | 6 pass | SMP arbitration |
 | `flutter test test/bpt_calibrator_test.dart` | 8 pass | BPT state machine |
-| `flutter test test/firmware_updater_test.dart` | 8 pass | DFU install state machine (new) |
+| `flutter test test/firmware_updater_test.dart` | 8 pass | DFU install state machine |
+| `flutter test test/device_info_test.dart` | 9 pass | DIS reader + version gate (new) |
 
 Run `flutter pub get` and `(cd packages/healthypi_healthy_store && dart pub get)`
 first on a new machine.
@@ -69,15 +70,18 @@ screen a thin view over its extracted state machine (`BptCalibrator` /
   `scr_dfu_new.dart` is now its view via an `_ImgMgmtUploadTransport` adapter.
   8 tests. **Decided it belongs in the SDK, not `mcumgr_dart`** (the pure-Dart wire
   stays put; a Flutter `ChangeNotifier` can't live in a pure-Dart pkg).
+- ✅ **Device-info DIS read** reconstituted (`lib/ble/device_info.dart`) — a
+  pure-Dart `DeviceInfoReader` behind a `DisTransport` seam, widened to the full
+  standard DIS set, `isAtLeast` gate carried over. `BleDisTransport` adapter binds
+  it to `BleManager`; the DFU screen's inline fw-revision read now routes through
+  it. 9 tests. Needs a device only to confirm the exact DIS strings.
 - ⏳ **Live-stream decoders** — promote `LiveSignal.decode` (now in
   `lib/screens/scr_live.dart`, not the deleted `scr_live_stream.dart`) + sample
   models into the SDK. **Blocked:** live-characteristic sample rates / scaling are
   documented nowhere — needs a hardware pass.
 - ⏳ **Ship the package** — Flutter package (universal_ble forces it), moves the
   durable surface in (transport + connection + SMP lock, streaming, DFU, device
-  info, re-exported Health Store). Gated on the two items above.
-- ⚠️ **Device-info gap:** `device_info_service.dart` was deleted as orphaned in the
-  legacy cleanup; the SDK's "device info" surface needs a DIS read reconstituted.
+  info, re-exported Health Store). Gated on the live decoders.
 
 ## Recommended next step
 

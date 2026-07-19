@@ -189,9 +189,15 @@ BPT is extracted (below); the rest is pending.
       screen (the updater takes a lazy byte loader, so it never touches the FS).
 - [ ] Ships as a Flutter package (`universal_ble` forces it) — one package, no
       `_ble` companion.
-- [ ] **Device-info gap:** `device_info_service.dart` (the consolidated DIS read)
-      was deleted as orphaned in the legacy-screen cleanup. The SDK's "device info"
-      surface needs a DIS read reconstituted before packaging.
+- [x] **Device-info gap closed:** reconstituted as `lib/ble/device_info.dart` — a
+      pure-Dart `DeviceInfoReader` behind a `DisTransport` seam, widened from the
+      deleted service's firmware-revision-only read to the full standard DIS set
+      (manufacturer/model/serial/hw/fw/sw), each field tolerated on failure. The
+      `isAtLeast` version-gate policy carried over verbatim. A `BleDisTransport`
+      adapter (`lib/utils/ble_dis_transport.dart`) binds the seam to `BleManager`;
+      `scr_dfu_new.dart`'s inline `180a/2a26` read now goes through it. 9 tests
+      (`test/device_info_test.dart`). **Needs a device only to confirm the exact
+      DIS strings the firmware reports** — structure + policy are validated here.
 
 ---
 
