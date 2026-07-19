@@ -13,7 +13,7 @@ the sequenced plan + per-phase status in [ROADMAP.md](ROADMAP.md).
 
 | Check | Expected | Notes |
 |---|---|---|
-| `flutter analyze` | **158 issues, 0 errors** | Was 182 before the 5a/5b/5c redesign retired the last legacy-themed screens' `withOpacity`/hardcoded-color lint. **158 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
+| `flutter analyze` | **149 issues, 0 errors** | Was 182 before the 5a/5b/5c redesign retired the last legacy-themed screens' `withOpacity`/hardcoded-color lint. **149 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
 | `flutter test` | **33 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
 | `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
@@ -28,12 +28,14 @@ first on a new machine.
 ## Working-tree state
 
 The 3 device-management-flow screens are now **redesigned onto the token system**
-(handoff 5a/5b/5c) — `hpi_legacy_theme` is gone from all of them (only `globals.dart`
-still imports it). Each stays a thin **view** over its extracted state machine:
-`scr_dfu_new` (5a) over `FirmwareUpdater`, `scr_bpt_calibration` (5b) over
+(handoff 5a/5b/5c), committed. Each stays a thin **view** over its extracted state
+machine: `scr_dfu_new` (5a) over `FirmwareUpdater`, `scr_bpt_calibration` (5b) over
 `BptCalibrator`, `scr_device_scan` (5c) restyled with a paired-device Connect/PAIRED
 distinction; `1h` device page gained the "Blood pressure calibration · NOT SET" row
-→ 5b. Logic untouched. Uncommitted until the commit below lands.
+→ 5b. Logic untouched. The redesign retired the last legacy-themed screens, so
+`lib/theme/hpi_legacy_theme.dart`, `lib/widgets/loading_indicator.dart`,
+`lib/utils/sizeConfig.dart` and the orphaned BPT opcode constants in `globals.dart`
+were all deleted as dead code (analyze 182 → **149**).
 
 ---
 

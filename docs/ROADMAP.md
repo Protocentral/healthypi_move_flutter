@@ -22,7 +22,7 @@ stays until those close out.
 2. **`ACK` is destructive.** Commit to SQLite, persist the cursor, *then* ack.
    Never ack `hello.head`. Never ack an unpersisted `syncAll()` cursor.
 
-Regression tripwires (current baselines): `flutter analyze` → **0 errors, 158
+Regression tripwires (current baselines): `flutter analyze` → **0 errors, 149
 issues** (was 434; legacy-screen deletion + the 5a/5b/5c redesign off `hpi_legacy_theme`
 removed the rest — should not increase). `flutter build bundle` → exit 0.
 `flutter test test/smp_lock_test.dart` → 6 pass. `flutter test test/synthetic_banner_test.dart` → 2 pass.

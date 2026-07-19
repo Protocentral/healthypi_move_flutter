@@ -19,7 +19,7 @@ Two rules that override convenience:
 1. **Migrate per *flow*, not per *file*.** Each BLE plugin holds its own OS-level connection, so a screen that *uses* a link can't move while the screen that *establishes* it hasn't.
 2. **`HpiHs.ackDurablyStored()` and `recordsAck()` are destructive.** The device drops the acked data. Commit to SQLite and persist the cursor first — never ack `hello.head`, never ack an unpersisted `syncAll()` cursor.
 
-Before claiming you broke something, check DECISIONS §12: `flutter test` already fails (the `widget_test.dart` smoke test pumps the app and hits a `StateError` in `HealthRepository.loadHome` with no DB in the test env — the shell is the `/` entry), and `flutter analyze` reports pre-existing lint with 0 errors. The count is a tripwire — it should **not increase**. It is currently **158** (was 182 before the device-flow redesign — 5a DFU / 5b BPT-cal / 5c device-scan — moved the last 3 screens off `hpi_legacy_theme`; 434 before the legacy-screen deletion; 445 before that). See the ROADMAP header for the full baseline tripwires.
+Before claiming you broke something, check DECISIONS §12: `flutter test` already fails (the `widget_test.dart` smoke test pumps the app and hits a `StateError` in `HealthRepository.loadHome` with no DB in the test env — the shell is the `/` entry), and `flutter analyze` reports pre-existing lint with 0 errors. The count is a tripwire — it should **not increase**. It is currently **149** (was 182 before the device-flow redesign — 5a DFU / 5b BPT-cal / 5c device-scan — moved the last 3 screens off `hpi_legacy_theme`; 434 before the legacy-screen deletion; 445 before that). See the ROADMAP header for the full baseline tripwires.
 
 ## Repository layout
 
@@ -32,7 +32,7 @@ The SMP/MCUmgr core is the published [`mcumgr_dart`](https://pub.dev/packages/mc
 ```bash
 flutter pub get
 flutter run                       # attach a real device; the app is useless in a simulator (needs BLE)
-flutter analyze                   # ~185 pre-existing lint infos/warnings, 0 errors
+flutter analyze                   # ~149 pre-existing lint infos/warnings, 0 errors
 flutter test                      # see caveat below
 flutter build bundle              # quickest full-app Dart compile, no platform SDK needed
 

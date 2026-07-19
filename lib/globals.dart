@@ -6,9 +6,9 @@
 /// file-prefix keys.
 ///
 /// This file used to be 554 lines and held three unrelated things: these
-/// constants, ~20 TextStyles/Colors, and two widget classes
-/// (BatteryLevelPainter, LoadingIndicator). Those moved to
-/// `lib/theme/hpi_legacy_theme.dart` and `lib/widgets/`. It now imports no
+/// constants, ~20 TextStyles/Colors, and two widget classes. The styles/colors
+/// and widgets (a legacy theme + loading indicator) were retired with the last
+/// legacy-themed screens (the 5a/5b/5c device-flow redesign). It now imports no
 /// Flutter library at all, which is the point: reading a service UUID should
 /// not drag in material.dart.
 class hPi4Global {
@@ -89,9 +89,8 @@ class hPi4Global {
   // not a custom CMD opcode. The old 0x41 WISER_CMD_SET_DEVICE_TIME path is gone
   // with the legacy CMD GATT service.
 
-  static const List<int> StartBPTCal = [0x61];
-  static const List<int> SetBPTCalMode = [0x60];
-  static const List<int> EndBPTCal = [0x62];
+  // BPT calibration opcodes (0x60 set-mode / 0x61 start-point / 0x62 end) now
+  // live with the state machine that owns them, in lib/ble/bpt_calibrator.dart.
 
   // Research Recording Commands (Long-term multi-signal recording)
   static const List<int> REC_CONFIGURE = [0x70];
