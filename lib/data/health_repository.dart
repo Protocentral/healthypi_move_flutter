@@ -197,57 +197,120 @@ class StressEdaView {
   final int? hrvWindows;
 }
 
-/// One blood-pressure spot reading — a paired systolic/diastolic estimate the
-/// watch produced from finger PPG after calibration. An `HsClass.event`: a
-/// discrete timestamped reading, never averaged into a per-hour value.
+/// One blood-pressure **wellness estimate** — a paired systolic/diastolic value
+/// the watch produced from finger PPG after the baseline was set. An
+/// `HsClass.event`: a discrete timestamped estimate, never averaged into a
+/// per-hour value.
+///
+/// The chip (MAX32664D) returns single sys/dia values, but a raw single number
+/// overstates PPG precision. So the raw values are **stored, not displayed** —
+/// the UI shows the derived [sysRange]/[diaRange] instead. This is both honest
+/// and the WHOOP/FDA-consistent framing (design 6a): a *range*, not a cuff
+/// reading, and never a clinical category.
 class BpReading {
   const BpReading({
     required this.at,
-    required this.systolic,
-    required this.diastolic,
+    required this.sysRaw,
+    required this.diaRaw,
     this.quality,
   });
 
   final DateTime at;
-  final int systolic;
-  final int diastolic;
 
-  /// Firmware quality byte for the reading, when present (contact/confidence).
+  /// Raw single values from the algorithm — internal only, not shown directly.
+  final int sysRaw;
+  final int diaRaw;
+
+  /// Firmware quality/confidence byte, when present.
   final int? quality;
+
+  /// Per-reading half-width (mmHg) from reported confidence, anchored to the
+  /// algorithm's ~±5–7 mmHg validation error vs cuff: a clean reading is tighter
+  /// (±3), a flagged one wider (±6). The exact confidence encoding is not
+  /// firmware-pinned yet, so this maps off the quality byte with a safe default.
+  int get halfWidth {
+    final q = quality;
+    if (q == null) return 5;
+    if ((q & HsQuality.valid) != 0 && (q & HsQuality.onSkin) != 0) return 3;
+    if (q == 0) return 6;
+    return 5;
+  }
+
+  /// Displayed estimate as a `[lo, hi]` mmHg range (the raw value ± [halfWidth]).
+  List<int> get sysRange => [sysRaw - halfWidth, sysRaw + halfWidth];
+  List<int> get diaRange => [diaRaw - halfWidth, diaRaw + halfWidth];
+
+  /// Combined estimate range for compact rows, e.g. `118–124/76–80`.
+  String get rangeLabel =>
+      '${sysRange[0]}–${sysRange[1]}/${diaRange[0]}–${diaRange[1]}';
 }
 
-/// Everything the Blood-pressure screen (6a/6b) needs in one load. BP is
-/// `HsClass.event` — sparse spot readings, listed with timestamps, never
-/// averaged. The screen never fabricates a value: no readings means no numbers.
+/// Everything the Blood-pressure screen (6a/6b) needs in one load.
+///
+/// **Relative wellness trend, not a measurement** (design 6a/6b, WHOOP/FDA
+/// framing). BP is `HsClass.event` — sparse estimates, never averaged into a
+/// fake daily value. The view exposes only *relative* framing built on the
+/// user's own [usualSys]/[usualDia] baseline; it deliberately provides **no**
+/// clinical category, threshold, or "normal/high" verdict. The screen never
+/// fabricates a value: no readings means no numbers.
 class BloodPressureView {
-  const BloodPressureView({this.calibratedAt, this.readings = const []});
+  const BloodPressureView({this.baselineSetAt, this.readings = const []});
 
-  /// When BPT calibration last completed **on this phone** (persisted on 5b's
-  /// completion), or null. A *local hint only* — the watch is the real source of
-  /// truth and may be calibrated with this null (calibrated earlier, on another
-  /// phone, or before this flag existed). Drives the "Calibrated X ago" footer,
-  /// not the 6a/6b gate. See `docs/FIRMWARE_HANDOFF_BPT_HS.md` §12.
-  final DateTime? calibratedAt;
+  /// When the BP baseline was last set (BPT calibration completed) **on this
+  /// phone**, or null. A *local hint only* — drives the "Baseline set X ago"
+  /// footer, not the 6a/6b gate. See `docs/FIRMWARE_HANDOFF_BPT_HS.md` §12.
+  final DateTime? baselineSetAt;
 
-  /// Spot readings, newest first.
+  /// Estimates, newest first.
   final List<BpReading> readings;
 
-  /// This phone saw the calibration complete. Informational — not the gate.
-  bool get isCalibrated => calibratedAt != null;
+  /// This phone recorded the baseline being set. Informational — not the gate.
+  bool get hasBaseline => baselineSetAt != null;
   bool get hasReadings => readings.isNotEmpty;
 
-  /// True → render 6a (values); false → render 6b (gate).
-  ///
-  /// Gated on **device evidence, not the local flag**: the watch only emits
-  /// BP-spot readings *after* it is calibrated, so any synced reading proves
-  /// calibration — even when this phone never ran 5b. (Until firmware reports
-  /// calibration state directly — §12 of the handoff — a calibrated watch with
-  /// no readings synced yet still shows 6b, because there is nothing to display.)
+  /// True → render 6a (set-up); false → render 6b (gate). Gated on **device
+  /// evidence**: the watch only emits estimates once a baseline is set, so any
+  /// synced estimate proves set-up even when this phone never ran 5b.
   bool get showValues => hasReadings;
 
   BpReading? get latest => readings.isEmpty ? null : readings.first;
 
-  /// Readings within [range] of now (for the segmented chart window).
+  /// Short relative status of the latest estimate for compact rows: `Typical` /
+  /// `Higher` / `Lower` (for you), or null when not set up. Relative and
+  /// personal — never a clinical category.
+  String? get latestRelativeShort {
+    final r = latest;
+    if (r == null) return null;
+    if (readings.length < 2) return 'Typical';
+    final d = deviation(r);
+    if (d <= -5) return 'Lower';
+    if (d >= 5) return 'Higher';
+    return 'Typical';
+  }
+
+  /// "Your usual" — the median raw sys/dia over the estimate history. The
+  /// personal reference the relative framing is built on (never a clinical
+  /// target).
+  int get usualSys => _median(readings.map((r) => r.sysRaw));
+  int get usualDia => _median(readings.map((r) => r.diaRaw));
+
+  /// A reading's deviation from "your usual", in mmHg (mean of sys+dia shift).
+  double deviation(BpReading r) =>
+      ((r.sysRaw - usualSys) + (r.diaRaw - usualDia)) / 2.0;
+
+  /// How far ±[_usualSpan] mmHg from "your usual" the continuous gradient spans.
+  static const double _usualSpan = 12.0;
+
+  /// Latest estimate's position on the continuous "vs your usual" scale, 0..1
+  /// (0.5 = at your usual; lower/higher shifts toward the ends). Relative and
+  /// personal — there are no clinical thresholds anywhere in this mapping.
+  double get todayVsUsual {
+    final r = latest;
+    if (r == null || readings.length < 2) return 0.5;
+    return (0.5 + deviation(r) / (2 * _usualSpan)).clamp(0.0, 1.0);
+  }
+
+  /// Estimates within [range] of now (for the segmented chart window).
   List<BpReading> inRange(TrendRange range) {
     final cutoff = switch (range) {
       TrendRange.day => const Duration(days: 1),
@@ -257,6 +320,12 @@ class BloodPressureView {
     };
     final since = DateTime.now().subtract(cutoff);
     return readings.where((r) => r.at.isAfter(since)).toList();
+  }
+
+  static int _median(Iterable<int> xs) {
+    final list = xs.toList()..sort();
+    if (list.isEmpty) return 0;
+    return list[list.length ~/ 2];
   }
 }
 
@@ -343,12 +412,12 @@ class HealthRepository {
               at: DateTime.fromMillisecondsSinceEpoch((r['ts'] as int) * 1000,
                       isUtc: true)
                   .toLocal(),
-              systolic: (r['sys'] as num).round(),
-              diastolic: (r['dia'] as num).round(),
+              sysRaw: (r['sys'] as num).round(),
+              diaRaw: (r['dia'] as num).round(),
               quality: (r['quality'] as num?)?.toInt(),
             ))
         .toList();
-    return BloodPressureView(calibratedAt: calAt, readings: readings);
+    return BloodPressureView(baselineSetAt: calAt, readings: readings);
   }
 
   /// Latest manual EDA spot-check metric for the home / trends cards.

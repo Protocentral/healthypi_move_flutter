@@ -9,18 +9,21 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 
-/// Blood-pressure values + trend (handoff 6a/6b) — the screen that *displays*
-/// the BPT estimates the watch produces after calibration (5b only calibrates).
+/// Blood pressure — **relative wellness trend, not a measurement** (handoff
+/// 6a/6b). The display counterpart to the 5b baseline set-up.
 ///
-/// BP is an **`HsClass.event`** metric: sparse spot readings, listed with
-/// timestamps, never averaged into a fake per-hour value or drawn as a
-/// candlestick. The screen is **gated on calibration state**: 6a when calibrated
-/// with ≥1 reading, else the 6b not-calibrated gate.
+/// **Regulatory framing is the whole design (WHOOP/FDA, Jul 2025 → Jun 2026).**
+/// The line that makes BP a regulated medical device is *clinical classification*,
+/// not the presence of numbers. So this screen:
+///  - shows an estimated mmHg **range**, never a single cuff-style value;
+///  - compares today to the user's **own usual** on a **continuous** gradient —
+///    no Normal/Elevated/Stage buckets, no diagnostic threshold lines, no shaded
+///    "healthy corridor";
+///  - uses **relative** language ("higher *for you*", never "high blood pressure")
+///    and strong wellness disclaimers.
 ///
-/// **Non-diagnostic by hard requirement** — the watch is not a certified medical
-/// device, so this never asserts a clinical BP category. Healthy ranges show
-/// only *indirectly* (a shaded reference corridor + faint boundary ticks) with a
-/// plain-language explanation and a repeated "not a medical device" disclaimer.
+/// Gated on baseline state: 6a when a baseline + ≥1 estimate exist, else 6b. It
+/// never fabricates a value.
 class ScrBloodPressure extends StatefulWidget {
   const ScrBloodPressure({super.key});
 
@@ -34,7 +37,8 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   TrendRange _range = TrendRange.week;
 
   static const _disclaimer =
-      'Cuffless estimate from finger PPG · not a medical device';
+      'Wellness estimate from finger PPG · shown as a range, not a cuff '
+      'measurement · not for diagnosis — talk to a clinician about any concerns';
 
   @override
   void initState() {
@@ -47,10 +51,8 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
     if (mounted) setState(() => _view = v);
   }
 
-  Future<void> _calibrate() async {
+  Future<void> _setUp() async {
     await Navigator.of(context).pushNamed('/device/bpt-calibration');
-    // Returning from calibration may have flipped the calibrated flag / added
-    // readings — reload so the gate re-evaluates.
     if (mounted) _load();
   }
 
@@ -80,21 +82,21 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
       body: SafeArea(
         child: view == null
             ? const Center(child: CircularProgressIndicator(color: HpiColors.bpSys))
-            : (view.showValues ? _calibrated(view) : _notCalibrated(view)),
+            : (view.showValues ? _setUpView(view) : _gate(view)),
       ),
     );
   }
 
-  // --- 6a — calibrated (has readings) ---------------------------------------
+  // --- 6a — set up (has estimates) ------------------------------------------
 
-  Widget _calibrated(BloodPressureView view) {
+  Widget _setUpView(BloodPressureView view) {
     final latest = view.latest!;
     final windowed = view.inRange(_range);
-    final stats = _BpStats.from(windowed.isEmpty ? view.readings : windowed);
+    final source = windowed.isEmpty ? view.readings : windowed;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        _hero(latest),
+        _hero(view, latest),
         const SizedBox(height: 14),
         HpiSegmentedControl(
           segments: const ['Day', 'Week', 'Month', '6M'],
@@ -103,22 +105,23 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
           accent: HpiColors.bpSys,
         ),
         const SizedBox(height: 14),
-        _trendCard(windowed),
+        _rangeChartCard(view, windowed),
         const SizedBox(height: 12),
-        _whereThisSitsCard(latest),
+        _vsUsualCard(view),
         const SizedBox(height: 12),
-        _statChips(stats),
+        _statChips(view, source),
         const SizedBox(height: 12),
-        _recentReadingsCard(view.readings),
+        _recentEstimatesCard(view),
         const SizedBox(height: 12),
-        _calibrationFooter(view.calibratedAt),
+        _baselineFooter(view.baselineSetAt),
         const SizedBox(height: 14),
         _disclaimerLine(),
       ],
     );
   }
 
-  Widget _hero(BpReading latest) {
+  Widget _hero(BloodPressureView view, BpReading latest) {
+    final rel = _relOf(view.deviation(latest));
     return HpiCard(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,126 +134,139 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text('${latest.systolic}',
-                        style: HpiText.heroNumberSm.copyWith(color: HpiColors.bpSys)),
+                    Text(_fmtRange(latest.sysRange),
+                        style:
+                            HpiText.heroNumberSm.copyWith(color: HpiColors.bpSys, fontSize: 28)),
                     Text(' / ',
-                        style: HpiText.heroNumberSm.copyWith(color: HpiColors.muted)),
-                    Text('${latest.diastolic}',
-                        style: HpiText.heroNumberSm.copyWith(color: HpiColors.bpDia)),
-                    Text('  mmHg',
-                        style: HpiText.body.copyWith(fontSize: 12.5)),
+                        style: HpiText.heroNumberSm
+                            .copyWith(color: HpiColors.muted, fontSize: 28)),
+                    Text(_fmtRange(latest.diaRange),
+                        style:
+                            HpiText.heroNumberSm.copyWith(color: HpiColors.bpDia, fontSize: 28)),
+                    Text('  mmHg est.', style: HpiText.body.copyWith(fontSize: 11.5)),
                   ],
                 ),
                 const SizedBox(height: 8),
-                const HpiPill(label: 'TYPICAL RANGE', color: HpiColors.steps),
+                HpiPill(label: rel.pill, color: rel.color),
               ],
             ),
           ),
           const SizedBox(width: 10),
-          Text('last reading\n${_absTime(latest.at)}',
-              textAlign: TextAlign.right,
-              style: HpiText.supporting),
+          Text('estimated\n${_relDayTime(latest.at)}',
+              textAlign: TextAlign.right, style: HpiText.supporting),
         ],
       ),
     );
   }
 
-  Widget _trendCard(List<BpReading> windowed) {
+  /// Estimated-range chart: plain numeric mmHg axis, a faint neutral "your
+  /// usual" band, and two connected-dot series. **No clinical target guides, no
+  /// shaded healthy corridor** — that is the exact thing that crosses the line.
+  Widget _rangeChartCard(BloodPressureView view, List<BpReading> windowed) {
     return HpiCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                  child: Text('SYSTOLIC / DIASTOLIC · ${_rangeLabel()}',
-                      style: HpiText.sectionLabel)),
-              Text(windowed.isEmpty ? 'no readings' : 'in range',
-                  style: HpiText.supporting.copyWith(
-                      color: windowed.isEmpty
-                          ? HpiColors.muted
-                          : HpiColors.steps)),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const HpiSectionLabel('ESTIMATED RANGE · LAST 7 DAYS'),
+          const SizedBox(height: 10),
           if (windowed.length < 2)
             _sparseNote(windowed.length)
           else
             SizedBox(
-              height: 140,
+              height: 150,
               child: CustomPaint(
-                size: const Size(double.infinity, 140),
-                painter: _BpTrendPainter(windowed),
+                size: const Size(double.infinity, 150),
+                painter: _BpRangePainter(
+                  windowed,
+                  usualSys: view.usualSys,
+                  usualDia: view.usualDia,
+                ),
               ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               _legendDot(HpiColors.bpSys, 'Systolic'),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               _legendDot(HpiColors.bpDia, 'Diastolic'),
-              const Spacer(),
-              Text('shaded = typical corridor',
-                  style: HpiText.supporting.copyWith(fontSize: 9.5)),
+              const SizedBox(width: 12),
+              _legendDot(HpiColors.faint, 'Your usual'),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Daily estimate from finger PPG, shown as a range — not a cuff reading.',
+            style: HpiText.supporting.copyWith(fontSize: 10),
           ),
         ],
       ),
     );
   }
 
-  Widget _sparseNote(int n) {
-    return Container(
-      height: 90,
-      alignment: Alignment.center,
-      child: Text(
-        n == 0
-            ? 'No readings in this range.\nTake a reading on the watch.'
-            : 'Just one reading in this range —\ntake more to see a trend.',
-        textAlign: TextAlign.center,
-        style: HpiText.body.copyWith(fontSize: 12),
-      ),
-    );
-  }
-
-  /// The non-clinical classifier: a 4-segment bar with the current reading's
-  /// position marked, faint reference ticks, and a plain-language explanation.
-  /// It never asserts a medical BP category.
-  Widget _whereThisSitsCard(BpReading latest) {
-    final idx = _categoryIndex(latest.systolic, latest.diastolic);
+  /// The continuous "vs your usual" gradient — the WHOOP-style relative scale.
+  /// A single gradient with a marker where today sits; end labels only. **No
+  /// discrete segments, no category names, no mmHg ticks.**
+  Widget _vsUsualCard(BloodPressureView view) {
+    final pos = view.todayVsUsual;
     return HpiCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const HpiSectionLabel('WHERE THIS SITS'),
-          const SizedBox(height: 4),
-          SizedBox(
-            height: 40,
-            child: CustomPaint(
-              size: const Size(double.infinity, 40),
-              painter: _ClassifierBarPainter(idx),
-            ),
-          ),
+          const HpiSectionLabel('TODAY vs YOUR USUAL'),
+          const SizedBox(height: 12),
+          LayoutBuilder(builder: (context, c) {
+            final w = c.maxWidth;
+            return SizedBox(
+              height: 22,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    height: 10,
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(5),
+                      gradient: const LinearGradient(colors: [
+                        HpiColors.steps, // lower for you
+                        Color(0xFF8FC93A),
+                        Color(0xFFF5C24B),
+                        HpiColors.temp,
+                        HpiColors.error, // higher for you
+                      ]),
+                    ),
+                  ),
+                  // Marker where today sits on the personal scale.
+                  Positioned(
+                    left: (pos * w - 6).clamp(0.0, w - 12),
+                    top: 0,
+                    child: Container(
+                      width: 12,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: HpiColors.onSurface,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(color: HpiColors.background, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              for (var i = 0; i < _catLabels.length; i++)
-                Text(_catLabels[i],
-                    style: HpiText.supporting.copyWith(
-                        fontSize: 9.5,
-                        color: i == idx ? _catColors[i] : HpiColors.muted,
-                        fontWeight:
-                            i == idx ? FontWeight.w800 : FontWeight.w600)),
+              Text('Lower for you', style: HpiText.supporting.copyWith(fontSize: 10)),
+              Text('Higher for you', style: HpiText.supporting.copyWith(fontSize: 10)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
-            'Reference boundaries (≈ under 120/80 at rest), not thresholds the '
-            'watch judges you against. General guidance, not a diagnosis — '
-            'confirm anything concerning with a validated cuff and a clinician.',
+            'A continuous, personal scale of how today compares with your own '
+            'usual — a wellness estimate, not a clinical category or diagnosis.',
             style: HpiText.body.copyWith(fontSize: 11.5, height: 1.45),
           ),
         ],
@@ -258,25 +274,27 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
     );
   }
 
-  Widget _statChips(_BpStats s) {
+  Widget _statChips(BloodPressureView view, List<BpReading> source) {
+    final s = _BpStats.from(view, source);
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-            child: _bpStatChip('7-DAY AVG',
-                '${s.avgSys}/${s.avgDia}', HpiColors.onSurface)),
+            child: _statChip(
+                '7-DAY EST. AVG', s.avgLabel, HpiColors.onSurface)),
         const SizedBox(width: 10),
         Expanded(
-            child: _bpStatChip(
-                'HIGHEST', '${s.maxSys}/${s.maxDia}', HpiColors.bpSys)),
+            child: _statChip(
+                'HIGHEST FOR YOU', s.highestWhen, HpiColors.bpSys)),
         const SizedBox(width: 10),
         Expanded(
-            child: _bpStatChip(
-                'LOWEST', '${s.minSys}/${s.minDia}', HpiColors.bpDia)),
+            child: _statChip(
+                'DAY-TO-DAY SWING', s.swingLabel, HpiColors.bpDia)),
       ],
     );
   }
 
-  Widget _bpStatChip(String label, String value, Color color) {
+  Widget _statChip(String label, String value, Color color) {
     return HpiCard(
       radius: 16,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
@@ -284,16 +302,16 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(value,
-              style: HpiText.statChip.copyWith(color: color, fontSize: 17)),
+              style: HpiText.statChip.copyWith(color: color, fontSize: 16)),
           const SizedBox(height: 4),
-          Text(label, style: HpiText.sectionLabel.copyWith(fontSize: 9)),
+          Text(label, style: HpiText.sectionLabel.copyWith(fontSize: 8.5)),
         ],
       ),
     );
   }
 
-  Widget _recentReadingsCard(List<BpReading> readings) {
-    final show = readings.take(8).toList();
+  Widget _recentEstimatesCard(BloodPressureView view) {
+    final show = view.readings.take(8).toList();
     return HpiCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
       child: Column(
@@ -301,19 +319,20 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
         children: [
           Row(
             children: [
-              const Expanded(child: HpiSectionLabel('RECENT READINGS')),
-              Text('spot · on watch', style: HpiText.supporting.copyWith(fontSize: 9.5)),
+              const Expanded(child: HpiSectionLabel('RECENT ESTIMATES')),
+              Text('spot · on watch',
+                  style: HpiText.supporting.copyWith(fontSize: 9.5)),
             ],
           ),
-          for (final r in show) _readingRow(r),
+          for (final r in show) _estimateRow(view, r),
           const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  Widget _readingRow(BpReading r) {
-    final idx = _categoryIndex(r.systolic, r.diastolic);
+  Widget _estimateRow(BloodPressureView view, BpReading r) {
+    final rel = _relOf(view.deviation(r));
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
@@ -321,34 +340,32 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
           Container(
             width: 8,
             height: 8,
-            decoration:
-                BoxDecoration(color: _catColors[idx], shape: BoxShape.circle),
+            decoration: BoxDecoration(color: rel.color, shape: BoxShape.circle),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_relTime(r.at), style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
+                Text(_relDayTime(r.at),
+                    style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
                 const SizedBox(height: 2),
-                Text('${_catLabels[idx]} · finger PPG',
+                Text('${rel.label} · finger PPG',
                     style: HpiText.supporting.copyWith(fontSize: 10)),
               ],
             ),
           ),
-          Text('${r.systolic}/${r.diastolic}',
-              style: HpiText.valueSm.copyWith(fontSize: 15)),
+          Text('${_fmtRange(r.sysRange)}/${_fmtRange(r.diaRange)}',
+              style: HpiText.valueSm.copyWith(fontSize: 13.5)),
         ],
       ),
     );
   }
 
-  Widget _calibrationFooter(DateTime? calibratedAt) {
-    // calibratedAt is null when the watch was calibrated elsewhere / earlier —
-    // we're showing 6a on the strength of synced readings, not this local flag.
-    final title = calibratedAt == null
-        ? 'Calibrated on this watch'
-        : 'Calibrated ${_relTime(calibratedAt)}';
+  Widget _baselineFooter(DateTime? baselineSetAt) {
+    final title = baselineSetAt == null
+        ? 'Baseline set on this watch'
+        : 'Baseline set ${_relTime(baselineSetAt)}';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -364,18 +381,17 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
+                Text(title, style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
                 const SizedBox(height: 2),
-                Text('Recalibrate ~monthly for accuracy',
+                Text('Refresh with a cuff ~monthly to keep it accurate',
                     style: HpiText.supporting),
               ],
             ),
           ),
           GestureDetector(
-            onTap: _calibrate,
+            onTap: _setUp,
             behavior: HitTestBehavior.opaque,
-            child: Text('Recalibrate',
+            child: Text('Refresh',
                 style: HpiText.cardTitle
                     .copyWith(color: HpiColors.hr, fontSize: 12.5)),
           ),
@@ -384,17 +400,15 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
     );
   }
 
-  // --- 6b — not calibrated (the gate) ---------------------------------------
+  // --- 6b — not set up (the gate) -------------------------------------------
 
-  Widget _notCalibrated(BloodPressureView view) {
-    // Two sub-states behind the 6b gate: never calibrated (the design's gate),
-    // or this phone recorded a calibration but no reading has synced yet — don't
-    // nag "calibrate" in the latter; it's already done.
-    final awaitingReading = view.isCalibrated;
+  Widget _gate(BloodPressureView view) {
+    // Second sub-state: this phone recorded a baseline but no estimate synced yet.
+    final awaiting = view.hasBaseline;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
       children: [
-        _gateHero(awaitingReading ? 'NO READINGS YET' : 'NOT CALIBRATED'),
+        _gateHero(awaiting ? 'NO ESTIMATES YET' : 'NOT SET'),
         const SizedBox(height: 14),
         HpiCard(
           padding: const EdgeInsets.all(20),
@@ -406,25 +420,26 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
                   size: 64,
                   iconSize: 34),
               const SizedBox(height: 16),
-              Text(awaitingReading ? 'Waiting for a reading' : 'Calibrate to enable BP',
+              Text(awaiting ? 'Waiting for an estimate' : 'Set up blood-pressure trends',
                   style: HpiText.screenTitle.copyWith(fontSize: 18),
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text(
-                awaitingReading
-                    ? 'This watch is calibrated. Take a spot reading on the '
-                        'watch, then sync — your estimates will appear here.'
-                    : 'The watch estimates blood pressure from finger PPG. It '
-                        'needs 3 reference cuff readings before it can produce a '
-                        'value — a one-time setup, repeated roughly monthly.',
+                awaiting
+                    ? 'Your baseline is set. Take a reading on the watch, then '
+                        'sync — your estimated range will appear here.'
+                    : 'Setting up teaches the watch your personal baseline. After '
+                        'that it shows a daily estimated range and how today '
+                        'compares with your own usual — a wellness estimate, not a '
+                        'cuff measurement. Refresh roughly monthly.',
                 style: HpiText.body.copyWith(fontSize: 12.5, height: 1.45),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 18),
               HpiFilledButton(
-                label: awaitingReading ? 'Recalibrate' : 'Calibrate now',
-                icon: awaitingReading ? Symbols.tune : Symbols.play_arrow,
-                onPressed: _calibrate,
+                label: awaiting ? 'Refresh baseline' : 'Set up now',
+                icon: awaiting ? Symbols.tune : Symbols.play_arrow,
+                onPressed: _setUp,
               ),
             ],
           ),
@@ -445,22 +460,17 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   Widget _gateHero(String pillLabel) {
     return HpiCard(
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          HpiIconSquare(
+              icon: Symbols.show_chart,
+              color: HpiColors.onSurfaceVariant,
+              size: 44,
+              iconSize: 22,
+              dim: true),
+          const SizedBox(width: 14),
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text('--',
-                    style: HpiText.heroNumberSm.copyWith(color: HpiColors.disabled)),
-                Text(' / ',
-                    style: HpiText.heroNumberSm.copyWith(color: HpiColors.disabled)),
-                Text('--',
-                    style: HpiText.heroNumberSm.copyWith(color: HpiColors.disabled)),
-                Text('  mmHg', style: HpiText.body.copyWith(fontSize: 12.5)),
-              ],
-            ),
+            child: Text('Not set up yet',
+                style: HpiText.cardTitle.copyWith(fontSize: 15)),
           ),
           HpiPill(label: pillLabel),
         ],
@@ -481,6 +491,20 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
 
   // --- shared ---------------------------------------------------------------
 
+  Widget _sparseNote(int n) {
+    return Container(
+      height: 96,
+      alignment: Alignment.center,
+      child: Text(
+        n == 0
+            ? 'No estimates in this range.\nTake a reading on the watch.'
+            : 'Just one estimate in this range —\ntake more to see a trend.',
+        textAlign: TextAlign.center,
+        style: HpiText.body.copyWith(fontSize: 12),
+      ),
+    );
+  }
+
   Widget _legendDot(Color color, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -498,27 +522,27 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   Widget _disclaimerLine() {
     return Center(
       child: Text(_disclaimer,
-          style: HpiText.supporting.copyWith(fontSize: 10), textAlign: TextAlign.center),
+          style: HpiText.supporting.copyWith(fontSize: 10),
+          textAlign: TextAlign.center),
     );
   }
 
-  String _rangeLabel() => switch (_range) {
-        TrendRange.day => 'LAST 24 H',
-        TrendRange.week => 'LAST 7 DAYS',
-        TrendRange.month => 'THIS MONTH',
-        TrendRange.sixMonths => 'LAST 6 MONTHS',
-      };
+  String _fmtRange(List<int> r) => '${r[0]}–${r[1]}';
 
-  String _absTime(DateTime t) {
-    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    final m = t.minute.toString().padLeft(2, '0');
+  String _relDayTime(DateTime t) {
+    final now = DateTime.now();
     final ap = t.hour < 12 ? 'AM' : 'PM';
-    return '$h:$m $ap';
+    final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
+    if (sameDay) {
+      final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+      return '$h:${t.minute.toString().padLeft(2, '0')} $ap';
+    }
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[t.weekday - 1]} $ap';
   }
 
   String _relTime(DateTime t) {
     final d = DateTime.now().difference(t);
-    if (d.inMinutes < 1) return 'just now';
     if (d.inMinutes < 60) return '${d.inMinutes} m ago';
     if (d.inHours < 24) return '${d.inHours} h ago';
     if (d.inDays < 30) return '${d.inDays} d ago';
@@ -526,89 +550,112 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   }
 }
 
-// --- Non-clinical categorisation (reference boundaries, not a diagnosis) -----
+// --- Relative (personal) status — never a clinical category ------------------
 
-const _catLabels = ['Typical', 'Higher', 'Elevated', 'Very high'];
-const _catColors = [HpiColors.steps, HpiColors.hr, HpiColors.temp, HpiColors.error];
+/// A reading's position relative to the user's *own* usual. Deliberately only
+/// three soft, personal buckets with "for you" language — this is not a clinical
+/// classification (no Normal/Elevated/Stage), which is the WHOOP/FDA line.
+enum _Rel {
+  lower('Lower for you', 'LOWER FOR YOU', HpiColors.bpDia),
+  typical('Typical for you', 'TYPICAL FOR YOU', HpiColors.steps),
+  higher('Higher for you', 'HIGHER FOR YOU', HpiColors.temp);
 
-/// Map a reading to one of four descriptive bands using reference boundaries
-/// (≈120/80, 130, 140/90). Deliberately **not** a clinical classification —
-/// labels are plain-language ("Higher", not "Stage 1 hypertension").
-int _categoryIndex(int sys, int dia) {
-  if (sys >= 140 || dia >= 90) return 3; // Very high
-  if (sys >= 130 || dia >= 80) return 2; // Elevated
-  if (sys >= 120) return 1; // Higher
-  return 0; // Typical
+  const _Rel(this.label, this.pill, this.color);
+  final String label;
+  final String pill;
+  final Color color;
 }
 
-/// Windowed min/avg/max for the three stat chips.
+/// ±5 mmHg vs your usual is "typical for you"; beyond that, lower/higher. A
+/// personal comparison, not a diagnostic threshold.
+_Rel _relOf(double deviation) {
+  if (deviation <= -5) return _Rel.lower;
+  if (deviation >= 5) return _Rel.higher;
+  return _Rel.typical;
+}
+
+/// The three stat chips, all framed relatively.
 class _BpStats {
   const _BpStats({
-    required this.avgSys,
-    required this.avgDia,
-    required this.minSys,
-    required this.minDia,
-    required this.maxSys,
-    required this.maxDia,
+    required this.avgLabel,
+    required this.highestWhen,
+    required this.swingLabel,
   });
 
-  final int avgSys, avgDia, minSys, minDia, maxSys, maxDia;
+  final String avgLabel; // "120/78" — a plain average, no verdict
+  final String highestWhen; // "Tue AM" — when, not a scary number
+  final String swingLabel; // Small / Moderate / Large — qualitative, personal
 
-  factory _BpStats.from(List<BpReading> rs) {
-    if (rs.isEmpty) {
-      return const _BpStats(
-          avgSys: 0, avgDia: 0, minSys: 0, minDia: 0, maxSys: 0, maxDia: 0);
+  factory _BpStats.from(BloodPressureView view, List<BpReading> source) {
+    if (source.isEmpty) {
+      return const _BpStats(avgLabel: '—', highestWhen: '—', swingLabel: '—');
     }
-    var sumS = 0, sumD = 0, minS = 999, minD = 999, maxS = 0, maxD = 0;
-    for (final r in rs) {
-      sumS += r.systolic;
-      sumD += r.diastolic;
-      minS = r.systolic < minS ? r.systolic : minS;
-      minD = r.diastolic < minD ? r.diastolic : minD;
-      maxS = r.systolic > maxS ? r.systolic : maxS;
-      maxD = r.diastolic > maxD ? r.diastolic : maxD;
+    var sumS = 0, sumD = 0;
+    BpReading highest = source.first;
+    double bestDev = view.deviation(highest);
+    for (final r in source) {
+      sumS += r.sysRaw;
+      sumD += r.diaRaw;
+      final dev = view.deviation(r);
+      if (dev > bestDev) {
+        bestDev = dev;
+        highest = r;
+      }
     }
+    final avgS = (sumS / source.length).round();
+    final avgD = (sumD / source.length).round();
+
+    // Day-to-day swing: qualitative spread of the raw systolic values. Kept
+    // fuzzy on purpose — a number here would invite a clinical reading.
+    final sys = source.map((r) => r.sysRaw).toList()..sort();
+    final spread = sys.last - sys.first;
+    final swing = spread < 8 ? 'Small' : (spread < 16 ? 'Moderate' : 'Large');
+
     return _BpStats(
-      avgSys: (sumS / rs.length).round(),
-      avgDia: (sumD / rs.length).round(),
-      minSys: minS,
-      minDia: minD,
-      maxSys: maxS,
-      maxDia: maxD,
+      avgLabel: '$avgS/$avgD',
+      highestWhen: _dayAmPm(highest.at),
+      swingLabel: swing,
     );
+  }
+
+  static String _dayAmPm(DateTime t) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return '${days[t.weekday - 1]} ${t.hour < 12 ? 'AM' : 'PM'}';
   }
 }
 
-/// The dual connected-dot series (systolic rose / diastolic blue) over a
-/// shaded typical corridor (120↔80) with dashed reference guides. Event-class:
-/// dots joined by lines, never bars/candles.
-class _BpTrendPainter extends CustomPainter {
-  _BpTrendPainter(this.readings);
+/// The estimated-range chart: two connected-dot series (systolic rose /
+/// diastolic blue) over a **faint neutral "your usual" band**. Plain numeric
+/// mmHg axis. **No clinical target guides, no shaded healthy corridor, no
+/// threshold lines** — that framing is what crosses the regulatory line.
+class _BpRangePainter extends CustomPainter {
+  _BpRangePainter(this.readings, {required this.usualSys, required this.usualDia});
 
-  /// Newest-first from the repo; drawn oldest→newest left→right.
-  final List<BpReading> readings;
+  final List<BpReading> readings; // newest-first
+  final int usualSys;
+  final int usualDia;
 
-  static const double _min = 60, _max = 140; // mmHg y-range
+  static const double _min = 60, _max = 140;
 
   @override
   void paint(Canvas canvas, Size size) {
     const leftPad = 6.0, rightLabel = 30.0, topPad = 6.0, botPad = 18.0;
     final plotW = size.width - leftPad - rightLabel;
     final plotH = size.height - topPad - botPad;
-    double y(num v) => topPad + (_max - v) / (_max - _min) * plotH;
+    double y(num v) => topPad + (_max - v.clamp(_min, _max)) / (_max - _min) * plotH;
 
-    // Shaded typical corridor between 120 and 80.
+    // Faint neutral "your usual" bands (±3 mmHg) — personal reference, NOT a
+    // clinical target. No dashes, no labels that imply a threshold.
+    final band = Paint()..color = const Color(0x0BFFFFFF);
     canvas.drawRect(
-      Rect.fromLTRB(leftPad, y(120), leftPad + plotW, y(80)),
-      Paint()..color = const Color(0x0BFFFFFF),
-    );
+        Rect.fromLTRB(leftPad, y(usualSys + 3), leftPad + plotW, y(usualSys - 3)),
+        band);
+    canvas.drawRect(
+        Rect.fromLTRB(leftPad, y(usualDia + 3), leftPad + plotW, y(usualDia - 3)),
+        band);
 
-    // Dashed reference guides at 120 (rose) and 80 (blue), + right labels.
-    _dashedLine(canvas, leftPad, leftPad + plotW, y(120),
-        HpiColors.bpSys.withValues(alpha: 0.5));
-    _dashedLine(canvas, leftPad, leftPad + plotW, y(80),
-        HpiColors.bpDia.withValues(alpha: 0.5));
-    for (final v in [140, 120, 80, 60]) {
+    // Plain numeric axis — a scale is fine; there are no target guide-lines.
+    for (final v in [140, 120, 100, 80, 60]) {
       final tp = TextPainter(
         text: TextSpan(
             text: '$v',
@@ -632,101 +679,23 @@ class _BpTrendPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round;
       final path = Path();
       for (var i = 0; i < n; i++) {
-        final p = Offset(x(i), y(sel(ordered[i]).clamp(_min, _max)));
-        if (i == 0) {
-          path.moveTo(p.dx, p.dy);
-        } else {
-          path.lineTo(p.dx, p.dy);
-        }
+        final p = Offset(x(i), y(sel(ordered[i])));
+        i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
       }
       canvas.drawPath(path, line);
       final dot = Paint()..color = color;
       for (var i = 0; i < n; i++) {
-        canvas.drawCircle(
-            Offset(x(i), y(sel(ordered[i]).clamp(_min, _max))), 3.5, dot);
+        canvas.drawCircle(Offset(x(i), y(sel(ordered[i]))), 3.5, dot);
       }
     }
 
-    series((r) => r.diastolic, HpiColors.bpDia);
-    series((r) => r.systolic, HpiColors.bpSys);
-  }
-
-  void _dashedLine(Canvas canvas, double x0, double x1, double y, Color color) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1;
-    const dash = 4.0, gap = 4.0;
-    for (var x = x0; x < x1; x += dash + gap) {
-      canvas.drawLine(
-          Offset(x, y), Offset((x + dash).clamp(x0, x1), y), paint);
-    }
+    series((r) => r.diaRaw, HpiColors.bpDia);
+    series((r) => r.sysRaw, HpiColors.bpSys);
   }
 
   @override
-  bool shouldRepaint(_BpTrendPainter old) => old.readings != readings;
-}
-
-/// The 4-segment "where this sits" bar with a marker triangle over the active
-/// segment and faint reference boundary ticks (120/80 · 130 · 140/90).
-class _ClassifierBarPainter extends CustomPainter {
-  _ClassifierBarPainter(this.activeIndex);
-  final int activeIndex;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const barH = 8.0;
-    final barTop = 10.0;
-    final segW = size.width / 4;
-    for (var i = 0; i < 4; i++) {
-      final r = Rect.fromLTWH(i * segW + 1, barTop, segW - 2, barH);
-      final rr = RRect.fromRectAndCorners(
-        r,
-        topLeft: Radius.circular(i == 0 ? 4 : 0),
-        bottomLeft: Radius.circular(i == 0 ? 4 : 0),
-        topRight: Radius.circular(i == 3 ? 4 : 0),
-        bottomRight: Radius.circular(i == 3 ? 4 : 0),
-      );
-      canvas.drawRRect(
-        rr,
-        Paint()
-          ..color = i == activeIndex
-              ? _catColors[i]
-              : _catColors[i].withValues(alpha: 0.28),
-      );
-    }
-
-    // Marker triangle over the active segment's centre.
-    final mx = activeIndex * segW + segW / 2;
-    final tri = Path()
-      ..moveTo(mx, barTop - 2)
-      ..lineTo(mx - 5, barTop - 9)
-      ..lineTo(mx + 5, barTop - 9)
-      ..close();
-    canvas.drawPath(tri, Paint()..color = HpiColors.onSurface);
-
-    // Faint boundary ticks under the bar at the 3 segment joins.
-    const ticks = ['120/80', '130', '140/90'];
-    for (var i = 1; i < 4; i++) {
-      final tx = i * segW;
-      canvas.drawLine(
-        Offset(tx, barTop + barH),
-        Offset(tx, barTop + barH + 4),
-        Paint()..color = HpiColors.faint,
-      );
-      final tp = TextPainter(
-        text: TextSpan(
-            text: ticks[i - 1],
-            style: const TextStyle(
-                fontFamily: 'JetBrains Mono',
-                fontSize: 8,
-                color: HpiColors.faint)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(tx - tp.width / 2, barTop + barH + 6));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ClassifierBarPainter old) =>
-      old.activeIndex != activeIndex;
+  bool shouldRepaint(_BpRangePainter old) =>
+      old.readings != readings ||
+      old.usualSys != usualSys ||
+      old.usualDia != usualDia;
 }

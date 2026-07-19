@@ -392,26 +392,23 @@ class _ScrHomeState extends State<ScrHome> {
     ]);
   }
 
-  /// Blood-pressure spot readings — a dedicated event-class screen (6a/6b).
-  /// Shows the last reading when calibrated, else the not-calibrated gate.
+  /// Blood-pressure relative-wellness estimates — a dedicated screen (6a/6b).
+  /// Shows the relative status + estimated range when set up, else "not set up".
   Widget _bpRow() {
     final bp = _bp;
-    final calibrated = bp?.showValues ?? false;
-    final latest = bp?.latest;
+    final setUp = bp?.showValues ?? false;
     return HpiListRow(
       icon: Symbols.monitor_heart,
       iconColor: HpiColors.bpSys,
       title: 'Blood pressure',
-      supporting: calibrated ? 'spot · finger PPG' : 'not calibrated',
-      dim: !calibrated,
+      supporting: setUp
+          ? '${bp!.latestRelativeShort} · ${bp.latest!.rangeLabel}'
+          : 'not set up',
+      dim: !setUp,
       onTap: () async {
         await Navigator.of(context).pushNamed('/blood-pressure');
         _load();
       },
-      trailing: calibrated
-          ? Text('${latest!.systolic}/${latest.diastolic}',
-              style: HpiText.statChip.copyWith(color: HpiColors.bpSys))
-          : Text('--', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
     );
   }
 

@@ -125,29 +125,24 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
     );
   }
 
-  /// Blood pressure — a dedicated event-class screen (6a/6b), not a single-scalar
-  /// trend detail, so it always pushes its own screen. Shows the last reading
-  /// when calibrated, else "not calibrated".
+  /// Blood pressure — a dedicated relative-wellness screen (6a/6b), not a
+  /// single-scalar trend detail, so it always pushes its own screen. Shows the
+  /// relative status + estimated range when set up, else "not set up".
   Widget _bpRow() {
     final bp = _bp;
-    final calibrated = bp?.showValues ?? false;
-    final latest = bp?.latest;
+    final setUp = bp?.showValues ?? false;
     return HpiListRow(
       icon: Symbols.monitor_heart,
       iconColor: HpiColors.bpSys,
       title: 'Blood pressure',
-      supporting: calibrated
-          ? 'spot · ${_relative(latest!.at)}'
-          : 'not calibrated',
-      dim: !calibrated,
+      supporting: setUp
+          ? '${bp!.latestRelativeShort} · ${bp.latest!.rangeLabel}'
+          : 'not set up',
+      dim: !setUp,
       onTap: () async {
         await Navigator.of(context).pushNamed('/blood-pressure');
-        _load(); // calibrating/taking a reading can flip the row
+        _load(); // setting up / taking an estimate can flip the row
       },
-      trailing: calibrated
-          ? Text('${latest!.systolic}/${latest.diastolic}',
-              style: HpiText.statChip.copyWith(color: HpiColors.bpSys))
-          : Text('--', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
     );
   }
 
