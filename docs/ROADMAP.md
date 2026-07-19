@@ -150,7 +150,7 @@ the remaining steps are held pending review and the repo going public.
 - [ ] Fix OpenView's `hs.ack(head)` call (`device_manager_screen.dart:1273`) to
       use `ackDurablyStored` with a persisted cursor (separate repo).
 
-## Phase 8 — `healthypi_move` SDK ⏳ in progress (1 of 4 done)
+## Phase 8 — `healthypi_move` SDK ⏳ in progress (2 of 4 done)
 
 Both preconditions — Phase 5 deleting the legacy protocol (DECISIONS §11) and
 hardware validation — are **met**. The durable surface is: transport +
@@ -173,8 +173,20 @@ BPT is extracted (below); the rest is pending.
       MCUmgr group (0x1000) for consistency is a later adapter swap — SMP has no
       server push, so the continuous contact/progress feedback would stay on a
       notify characteristic (or be polled) regardless. See DECISIONS (BPT/HPI_HS).
-- [ ] Wrap `ImgMgmt` + manifest into a `FirmwareUpdater`; the DFU protocol core is
-      already outside the widget.
+- [x] Wrap `ImgMgmt` into a `FirmwareUpdater` (`lib/ble/firmware_updater.dart`) —
+      a transport-agnostic `ChangeNotifier` (`foundation`-only, SDK-ready) behind a
+      `FirmwareUploadTransport` seam. It owns the multi-image upload→confirm walk,
+      progress (per-image + `overallProgress`), and cooperative cancel (won't
+      `confirm` an image once cancel is requested, so the device never swaps to a
+      half-committed update). `scr_dfu_new.dart` is now just its view; an
+      `_ImgMgmtUploadTransport` adapter binds the seam to `mcumgr_dart`'s `ImgMgmt`
+      over the live SMP session. Unit-tested (`test/firmware_updater_test.dart`, 8
+      tests) with a fake transport. **Stays in the SDK, not `mcumgr_dart`:** the
+      raw wire (`upload`/`confirm`/chunking/SHA) is already in `mcumgr_dart` (pure
+      Dart, shared with OpenView 3); a `ChangeNotifier` progress model is Flutter/
+      presentation layer and would force Flutter into that pure-Dart package.
+      Manifest→`FirmwareImage` mapping and the `dart:io` file read stay in the
+      screen (the updater takes a lazy byte loader, so it never touches the FS).
 - [ ] Ships as a Flutter package (`universal_ble` forces it) — one package, no
       `_ble` companion.
 - [ ] **Device-info gap:** `device_info_service.dart` (the consolidated DIS read)

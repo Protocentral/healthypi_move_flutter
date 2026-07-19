@@ -15,17 +15,23 @@ the sequenced plan + per-phase status in [ROADMAP.md](ROADMAP.md).
 |---|---|---|
 | `flutter analyze` | **182 issues, 0 errors** | Was 434 before the legacy-screen deletion. **182 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
-| `flutter test` | **16 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
+| `flutter test` | **24 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
 | `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
 | `flutter test test/smp_lock_test.dart` | 6 pass | SMP arbitration |
-| `flutter test test/bpt_calibrator_test.dart` | 8 pass | BPT state machine (new) |
+| `flutter test test/bpt_calibrator_test.dart` | 8 pass | BPT state machine |
+| `flutter test test/firmware_updater_test.dart` | 8 pass | DFU install state machine (new) |
 
 Run `flutter pub get` and `(cd packages/healthypi_healthy_store && dart pub get)`
 first on a new machine.
 
 ## Working-tree state
 
-Clean at handoff — everything below is committed and pushed to `origin/main`.
+Clean at handoff — the `FirmwareUpdater` extraction is committed to `main`. The 3
+device-management-flow screens (`scr_device_scan`, `scr_dfu_new`,
+`scr_bpt_calibration`) are still on `hpi_legacy_theme` — a redesign pass is coming
+(owner is doing the design handoff); **redesign the view only**, keeping each
+screen a thin view over its extracted state machine (`BptCalibrator` /
+`FirmwareUpdater`) and transport adapter.
 
 ---
 
@@ -53,12 +59,16 @@ Clean at handoff — everything below is committed and pushed to `origin/main`.
 - ⛔ Publish `0.1.0` and the OpenView 3 migration (+ its `hs.ack(head)` fix) are
   blocked on the repo going public / pub.dev auth / a separate repo.
 
-**Phase 8 — `healthypi_move` SDK** (in progress, 1 brick done):
+**Phase 8 — `healthypi_move` SDK** (in progress, 2 bricks done):
 - ✅ **BPT calibration** extracted (`lib/ble/bpt_calibrator.dart`) — the pattern
   for the rest. Firmware-facing move-to-HPI_HS spec in
   `docs/FIRMWARE_HANDOFF_BPT_HS.md` (DECISIONS §13).
-- ⏳ **`FirmwareUpdater`** — wrap `ImgMgmt` + `manifest.dart` into one class. Pure
-  refactor, **no hardware dependency** — the best next brick, doable + testable here.
+- ✅ **`FirmwareUpdater`** extracted (`lib/ble/firmware_updater.dart`) — a
+  `foundation`-only `ChangeNotifier` behind a `FirmwareUploadTransport` seam,
+  owning the multi-image upload→confirm walk, progress, and cooperative cancel.
+  `scr_dfu_new.dart` is now its view via an `_ImgMgmtUploadTransport` adapter.
+  8 tests. **Decided it belongs in the SDK, not `mcumgr_dart`** (the pure-Dart wire
+  stays put; a Flutter `ChangeNotifier` can't live in a pure-Dart pkg).
 - ⏳ **Live-stream decoders** — promote `LiveSignal.decode` (now in
   `lib/screens/scr_live.dart`, not the deleted `scr_live_stream.dart`) + sample
   models into the SDK. **Blocked:** live-characteristic sample rates / scaling are
@@ -71,9 +81,19 @@ Clean at handoff — everything below is committed and pushed to `origin/main`.
 
 ## Recommended next step
 
-`FirmwareUpdater` (Phase 8) — the only remaining pending item that is pure refactor
-with no hardware dependency, so it can be finished and unit-tested here exactly
-like the BPT extraction.
+Both no-hardware Phase 8 bricks (BPT, FirmwareUpdater) are done. What remains needs
+a device or is a smaller gap — pick one:
+
+- **Device-info DIS read** (Phase 8 gap) — reconstitute the deleted
+  `device_info_service.dart` as a small DIS (`0x180A`) reader. Mostly no-hardware
+  (a real device confirms the strings), and it's a prerequisite for packaging the
+  SDK. Reasonable next brick here.
+- **Live-stream decoders** (Phase 8) — **blocked on hardware**: live-characteristic
+  sample rates / scaling are documented nowhere; needs a device pass before the
+  `LiveSignal.decode` + sample models can be promoted into the SDK.
+- **Ship the package** — gated on the two above.
+
+First, though: commit the `FirmwareUpdater` work (see Working-tree state).
 
 ## Heads-up: external doc deletions
 

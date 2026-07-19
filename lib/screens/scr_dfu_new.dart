@@ -3,11 +3,13 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'scr_main_shell.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
+import '../ble/firmware_updater.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
 import '../utils/ble_manager.dart';
@@ -66,9 +68,11 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   SmpBleTransport? _dfuTransport;
   SmpClient? _dfuClient;
 
+  /// The install state machine (upload + confirm walk); the screen is its view.
+  FirmwareUpdater? _updater;
+
   /// Token for the SMP wire, held for the duration of the image upload.
   Object? _smpToken;
-  bool _dfuCancelled = false;
 
   // Advanced options
   bool _isManualMode = false;
@@ -91,7 +95,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   @override
   void dispose() {
-    _dfuCancelled = true;
+    // Stop the upload walk before the next image if we're torn down mid-update.
+    _updater?.cancel();
+    _updater?.dispose();
     _dfuClient?.dispose();
     _dfuTransport?.dispose();
     // Free the SMP wire if the screen is torn down mid-update, otherwise the
@@ -257,7 +263,6 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _currentImageIndex = 0;
     });
 
-    _dfuCancelled = false;
     try {
       // Claim the SMP wire for the whole upload — a background sync landing
       // mid-upload would interleave frames on the SMP characteristic and
@@ -274,36 +279,28 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           ImgMgmt(client, maxWriteLength: () => _dfuTransport?.maxWriteLength);
       await transport.refreshMtu(); // ensure a large chunk size
 
-      // Upload + confirm each image in the manifest (MCUboot confirmOnly).
-      final files = _manifest!.files;
-      for (int i = 0; i < files.length; i++) {
-        if (_dfuCancelled) throw Exception('cancelled');
-        final file = files[i];
-        final firmwareFile = File('${_extractedDir!.path}/${file.file}');
-        final bytes = await firmwareFile.readAsBytes();
+      // Drive the upload + confirm walk through the extracted state machine
+      // (MCUboot confirmOnly per image); the screen just mirrors its progress.
+      final updater = FirmwareUpdater(
+        _ImgMgmtUploadTransport(img),
+        log: (m) => debugPrint('[DFU] $m'),
+      );
+      _updater = updater;
+      updater.addListener(_onUpdaterProgress);
 
-        if (mounted) setState(() => _currentImageIndex = i);
-        debugPrint('[DFU] Uploading image ${i + 1}/${files.length} '
-            '(index ${file.image}, ${bytes.length} B)');
+      final images = _manifest!.files
+          .map((f) => FirmwareImage(
+                imageIndex: f.image,
+                name: f.file,
+                load: () =>
+                    File('${_extractedDir!.path}/${f.file}').readAsBytes(),
+              ))
+          .toList();
 
-        final sha = await img.upload(
-          bytes,
-          imageIndex: file.image,
-          onProgress: (sent, total) {
-            if (mounted) {
-              setState(() {
-                final p = total > 0 ? sent / total : 0.0;
-                _dfuProgress = p;
-                _imageProgress[i] = p * 100;
-                _currentImageIndex = i;
-              });
-            }
-          },
-        );
-
-        // confirmOnly: mark the uploaded image permanent (swap on next reboot).
-        await img.confirm(sha);
-        debugPrint('[DFU] Image ${i + 1} uploaded + confirmed');
+      try {
+        await updater.run(images);
+      } finally {
+        updater.removeListener(_onUpdaterProgress);
       }
 
       debugPrint('[DFU] Update completed successfully');
@@ -328,7 +325,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       _dfuTransport = null;
       _conn.releaseSmp(_smpToken);
       _smpToken = null;
-      if (mounted) {
+      // A user-cancelled update (screen torn down mid-upload) isn't an error to
+      // surface — the widget is already gone.
+      if (mounted && e is! FirmwareUpdateCancelled) {
         setState(() {
           _dfuState = DFUScreenState.error;
           _errorMessage = e is SmpBusyException
@@ -338,6 +337,17 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         });
       }
     }
+  }
+
+  /// Mirror the [FirmwareUpdater]'s progress into the installing-card UI.
+  void _onUpdaterProgress() {
+    final u = _updater;
+    if (u == null || !mounted) return;
+    setState(() {
+      _currentImageIndex = u.currentImageIndex;
+      _dfuProgress = u.currentImageProgress;
+      _imageProgress[u.currentImageIndex] = u.currentImageProgress * 100;
+    });
   }
 
   /// Show completion dialog
@@ -1090,4 +1100,25 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       ),
     );
   }
+}
+
+/// Binds the SDK-ready [FirmwareUploadTransport] seam to `mcumgr_dart`'s
+/// `ImgMgmt` over the live SMP session. The only piece that touches both the
+/// state machine and the wire — it moves to the app/SDK boundary, never into
+/// the pure-Dart `mcumgr_dart` package.
+class _ImgMgmtUploadTransport implements FirmwareUploadTransport {
+  _ImgMgmtUploadTransport(this._img);
+
+  final ImgMgmt _img;
+
+  @override
+  Future<List<int>> uploadImage(
+    Uint8List image, {
+    required int imageIndex,
+    void Function(int sent, int total)? onProgress,
+  }) =>
+      _img.upload(image, imageIndex: imageIndex, onProgress: onProgress);
+
+  @override
+  Future<void> confirm(List<int> sha) => _img.confirm(sha);
 }
