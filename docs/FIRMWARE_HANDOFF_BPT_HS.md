@@ -60,17 +60,19 @@ Custom cmd/data GATT service (`UUID_SERVICE_CMD`), for reference:
 Feedback: notifications on `UUID_CHAR_CMD_DATA`, **2 bytes** `[status, progress]`,
 streamed while a point runs. A full calibration is **3 points**.
 
-## 4. Proposed HPI_HS command set (group `0x1000`)
+## 4. HPI_HS command set (group `0x1000`) — **shipped & tested**
 
-Existing ids run 0–7 (`HELLO`…`SET_TZ`). BPT takes the next block. **Ids are
-proposed — firmware owns the final numbering; the app binds to fixed ids, so pin
-these before either side ships.** CBOR keys are kept short to match the group.
+Existing ids run 0–7 (`HELLO`…`SET_TZ`). BPT takes the next block. **Ids 8–11 /
+group `0x1000` are confirmed against firmware and the calibrate flow is verified
+end-to-end on hardware** — do not renumber. CBOR keys are kept short to match the
+group. (Exception: `cal`/`cal_ts` in cmd 10 is **not yet implemented** — deferred
+to a later release; see §12.)
 
 | Cmd | Name | Op | Request | Response | Replaces |
 |---|---|---|---|---|---|
 | **8** | `HPI_HS_CMD_BPT_CAL_ENTER` | WRITE | `{}` | `{rc}` | `0x60` |
 | **9** | `HPI_HS_CMD_BPT_CAL_POINT` | WRITE | `{sys:<u8>, dia:<u8>, idx:<u8>}` | `{rc}` | `0x61,…` |
-| **10** | `HPI_HS_CMD_BPT_CAL_STATUS` | READ | `{}` | `{st:<u8>, prog:<u8>, idx:<u8>, run:<bool>, cal:<bool>, cal_ts:<i64>}` | (poll path) |
+| **10** | `HPI_HS_CMD_BPT_CAL_STATUS` | READ | `{}` | `{st:<u8>, prog:<u8>, idx:<u8>, run:<bool>}` *(+ `cal`/`cal_ts` later, §12)* | (poll path) |
 | **11** | `HPI_HS_CMD_BPT_CAL_END` | WRITE | `{}` | `{rc}` | `0x62` |
 
 Field semantics:
@@ -104,15 +106,17 @@ these four commands can live in a new `0x1001` "device control" group instead,
 with identical shapes. The app seam (§8) doesn't care which group id it is — it's
 one constant. Firmware's call; the app follows.
 
-## 5. Decision firmware must return
+## 5. Decisions — **resolved** (shipped)
 
-1. **Feedback transport:** hybrid (A, keep notify) or poll (B, cmd 10 only)?
-2. **Final command ids** (8–11 as proposed, or others), and **group** (`0x1000`
-   vs `0x1001`).
-3. Whether `BPT_CAL_ENTER` implicitly resets any in-progress calibration, or
-   errors if already in calibration mode.
-4. **Can `BPT_CAL_STATUS` report persistent calibration state (`cal`/`cal_ts`)?**
-   This is now the app's top ask — see **§12**.
+1. **Feedback transport:** ✅ **poll (B)** — the app polls `BPT_CAL_STATUS` ~6 Hz;
+   the custom notify characteristic is gone with the rest of the service.
+2. **Command ids / group:** ✅ **8–11 in `0x1000`** (not the `0x1001` sibling),
+   confirmed against firmware.
+3. `BPT_CAL_ENTER` reset-vs-error semantics: firmware's behaviour is accepted as
+   shipped; the app doesn't depend on a particular choice here.
+4. **Persistent calibration state (`cal`/`cal_ts`):** ⏸️ **deferred to a later
+   release** — see **§12**. Interim: the app infers calibration from synced BP
+   readings.
 
 ## 6. Status code contract (unchanged from today — the app depends on these)
 
@@ -169,10 +173,11 @@ on the app side):
 - Keep the notify characteristic for option (A); it already streams `[status,
   progress]` and needs no change.
 
-## 10. App-side readiness — **DONE** (implemented, on-device validation pending)
+## 10. App-side readiness — **DONE & hardware-validated**
 
-**Update:** the app now speaks the BPT-over-HPI_HS path. `HpiHs` carries cmds
-8–11 (`bptCalEnter`/`bptCalPoint`/`bptCalStatus`/`bptCalEnd`, `HsBptStatus`);
+**Update:** the app speaks the BPT-over-HPI_HS path, **confirmed working end-to-end
+on hardware** (ids 8–11 / group `0x1000` verified with firmware). `HpiHs` carries
+cmds 8–11 (`bptCalEnter`/`bptCalPoint`/`bptCalStatus`/`bptCalEnd`, `HsBptStatus`);
 `HpiHsBptTransport` (`lib/ble/hpi_hs_bpt_transport.dart`) binds the calibrator to
 them and implements **feedback option B** — it polls `BPT_CAL_STATUS` ~6 Hz, since
 the custom notify characteristic was removed with the rest of the service. The
@@ -219,11 +224,16 @@ Roadmap Phase 8 entry.
    The app tolerates unknown codes (renders a generic "sensor status N") but will
    not treat them as terminal.
 
-## 12. Requested: the device must report persistent calibration state
+## 12. Later release: device-reported persistent calibration state
 
-**Why this matters.** The app now has a Blood-pressure *display* screen (handoff
-6a/6b) that must answer one question on entry: *is this watch calibrated?* There
-is currently **no way to ask the device that.** `BPT_CAL_STATUS` (cmd 10) reports
+**Status: deferred to a later release** (agreed). For the current release the app
+**infers** calibration from synced BP readings (see "interim" below), which is
+correct whenever the watch has produced any reading. This section is the spec for
+the follow-up that makes it exact.
+
+**Why it matters.** The Blood-pressure *display* screen (handoff 6a/6b) must answer
+one question on entry: *is this watch calibrated?* There is currently **no way to
+ask the device that** — `BPT_CAL_STATUS` (cmd 10) reports
 only an *in-progress measurement* (`st/prog/idx/run`), not whether a completed
 calibration is on file. So the app is forced to guess, and guesses wrong.
 

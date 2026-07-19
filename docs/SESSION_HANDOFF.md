@@ -59,10 +59,19 @@ opcode bytes onto HS writes and **polls `BPT_CAL_STATUS` ~6 Hz** for feedback
 lock for the whole calibration) and binds the calibrator to that transport;
 `_ConnCmdBptTransport` is gone. The custom CMD service UUIDs + all its
 `0x30`–`0x76` opcode constants were deleted from `globals.dart`; the dev-console
-GATT row now shows `HPI_HS · SMP`. **Command ids 8–11 must match firmware**
-(pinned by a package test). analyze 182 → **121**. (Still-dead recording
+GATT row now shows `HPI_HS · SMP`. **Command ids 8–11 / group `0x1000` confirmed
+against firmware; BPT calibration is verified working end-to-end on hardware.**
+Device-reported calibration status (`cal`/`cal_ts`) is **deferred to a later
+release** — for now the BP screen infers calibration from synced readings
+(FIRMWARE_HANDOFF_BPT_HS §12). analyze 182 → **121**. (Still-dead recording
 *data-format* constants — `REC_STATE_*`/`REC_FILE_*`/`SIGNAL_*`/`REC_SAMPLE_*` —
 remain in `globals.dart`; removable in a follow-up.)
+
+**Validation status of the device flows:** BPT calibration (5b) ✅ works on
+hardware; BP values screen (6a) picking up real `bp_sys`/`bp_dia` after the
+device-key fix — confirm the `ts_utc` pairing on a real run; **DFU (5a) still
+untested on hardware** — the top remaining validation item; scan (5c) restyle
+is presentation-only over the proven scan/pair logic.
 
 ---
 
@@ -113,21 +122,23 @@ remain in `globals.dart`; removable in a follow-up.)
   durable surface in (transport + connection + SMP lock, streaming, DFU, device
   info, re-exported Health Store). Gated on the live decoders.
 
-## Recommended next step
+## Recommended next step — release readiness
 
-Both no-hardware Phase 8 bricks (BPT, FirmwareUpdater) are done. What remains needs
-a device or is a smaller gap — pick one:
+The app is feature-complete for v1; what's left before release is a **hardware
+validation pass** plus housekeeping (SDK/package work is post-release):
 
-- **Device-info DIS read** (Phase 8 gap) — reconstitute the deleted
-  `device_info_service.dart` as a small DIS (`0x180A`) reader. Mostly no-hardware
-  (a real device confirms the strings), and it's a prerequisite for packaging the
-  SDK. Reasonable next brick here.
-- **Live-stream decoders** (Phase 8) — **blocked on hardware**: live-characteristic
-  sample rates / scaling are documented nowhere; needs a device pass before the
-  `LiveSignal.decode` + sample models can be promoted into the SDK.
-- **Ship the package** — gated on the two above.
+1. **DFU (5a) on real hardware** — the top open item: download → SMP img upload +
+   confirm-per-image → reboot/reconnect. The only redesigned device flow not yet
+   driven on a Move. BPT calibration (5b) and BP display (6a) are validated /
+   picking up real data.
+2. **BP 6a `ts_utc` pairing check** — confirm `bp_sys`/`bp_dia` pair on a real run
+   (else switch `getBpReadings` to nearest-timestamp pairing — a one-liner).
+3. **Housekeeping** — bump `version` (still `2.1.0+87`); fix the two stale
+   `DECISIONS §12` entries (deploy app-id + build artifacts are already fixed).
 
-First, though: commit the `FirmwareUpdater` work (see Working-tree state).
+Post-release (not blockers): Phase 7 package publish (app bundles it via `path:`),
+Phase 8 SDK extraction (live-stream decoders, ship the package), device-reported
+BP `cal`/`cal_ts` (FIRMWARE_HANDOFF_BPT_HS §12).
 
 ## Heads-up: external doc deletions
 
