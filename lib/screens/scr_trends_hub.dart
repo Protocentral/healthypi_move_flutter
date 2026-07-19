@@ -26,6 +26,7 @@ class ScrTrendsHub extends StatefulWidget {
 class _ScrTrendsHubState extends State<ScrTrendsHub> {
   final _repo = HealthRepository();
   HomeDashboard? _dash;
+  BloodPressureView? _bp;
   String _selected = 'hr';
 
   static const _real = ['hr', 'spo2', 'temp', 'activity'];
@@ -33,8 +34,15 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   @override
   void initState() {
     super.initState();
+    _load();
+  }
+
+  void _load() {
     _repo.loadHome().then((d) {
       if (mounted) setState(() => _dash = d);
+    });
+    _repo.loadBloodPressure().then((v) {
+      if (mounted) setState(() => _bp = v);
     });
   }
 
@@ -110,7 +118,36 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
             ? 'DERIVED'
             : 'DERIVED · NOT YET AVAILABLE'),
         HpiGroupedCard(rows: [_row('stress', expanded), _row('eda', expanded)]),
+        const SizedBox(height: 12),
+        const HpiSectionLabel('SPOT'),
+        HpiGroupedCard(rows: [_bpRow()]),
       ],
+    );
+  }
+
+  /// Blood pressure — a dedicated event-class screen (6a/6b), not a single-scalar
+  /// trend detail, so it always pushes its own screen. Shows the last reading
+  /// when calibrated, else "not calibrated".
+  Widget _bpRow() {
+    final bp = _bp;
+    final calibrated = bp?.showValues ?? false;
+    final latest = bp?.latest;
+    return HpiListRow(
+      icon: Symbols.monitor_heart,
+      iconColor: HpiColors.bpSys,
+      title: 'Blood pressure',
+      supporting: calibrated
+          ? 'spot · ${_relative(latest!.at)}'
+          : 'not calibrated',
+      dim: !calibrated,
+      onTap: () async {
+        await Navigator.of(context).pushNamed('/blood-pressure');
+        _load(); // calibrating/taking a reading can flip the row
+      },
+      trailing: calibrated
+          ? Text('${latest!.systolic}/${latest.diastolic}',
+              style: HpiText.statChip.copyWith(color: HpiColors.bpSys))
+          : Text('--', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
     );
   }
 

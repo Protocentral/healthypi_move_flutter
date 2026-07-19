@@ -36,6 +36,20 @@ distinction; `1h` device page gained the "Blood pressure calibration · NOT SET"
 `lib/theme/hpi_legacy_theme.dart`, `lib/widgets/loading_indicator.dart` and
 `lib/utils/sizeConfig.dart` were deleted as dead code.
 
+**Blood-pressure values + trend screen added (handoff 6a/6b)** — the display
+counterpart to 5b (which only *calibrates*). `lib/screens/scr_blood_pressure.dart`:
+6a (calibrated + ≥1 reading) = hero sys/dia, a dual connected-dot chart (systolic
+rose `#EC6A86` / diastolic blue `#7FA8D0`) over a shaded typical corridor, a
+**non-clinical** "where this sits" classifier (reference boundaries, never a
+diagnosis), stat chips, an event-log of readings, and a recalibrate nudge → 5b;
+6b = the not-calibrated gate (never invents a number). **BP is `HsClass.event`** —
+`HealthRepository.loadBloodPressure()` pairs sys/dia event samples from
+`hs_samples` (`DatabaseHelper.getBpReadings`, tolerant of the firmware's BP type
+keys) and gates on a `bp_calibrated_at` flag persisted when 5b completes. Entry
+points: Trends-hub "SPOT" row + a Home signal row + route `/blood-pressure`.
+**Needs a device** to confirm the BP type keys + see 6a with real data; until then
+it correctly shows 6b. New BP colors added to `HpiColors`.
+
 **BPT calibration moved off the custom cmd/data GATT service onto HPI_HS**
 (firmware is fully on the HS API). New: `HpiHs` cmds 8–11 (`BPT_CAL_ENTER`/
 `POINT`/`STATUS`/`END`, `HsBptStatus`) in the package; `HpiHsBptTransport`

@@ -35,6 +35,7 @@ enum _Layout { list, grid }
 class _ScrHomeState extends State<ScrHome> {
   final _repo = HealthRepository();
   HomeDashboard? _dash;
+  BloodPressureView? _bp;
   _Layout _layout = _Layout.list;
   String _selectedMetric = hPi4Global.PREFIX_HR; // tablet right-pane selection
 
@@ -73,6 +74,8 @@ class _ScrHomeState extends State<ScrHome> {
   Future<void> _load() async {
     final dash = await _repo.loadHome();
     if (mounted) setState(() => _dash = dash);
+    final bp = await _repo.loadBloodPressure();
+    if (mounted) setState(() => _bp = bp);
   }
 
   Future<void> _sync() async {
@@ -385,7 +388,31 @@ class _ScrHomeState extends State<ScrHome> {
       _signalRow('temp'),
       _signalRow('stress'),
       _signalRow('eda'),
+      _bpRow(),
     ]);
+  }
+
+  /// Blood-pressure spot readings — a dedicated event-class screen (6a/6b).
+  /// Shows the last reading when calibrated, else the not-calibrated gate.
+  Widget _bpRow() {
+    final bp = _bp;
+    final calibrated = bp?.showValues ?? false;
+    final latest = bp?.latest;
+    return HpiListRow(
+      icon: Symbols.monitor_heart,
+      iconColor: HpiColors.bpSys,
+      title: 'Blood pressure',
+      supporting: calibrated ? 'spot · finger PPG' : 'not calibrated',
+      dim: !calibrated,
+      onTap: () async {
+        await Navigator.of(context).pushNamed('/blood-pressure');
+        _load();
+      },
+      trailing: calibrated
+          ? Text('${latest!.systolic}/${latest.diastolic}',
+              style: HpiText.statChip.copyWith(color: HpiColors.bpSys))
+          : Text('--', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
+    );
   }
 
   Widget _signalRow(String key) {

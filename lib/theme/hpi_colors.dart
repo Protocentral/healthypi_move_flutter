@@ -32,6 +32,8 @@ abstract final class HpiColors {
   static const stress = Color(0xFF8B84F0); // stress / HRV
   static const steps = Color(0xFF2EB865); // steps / activity / success
   static const temp = Color(0xFFF0845C); // wrist temp
+  static const bpSys = Color(0xFFEC6A86); // blood-pressure systolic (rose)
+  static const bpDia = Color(0xFF7FA8D0); // blood-pressure diastolic (blue)
   static const error = Color(0xFFF87171); // errors / warnings
 
   // Hairlines & neutral chips (white at low alpha).

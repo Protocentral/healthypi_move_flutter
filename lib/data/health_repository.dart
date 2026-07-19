@@ -4,6 +4,7 @@
 import '../globals.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import '../utils/database_helper.dart';
+import '../utils/device_manager.dart';
 
 /// Whether a metric can be shown, and if not, why. Drives the redesign's
 /// honest zero-states (docs/REDESIGN_PLAN.md): the UI never fabricates a value.
@@ -197,6 +198,60 @@ class StressEdaView {
   final int? hrvWindows;
 }
 
+/// One blood-pressure spot reading — a paired systolic/diastolic estimate the
+/// watch produced from finger PPG after calibration. An `HsClass.event`: a
+/// discrete timestamped reading, never averaged into a per-hour value.
+class BpReading {
+  const BpReading({
+    required this.at,
+    required this.systolic,
+    required this.diastolic,
+    this.quality,
+  });
+
+  final DateTime at;
+  final int systolic;
+  final int diastolic;
+
+  /// Firmware quality byte for the reading, when present (contact/confidence).
+  final int? quality;
+}
+
+/// Everything the Blood-pressure screen (6a/6b) needs in one load. BP is gated
+/// on calibration state: 6a renders only when [isCalibrated] **and** there is
+/// at least one reading; otherwise the screen shows the 6b not-calibrated gate.
+/// It never fabricates a value — no readings means no numbers.
+class BloodPressureView {
+  const BloodPressureView({this.calibratedAt, this.readings = const []});
+
+  /// When BPT calibration last completed (persisted on 5b's completion), or null
+  /// if the watch has never been calibrated on this phone.
+  final DateTime? calibratedAt;
+
+  /// Spot readings, newest first.
+  final List<BpReading> readings;
+
+  bool get isCalibrated => calibratedAt != null;
+  bool get hasReadings => readings.isNotEmpty;
+
+  /// True → render 6a; false → render 6b.
+  bool get showValues => isCalibrated && hasReadings;
+
+  BpReading? get latest => readings.isEmpty ? null : readings.first;
+
+  /// Readings within [range] of now (for the segmented chart window).
+  List<BpReading> inRange(TrendRange range) {
+    final cutoff = switch (range) {
+      TrendRange.day => const Duration(days: 1),
+      TrendRange.week => const Duration(days: 7),
+      TrendRange.month => const Duration(days: 31),
+      TrendRange.sixMonths => const Duration(days: 183),
+    };
+    final since = DateTime.now().subtract(cutoff);
+    return readings.where((r) => r.at.isAfter(since)).toList();
+  }
+}
+
 /// The single read path the redesigned screens use. Composes the existing
 /// derived `health_trends` store (via [DatabaseHelper]) into typed view models,
 /// and is the one place that decides data availability. It reads only; the write
@@ -257,6 +312,32 @@ class HealthRepository {
       rmssdBaselineMs: summary?.rmssdBaselineMs ?? stress.baseline,
       hrvWindows: summary?.hrvWindows,
     );
+  }
+
+  /// `app_metadata` key holding the last BPT-calibration completion time. Set by
+  /// the calibration screen (5b) on success; read here to gate the BP screen.
+  static const String bpCalibratedAtKey = 'bp_calibrated_at';
+
+  /// Full Blood-pressure screen payload (6a/6b): calibration state + the recent
+  /// event-class BP spot readings. Returns an un-calibrated view (→ 6b) when the
+  /// watch has never calibrated or no readings have synced — never a fake value.
+  Future<BloodPressureView> loadBloodPressure() async {
+    final calAt = await _db.getMetadata<DateTime>(bpCalibratedAtKey);
+    final device = (await DeviceManager.getPairedDevice())?.macAddress;
+    final rows =
+        device == null ? const <Map<String, Object?>>[] : await _db.getBpReadings(device);
+    final readings = rows
+        .map((r) => BpReading(
+              // ts_utc is epoch seconds UTC; show in local time like other cards.
+              at: DateTime.fromMillisecondsSinceEpoch((r['ts'] as int) * 1000,
+                      isUtc: true)
+                  .toLocal(),
+              systolic: (r['sys'] as num).round(),
+              diastolic: (r['dia'] as num).round(),
+              quality: (r['quality'] as num?)?.toInt(),
+            ))
+        .toList();
+    return BloodPressureView(calibratedAt: calAt, readings: readings);
   }
 
   /// Latest manual EDA spot-check metric for the home / trends cards.

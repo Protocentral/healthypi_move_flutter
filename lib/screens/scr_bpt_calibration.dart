@@ -8,9 +8,11 @@ import 'package:move/utils/connection_manager.dart';
 
 import '../ble/bpt_calibrator.dart';
 import '../ble/hpi_hs_bpt_transport.dart';
+import '../data/health_repository.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_client.dart';
 import '../utils/snackbar.dart';
@@ -246,6 +248,16 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 
   Future<void> _endAndExit() async {
+    // Record a completed calibration (all 3 points) so the Blood-pressure screen
+    // can gate on it (6a vs 6b). Only a full calibration flips the flag.
+    if (_currentState == CalibrationState.allComplete) {
+      try {
+        await DatabaseHelper.instance
+            .setMetadata(HealthRepository.bpCalibratedAtKey, DateTime.now());
+      } catch (e) {
+        logConsole('Could not persist calibration timestamp: $e');
+      }
+    }
     try {
       await _cal?.endCalibration();
     } catch (e) {

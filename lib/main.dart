@@ -7,6 +7,7 @@ import 'package:upgrader/upgrader.dart';
 import 'screens/scr_main_shell.dart';
 import 'screens/scr_device_scan.dart';
 import 'screens/scr_bpt_calibration.dart';
+import 'screens/scr_blood_pressure.dart';
 import 'theme/hpi_theme.dart';
 import 'ui/components/hpi_synthetic_banner.dart';
 import 'utils/ble_manager.dart';
@@ -51,6 +52,7 @@ class HealthyPiApp extends StatelessWidget {
         '/': (context) => UpgradeAlert(child: const ScrMainShell()),
         '/scan': (context) => const ScrDeviceScan(),
         '/device/bpt-calibration': (context) => const ScrBPTCalibration(),
+        '/blood-pressure': (context) => const ScrBloodPressure(),
       },
       // Fallback for an unregistered route name — always the redesigned shell.
       onUnknownRoute: (settings) {

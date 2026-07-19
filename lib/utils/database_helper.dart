@@ -1487,6 +1487,66 @@ class DatabaseHelper {
     return {for (final r in rows) r['type'] as int: r['n'] as int};
   }
 
+  /// Recent blood-pressure spot readings (an `HsClass.event` metric — sparse,
+  /// never averaged). BP arrives as two separate event types, systolic and
+  /// diastolic, that share a timestamp; this resolves their type ids from the
+  /// registry, pulls recent samples, and pairs sys+dia by `ts_utc`.
+  ///
+  /// Type keys are matched **tolerantly** — firmware may name them `bp_sys`/
+  /// `bp_dia`, `sys`/`dia`, etc. If the registry has no BP types, returns empty
+  /// (the screen then shows its not-calibrated / no-data state — it never
+  /// invents a value). Returns newest-first maps `{ts, sys, dia, quality}` with
+  /// values already divided by each type's scale.
+  Future<List<Map<String, Object?>>> getBpReadings(String device,
+      {int limit = 90}) async {
+    final db = await database;
+    final types =
+        await db.query('hs_types', where: 'device = ?', whereArgs: [device]);
+
+    int? sysId, diaId;
+    double sysScale = 1, diaScale = 1;
+    double scaleOf(Object? s) {
+      final v = (s as num?)?.toDouble() ?? 1;
+      return v == 0 ? 1 : v;
+    }
+
+    for (final t in types) {
+      final key = (t['key'] as String?)?.toLowerCase() ?? '';
+      final id = (t['id'] as num?)?.toInt();
+      if (id == null || !key.contains('bp')) continue;
+      if (key.contains('sys')) {
+        sysId = id;
+        sysScale = scaleOf(t['scale']);
+      } else if (key.contains('dia')) {
+        diaId = id;
+        diaScale = scaleOf(t['scale']);
+      }
+    }
+    if (sysId == null || diaId == null) return const [];
+
+    final rows = await db.rawQuery(
+      'SELECT ts_utc, type, quality, value FROM hs_samples '
+      'WHERE device = ? AND type IN (?, ?) ORDER BY ts_utc DESC LIMIT ?',
+      [device, sysId, diaId, limit * 2],
+    );
+
+    // Pair sys+dia by shared timestamp (the watch stamps both at measurement).
+    final byTs = <int, Map<String, Object?>>{};
+    for (final r in rows) {
+      final ts = (r['ts_utc'] as num).toInt();
+      final type = (r['type'] as num).toInt();
+      final value = (r['value'] as num).toDouble();
+      final m = byTs.putIfAbsent(ts, () => {'ts': ts, 'quality': r['quality']});
+      if (type == sysId) m['sys'] = value / sysScale;
+      if (type == diaId) m['dia'] = value / diaScale;
+    }
+    final paired = byTs.values
+        .where((m) => m['sys'] != null && m['dia'] != null)
+        .toList()
+      ..sort((a, b) => (b['ts'] as int).compareTo(a['ts'] as int));
+    return paired.take(limit).toList();
+  }
+
   /// The Healthy Store device key (HELLO.uid) we hold samples for, or null when
   /// nothing has synced. Used by tools that need to act on "the" store without
   /// a live connection to ask HELLO.
