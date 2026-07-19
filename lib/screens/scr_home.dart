@@ -50,11 +50,18 @@ class _ScrHomeState extends State<ScrHome> {
   void initState() {
     super.initState();
     _restoreLayout();
+    // The shell keeps this tab alive in an IndexedStack, so initState runs once —
+    // before the first sync/pair. Reload when data lands or the device changes,
+    // otherwise the screen stays empty until a hot restart.
+    HealthyStoreSyncManager.dataRevision.addListener(_load);
+    DeviceManager.pairingRevision.addListener(_load);
     _load();
   }
 
   @override
   void dispose() {
+    HealthyStoreSyncManager.dataRevision.removeListener(_load);
+    DeviceManager.pairingRevision.removeListener(_load);
     _syncSub?.cancel();
     super.dispose();
   }

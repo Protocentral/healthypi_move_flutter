@@ -9,6 +9,8 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/adaptive/breakpoints.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/device_manager.dart';
+import '../utils/healthy_store_sync_manager.dart';
 import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
@@ -34,7 +36,18 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   @override
   void initState() {
     super.initState();
+    // Kept alive in the shell's IndexedStack — reload when a sync lands data or
+    // the paired device changes, not just once on first build.
+    HealthyStoreSyncManager.dataRevision.addListener(_load);
+    DeviceManager.pairingRevision.addListener(_load);
     _load();
+  }
+
+  @override
+  void dispose() {
+    HealthyStoreSyncManager.dataRevision.removeListener(_load);
+    DeviceManager.pairingRevision.removeListener(_load);
+    super.dispose();
   }
 
   void _load() {

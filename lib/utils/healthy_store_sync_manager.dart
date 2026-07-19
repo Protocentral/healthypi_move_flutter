@@ -51,6 +51,14 @@ class HealthyStoreSyncManager {
   final _progressController = StreamController<SyncProgress>.broadcast();
   Stream<SyncProgress> get progressStream => _progressController.stream;
 
+  /// Bumped whenever a sync commits new samples and re-derives trends, so
+  /// data-reading screens (Home, Trends) reload without waiting for a hot
+  /// restart. Mirrors [DeviceManager.pairingRevision]: any screen that reads the
+  /// store adds a listener in `initState` and reloads on change. Without this,
+  /// a screen that loaded empty in `initState` (e.g. before the first sync, or
+  /// on a sync triggered from the Device page) never picks up the new data.
+  static final ValueNotifier<int> dataRevision = ValueNotifier<int>(0);
+
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
@@ -673,6 +681,10 @@ class HealthyStoreSyncManager {
       debugPrint('[HS-Sync] ⚠ $synthetic of $total stored samples are SYNTHETIC '
           '(firmware test data) — excluded from trends and charts');
     }
+
+    // Samples, trends, and SUMMARY are all committed now — signal any live
+    // data-reading screen to reload so it doesn't stay empty until a hot restart.
+    if (stored > 0) dataRevision.value++;
 
     return _SessionOutcome(stored: stored, done: done, error: error);
   }

@@ -42,8 +42,10 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     super.initState();
     _cm.addListener(_onLink);
     // The shell keeps this tab alive in an IndexedStack, so initState runs once
-    // — before any pairing. Re-read whenever the paired device changes.
+    // — before any pairing. Re-read whenever the paired device changes, or a
+    // sync (here or from Home) commits new data.
     DeviceManager.pairingRevision.addListener(_load);
+    HealthyStoreSyncManager.dataRevision.addListener(_load);
     _load();
   }
 
@@ -51,6 +53,7 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
   void dispose() {
     _cm.removeListener(_onLink);
     DeviceManager.pairingRevision.removeListener(_load);
+    HealthyStoreSyncManager.dataRevision.removeListener(_load);
     _syncSub?.cancel();
     super.dispose();
   }
