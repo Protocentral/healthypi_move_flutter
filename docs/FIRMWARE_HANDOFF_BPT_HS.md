@@ -163,7 +163,20 @@ on the app side):
 - Keep the notify characteristic for option (A); it already streams `[status,
   progress]` and needs no change.
 
-## 10. App-side readiness (already done — this is an adapter swap)
+## 10. App-side readiness — **DONE** (implemented, on-device validation pending)
+
+**Update:** the app now speaks the BPT-over-HPI_HS path. `HpiHs` carries cmds
+8–11 (`bptCalEnter`/`bptCalPoint`/`bptCalStatus`/`bptCalEnd`, `HsBptStatus`);
+`HpiHsBptTransport` (`lib/ble/hpi_hs_bpt_transport.dart`) binds the calibrator to
+them and implements **feedback option B** — it polls `BPT_CAL_STATUS` ~6 Hz, since
+the custom notify characteristic was removed with the rest of the service. The
+custom cmd/data GATT service is fully deleted from the app. **The ids/group/CBOR
+keys below are assumed to match the shipped firmware** (`docs/HPI_HS_API.md`); if
+firmware pinned different values, update `HpiHs.cmdBptCal*` + the package test.
+Original design notes follow.
+
+---
+
 
 The app's BPT logic was extracted into a transport-agnostic state machine
 (`lib/ble/bpt_calibrator.dart`) behind a `BptCalTransport` interface:

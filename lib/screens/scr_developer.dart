@@ -713,7 +713,8 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
       _gattRow('ECG_STREAM', hPi4Global.UUID_ECG_CHAR, HpiColors.hr, 'NOTIFY'),
       _gattRow('PPG_STREAM', hPi4Global.UUID_CHAR_PPG, HpiColors.spo2, 'NOTIFY'),
       _gattRow('GSR_STREAM', hPi4Global.UUID_GSR_CHAR, HpiColors.eda, 'NOTIFY'),
-      _gattRow('CMD', hPi4Global.UUID_CHAR_CMD, HpiColors.onSurfaceVariant, 'R/W'),
+      _gattRow('HPI_HS · SMP', hPi4Global.UUID_CHAR_SMP,
+          HpiColors.onSurfaceVariant, 'R/W'),
     ]);
   }
 

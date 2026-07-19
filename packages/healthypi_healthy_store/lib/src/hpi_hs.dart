@@ -86,6 +86,32 @@ class HsRecordDownload {
   final bool crcOk;
 }
 
+/// A snapshot of BPT (blood-pressure) calibration state, from
+/// `BPT_CAL_STATUS` (cmd 10). SMP has no server push, so the app polls this
+/// while a point runs instead of listening on a notify characteristic. Status
+/// codes are the firmware's finger-PPG contract (see `docs/HPI_HS_API.md`);
+/// the two terminal codes for a running point are 2 (complete) and 6 (failed).
+class HsBptStatus {
+  const HsBptStatus({
+    required this.status,
+    required this.progress,
+    required this.index,
+    required this.running,
+  });
+
+  /// Firmware status code (0 no-signal, 1 good, 2 complete, 6 failed, …).
+  final int status;
+
+  /// Point measurement progress, 0–100.
+  final int progress;
+
+  /// 0-based index of the point currently being measured.
+  final int index;
+
+  /// True while a point measurement is in flight.
+  final bool running;
+}
+
 /// Client for the **custom HPI_HS MCUmgr group** (id `0x1000`) — the ProtoCentral
 /// Healthy Store. Full contract in the HealthyPi Move `docs/HPI_HS_API.md`.
 /// Gated: only surfaced when [hello] succeeds against a device that implements it.
@@ -111,6 +137,14 @@ class HpiHs {
   static const int cmdAck = 5;
   static const int cmdSynth = 6;
   static const int cmdSetTz = 7;
+
+  // BPT (blood-pressure) calibration control, moved off the retired custom
+  // cmd/data GATT service into this group. Ids must match the firmware's
+  // `docs/HPI_HS_API.md`; see `docs/FIRMWARE_HANDOFF_BPT_HS.md` §4.
+  static const int cmdBptCalEnter = 8; // WRITE {}                 -> {rc}
+  static const int cmdBptCalPoint = 9; // WRITE {sys,dia,idx}      -> {rc}
+  static const int cmdBptCalStatus = 10; // READ  {}               -> {st,prog,idx,run}
+  static const int cmdBptCalEnd = 11; // WRITE {}                  -> {rc}
 
   SmpMessage _check(SmpMessage rsp) {
     final code = rsp.rc;
@@ -468,5 +502,62 @@ class HpiHs {
       payload: {'off': offsetSeconds},
     ));
     _logMsg('SET_TZ off=${offsetSeconds}s');
+  }
+
+  // --- BPT calibration ------------------------------------------------------
+
+  /// `BPT_CAL_ENTER` (cmd 8) — enter calibration mode. Replaces `0x60`.
+  Future<void> bptCalEnter() async {
+    _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdBptCalEnter,
+      payload: const {},
+    ));
+    _logMsg('BPT_CAL_ENTER');
+  }
+
+  /// `BPT_CAL_POINT` (cmd 9) — begin point [idx] (0-based) with the cuff
+  /// reference [sys]/[dia] (mmHg, each one byte). Replaces `0x61,sys,dia,idx`.
+  Future<void> bptCalPoint({
+    required int sys,
+    required int dia,
+    required int idx,
+  }) async {
+    _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdBptCalPoint,
+      payload: {'sys': sys & 0xFF, 'dia': dia & 0xFF, 'idx': idx & 0xFF},
+    ));
+    _logMsg('BPT_CAL_POINT sys=$sys dia=$dia idx=$idx');
+  }
+
+  /// `BPT_CAL_STATUS` (cmd 10) — poll current contact/progress. SMP cannot push,
+  /// so the app polls this while a point runs (see [HsBptStatus]).
+  Future<HsBptStatus> bptCalStatus() async {
+    final rsp = _check(await client.send(
+      op: SmpOp.readReq,
+      group: group,
+      id: cmdBptCalStatus,
+    ));
+    final p = rsp.payload;
+    return HsBptStatus(
+      status: (p['st'] as num?)?.toInt() ?? 0,
+      progress: (p['prog'] as num?)?.toInt() ?? 0,
+      index: (p['idx'] as num?)?.toInt() ?? 0,
+      running: (p['run'] as bool?) ?? false,
+    );
+  }
+
+  /// `BPT_CAL_END` (cmd 11) — exit calibration mode. Replaces `0x62`.
+  Future<void> bptCalEnd() async {
+    _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdBptCalEnd,
+      payload: const {},
+    ));
+    _logMsg('BPT_CAL_END');
   }
 }

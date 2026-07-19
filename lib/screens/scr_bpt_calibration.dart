@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: MIT
 
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:move/utils/connection_manager.dart';
 
 import '../ble/bpt_calibrator.dart';
-import '../globals.dart';
+import '../ble/hpi_hs_bpt_transport.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
+import '../utils/healthy_store_client.dart';
 import '../utils/snackbar.dart';
 import 'scr_device_scan.dart';
 import 'scr_main_shell.dart';
@@ -35,31 +35,37 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   final ConnectionManager _conn = ConnectionManager.instance;
 
-  /// The transport-agnostic BPT state machine. Bound to the custom CMD GATT
-  /// service today via [_ConnCmdBptTransport]; a future HPI_HS/SMP binding is an
-  /// adapter swap here, with no change to this screen or the calibrator.
-  late final BptCalibrator _cal;
+  /// The SMP session that carries the HPI_HS BPT commands. Rides the
+  /// [ConnectionManager] link and holds the SMP wire lock for the whole
+  /// calibration (like sync/DFU), so a background sync cannot interleave frames.
+  HealthyStoreClient? _hsClient;
+
+  /// Feedback poll + command adapter over HPI_HS (`0x1000`).
+  HpiHsBptTransport? _bptTransport;
+
+  /// The transport-agnostic BPT state machine. Created once the HPI_HS session
+  /// is up (the transport needs its `hs` client), so it is nullable until then.
+  BptCalibrator? _cal;
 
   bool _isInitializing = true;
   String _statusMessage = "Connecting to device…";
 
   // --- calibrator state, surfaced as shims so the view code reads unchanged ---
-  CalibrationState get _currentState => _cal.phase;
-  int get _currentPointIndex => _cal.currentPointIndex;
-  List<CalibrationPoint> get _calibrationPoints => _cal.points;
-  int get _progress => _cal.progress;
-  int get _statusCode => _cal.statusCode;
-  String get _statusString => _cal.statusMessage;
-  bool get _fingerSignalGood => _cal.fingerSignalGood;
-  bool get _pointFailed => _cal.pointFailed;
+  // Null-safe: the state body only renders after [_cal] is created (once
+  // _isInitializing is false), but the defaults keep the getters total.
+  CalibrationState get _currentState =>
+      _cal?.phase ?? CalibrationState.preCalibration;
+  int get _currentPointIndex => _cal?.currentPointIndex ?? 0;
+  List<CalibrationPoint> get _calibrationPoints => _cal?.points ?? const [];
+  int get _progress => _cal?.progress ?? 0;
+  int get _statusCode => _cal?.statusCode ?? 0;
+  String get _statusString => _cal?.statusMessage ?? '';
+  bool get _fingerSignalGood => _cal?.fingerSignalGood ?? false;
+  bool get _pointFailed => _cal?.pointFailed ?? false;
 
   @override
   void initState() {
     super.initState();
-    _cal = BptCalibrator(
-      _ConnCmdBptTransport(_conn),
-      log: logConsole,
-    )..addListener(_onCalChanged);
     _initializeConnection();
   }
 
@@ -71,12 +77,14 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
 
   @override
   void dispose() {
-    _cal.removeListener(_onCalChanged);
-    _cal.dispose(); // cancels the status subscription
+    _cal?.removeListener(_onCalChanged);
+    _cal?.dispose(); // cancels the status subscription
+    // Tear the HPI_HS session down (releases the SMP lock); leaves the
+    // ConnectionManager link up for Home/Device.
+    _bptTransport?.dispose();
+    _hsClient?.disconnect();
     _systolicController.dispose();
     _diastolicController.dispose();
-    // Leave the BLE link up — ConnectionManager owns it and Home/Device may
-    // still need it.
     super.dispose();
   }
 
@@ -116,15 +124,49 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
       await _conn.connect(deviceInfo.macAddress, name: deviceInfo.displayName);
       await DeviceManager.updateLastConnected();
 
-      // Enter BPT calibration mode and start the finger-signal stream so the
-      // user can seat the sensor and see contact quality *before* they enter
-      // cuff readings. Waiting until "Begin" to listen is too late — by then
-      // a bad finger placement just burns a calibration attempt.
+      // Open an HPI_HS SMP session over that link (acquires the SMP lock, probes
+      // HELLO). BPT control + status now ride group 0x1000 — the custom cmd/data
+      // GATT service is retired.
+      if (mounted) setState(() => _statusMessage = 'Opening HPI_HS session…');
+      final hsClient = HealthyStoreClient(deviceInfo.macAddress,
+          name: deviceInfo.displayName);
+      await hsClient.connect();
+      _hsClient = hsClient;
+
+      if (!hsClient.hasHealthyStore || hsClient.hs == null) {
+        // The watch answered but has no HPI_HS group — firmware too old for the
+        // BPT-over-HS path (there is no custom-service fallback any more).
+        _statusMessage =
+            'This watch\'s firmware does not support BPT calibration over '
+            'HPI_HS. Update the firmware and try again.';
+        await _teardownHs();
+        if (mounted) {
+          setState(() => _isInitializing = false);
+          _showConnectionErrorDialog();
+        }
+        return;
+      }
+
+      final transport = HpiHsBptTransport(
+        hsClient.hs!,
+        isConnected: () => hsClient.isConnected,
+        log: logConsole,
+      );
+      _bptTransport = transport;
+      final cal = BptCalibrator(transport, log: logConsole)
+        ..addListener(_onCalChanged);
+      _cal = cal;
+
+      // Enter BPT calibration mode and start the finger-signal poll so the user
+      // can seat the sensor and see contact quality *before* they enter cuff
+      // readings. Waiting until "Begin" to listen is too late — by then a bad
+      // finger placement just burns a calibration attempt.
       if (mounted) {
         setState(() => _isInitializing = false);
-        await _cal.enterCalibrationMode();
+        await cal.enterCalibrationMode();
       }
     } catch (e) {
+      await _teardownHs();
       if (mounted) {
         setState(() {
           _isInitializing = false;
@@ -133,6 +175,15 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         _showConnectionErrorDialog();
       }
     }
+  }
+
+  /// Tear down the HPI_HS session + feedback poll, releasing the SMP lock.
+  /// Leaves the ConnectionManager link up.
+  Future<void> _teardownHs() async {
+    await _bptTransport?.dispose();
+    _bptTransport = null;
+    await _hsClient?.disconnect();
+    _hsClient = null;
   }
 
   void _showConnectionErrorDialog() {
@@ -191,15 +242,16 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   Future<void> _startPoint() async {
     final sys = int.tryParse(_systolicController.text.trim()) ?? 0;
     final dia = int.tryParse(_diastolicController.text.trim()) ?? 0;
-    await _cal.startPoint(systolic: sys, diastolic: dia);
+    await _cal?.startPoint(systolic: sys, diastolic: dia);
   }
 
   Future<void> _endAndExit() async {
     try {
-      await _cal.endCalibration();
+      await _cal?.endCalibration();
     } catch (e) {
       logConsole('Error ending calibration: $e');
     }
+    await _teardownHs(); // release the SMP lock before dropping the link
     await _disconnect();
     if (mounted) ScrMainShell.returnToRoot(context);
   }
@@ -344,22 +396,21 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         HpiFilledButton(
           label: 'Start calibration',
           icon: Symbols.play_arrow,
-          onPressed: () => _cal.beginInput(),
+          onPressed: () => _cal?.beginInput(),
         ),
       ],
     );
   }
 
   Widget _infoRow(IconData icon, String label, String value) {
+    // label over value (not a trailing column) so a long value wraps within the
+    // row instead of fighting the title for horizontal space.
     return HpiListRow(
       icon: icon,
       iconColor: HpiColors.hr,
       title: label,
-      trailing: Flexible(
-        child: Text(value,
-            textAlign: TextAlign.right,
-            style: HpiText.body.copyWith(fontSize: 12, color: HpiColors.onSurface)),
-      ),
+      supporting: value,
+      supportingColor: HpiColors.onSurfaceVariant,
       showChevron: false,
     );
   }
@@ -658,7 +709,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
                 HpiFilledButton(
                   label: 'Retry this point',
                   icon: Symbols.refresh,
-                  onPressed: () => _cal.retryPoint(),
+                  onPressed: () => _cal?.retryPoint(),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -731,7 +782,7 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
         HpiFilledButton(
           label: 'Continue to point ${_calibrationPoints.length + 1}',
           icon: Symbols.arrow_forward,
-          onPressed: () => _cal.advanceToNextPoint(),
+          onPressed: () => _cal?.advanceToNextPoint(),
         ),
         const SizedBox(height: 10),
         _outlinedNeutral('Finish calibration early', _endAndExit),
@@ -840,25 +891,3 @@ class _ScrBPTCalibrationState extends State<ScrBPTCalibration> {
   }
 }
 
-/// Binds [BptCalTransport] to today's transport: the custom CMD GATT service via
-/// [ConnectionManager]. This thin adapter is the *only* app-specific glue — when
-/// the calibrator moves into the `healthypi_move` SDK, the machine and interface
-/// go with it and this stays behind (or is replaced by an HPI_HS/SMP binding).
-class _ConnCmdBptTransport implements BptCalTransport {
-  _ConnCmdBptTransport(this._conn);
-
-  final ConnectionManager _conn;
-
-  @override
-  Stream<Uint8List> get statusStream => _conn.subscribe(
-      hPi4Global.UUID_SERVICE_CMD, hPi4Global.UUID_CHAR_CMD_DATA);
-
-  @override
-  Future<void> sendCommand(List<int> bytes) => _conn.write(
-      hPi4Global.UUID_SERVICE_CMD,
-      hPi4Global.UUID_CHAR_CMD,
-      Uint8List.fromList(bytes));
-
-  @override
-  bool get isConnected => _conn.isConnected;
-}

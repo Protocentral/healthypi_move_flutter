@@ -155,4 +155,25 @@ void main() {
       expect(t.toReal(42), 42.0);
     });
   });
+
+  group('BPT calibration commands', () {
+    // The app binds to these fixed ids; the firmware owns the numbering. This
+    // pins them so an accidental edit can't silently desync the wire contract
+    // (docs/FIRMWARE_HANDOFF_BPT_HS.md §4). Change only alongside the firmware.
+    test('command ids match the pinned HPI_HS contract', () {
+      expect(HpiHs.group, 0x1000);
+      expect(HpiHs.cmdBptCalEnter, 8);
+      expect(HpiHs.cmdBptCalPoint, 9);
+      expect(HpiHs.cmdBptCalStatus, 10);
+      expect(HpiHs.cmdBptCalEnd, 11);
+    });
+
+    test('HsBptStatus carries the four status fields', () {
+      const s = HsBptStatus(status: 2, progress: 100, index: 1, running: false);
+      expect(s.status, 2); // terminal "point complete"
+      expect(s.progress, 100);
+      expect(s.index, 1);
+      expect(s.running, isFalse);
+    });
+  });
 }

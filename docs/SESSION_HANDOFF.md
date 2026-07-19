@@ -13,10 +13,10 @@ the sequenced plan + per-phase status in [ROADMAP.md](ROADMAP.md).
 
 | Check | Expected | Notes |
 |---|---|---|
-| `flutter analyze` | **149 issues, 0 errors** | Was 182 before the 5a/5b/5c redesign retired the last legacy-themed screens' `withOpacity`/hardcoded-color lint. **149 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
+| `flutter analyze` | **121 issues, 0 errors** | Was 182 before the 5a/5b/5c redesign retired the last legacy-themed screens' `withOpacity`/hardcoded-color lint. **121 is the tripwire — should not increase.** All pre-existing lint (`avoid_print`, `withOpacity`, `constant_identifier_names`). |
 | `flutter build bundle` | exit 0 | quickest full Dart compile |
 | `flutter test` | **33 pass / 1 fail** | The 1 failure is the `widget_test.dart` smoke test — `StateError` in `HealthRepository.loadHome` with no DB in the test env (the shell is the `/` entry). Pre-existing, **not** a regression. |
-| `cd packages/healthypi_healthy_store && dart test` | **30 pass** | pure-Dart protocol suite |
+| `cd packages/healthypi_healthy_store && dart test` | **32 pass** | pure-Dart protocol suite |
 | `flutter test test/smp_lock_test.dart` | 6 pass | SMP arbitration |
 | `flutter test test/bpt_calibrator_test.dart` | 8 pass | BPT state machine |
 | `flutter test test/firmware_updater_test.dart` | 8 pass | DFU install state machine |
@@ -32,10 +32,23 @@ The 3 device-management-flow screens are now **redesigned onto the token system*
 machine: `scr_dfu_new` (5a) over `FirmwareUpdater`, `scr_bpt_calibration` (5b) over
 `BptCalibrator`, `scr_device_scan` (5c) restyled with a paired-device Connect/PAIRED
 distinction; `1h` device page gained the "Blood pressure calibration · NOT SET" row
-→ 5b. Logic untouched. The redesign retired the last legacy-themed screens, so
-`lib/theme/hpi_legacy_theme.dart`, `lib/widgets/loading_indicator.dart`,
-`lib/utils/sizeConfig.dart` and the orphaned BPT opcode constants in `globals.dart`
-were all deleted as dead code (analyze 182 → **149**).
+→ 5b. The redesign retired the last legacy-themed screens, so
+`lib/theme/hpi_legacy_theme.dart`, `lib/widgets/loading_indicator.dart` and
+`lib/utils/sizeConfig.dart` were deleted as dead code.
+
+**BPT calibration moved off the custom cmd/data GATT service onto HPI_HS**
+(firmware is fully on the HS API). New: `HpiHs` cmds 8–11 (`BPT_CAL_ENTER`/
+`POINT`/`STATUS`/`END`, `HsBptStatus`) in the package; `HpiHsBptTransport`
+(`lib/ble/hpi_hs_bpt_transport.dart`) maps the calibrator's `0x60`/`0x61`/`0x62`
+opcode bytes onto HS writes and **polls `BPT_CAL_STATUS` ~6 Hz** for feedback
+(SMP has no push). The BPT screen opens a `HealthyStoreClient` (holds the SMP
+lock for the whole calibration) and binds the calibrator to that transport;
+`_ConnCmdBptTransport` is gone. The custom CMD service UUIDs + all its
+`0x30`–`0x76` opcode constants were deleted from `globals.dart`; the dev-console
+GATT row now shows `HPI_HS · SMP`. **Command ids 8–11 must match firmware**
+(pinned by a package test). analyze 182 → **121**. (Still-dead recording
+*data-format* constants — `REC_STATE_*`/`REC_FILE_*`/`SIGNAL_*`/`REC_SAMPLE_*` —
+remain in `globals.dart`; removable in a follow-up.)
 
 ---
 
