@@ -4,7 +4,6 @@
 import '../globals.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import '../utils/database_helper.dart';
-import '../utils/device_manager.dart';
 
 /// Whether a metric can be shown, and if not, why. Drives the redesign's
 /// honest zero-states (docs/REDESIGN_PLAN.md): the UI never fabricates a value.
@@ -332,7 +331,10 @@ class HealthRepository {
   /// watch has never calibrated or no readings have synced — never a fake value.
   Future<BloodPressureView> loadBloodPressure() async {
     final calAt = await _db.getMetadata<DateTime>(bpCalibratedAtKey);
-    final device = (await DeviceManager.getPairedDevice())?.macAddress;
+    // hs_samples / hs_types are keyed by the Healthy Store device (HELLO `uid`,
+    // e.g. `892f58a633dc8e82`) that the sync wrote under — NOT the BLE
+    // deviceId/MAC. Use that store key, or BP readings never resolve.
+    final device = await _db.getHealthyStoreDeviceKey();
     final rows =
         device == null ? const <Map<String, Object?>>[] : await _db.getBpReadings(device);
     final readings = rows
