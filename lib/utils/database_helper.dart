@@ -189,7 +189,7 @@ class DatabaseHelper {
 
     // Per-device sync state. `cursor` is the highest seq durably stored — the
     // only value ever fed to an ACK. Never ack `head`; never ack an unpersisted
-    // cursor (both are destructive on the device). See CLAUDE.md.
+    // cursor (both are destructive on the device). See docs/HPI_HS_API.md §6.
     await db.execute('''
       CREATE TABLE IF NOT EXISTS hs_sync_state (
         device         TEXT PRIMARY KEY,
