@@ -45,6 +45,13 @@ class FakeUploadTransport implements FirmwareUploadTransport {
 
   @override
   Future<void> confirm(List<int> sha) async => confirms.add(List.of(sha));
+
+  /// Slots the fake device exposes. Empty (default) = unknown → pre-flight
+  /// skipped, matching a device whose image list can't be read.
+  Set<int> imageIndexes = const {};
+
+  @override
+  Future<Set<int>> deviceImageIndexes() async => imageIndexes;
 }
 
 FirmwareImage _img(int slot, int len, {String? name}) => FirmwareImage(
@@ -156,6 +163,40 @@ void main() {
     expect(caught, isNot(isA<StateError>()));
   });
 
+  group('pre-flight slot check', () {
+    test('rejects a package image the device has no slot for, before uploading',
+        () async {
+      tx.imageIndexes = {0}; // single-image device
+      await expectLater(
+        updater.run([_img(0, 100), _img(1, 100)]), // package wants slot 1
+        throwsA(isA<FirmwareImageUnsupported>()),
+      );
+      // Nothing transferred — that's the point (the real failure costs minutes).
+      expect(tx.uploads, isEmpty);
+      expect(updater.state, FirmwareUpdateState.failed);
+    });
+
+    test('allows the package when the device exposes every slot', () async {
+      tx.imageIndexes = {0, 1};
+      await updater.run([_img(0, 100), _img(1, 200)]);
+      expect(updater.state, FirmwareUpdateState.complete);
+      expect(tx.uploads, hasLength(2));
+    });
+
+    test('an unknown slot map does not block the update', () async {
+      tx.imageIndexes = const {}; // list unreadable
+      await updater.run([_img(1, 100)]);
+      expect(updater.state, FirmwareUpdateState.complete);
+      expect(tx.uploads, hasLength(1));
+    });
+
+    test('the error names the offending slot and what the device has', () {
+      const e = FirmwareImageUnsupported(1, {0});
+      expect(e.toString(), contains('slot 1'));
+      expect(e.toString(), contains('0'));
+    });
+  });
+
   test('run resets state, so a retry after a failure starts clean', () async {
     tx.failOnUpload = Exception('boom');
     await expectLater(updater.run([_img(0, 10)]), throwsA(isA<Exception>()));
@@ -186,4 +227,7 @@ class _TracingTransport implements FirmwareUploadTransport {
 
   @override
   Future<void> confirm(List<int> sha) async => order.add('confirm');
+
+  @override
+  Future<Set<int>> deviceImageIndexes() async => const {};
 }

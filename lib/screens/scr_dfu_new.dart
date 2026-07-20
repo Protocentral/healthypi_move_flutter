@@ -1018,4 +1018,17 @@ class _ImgMgmtUploadTransport implements FirmwareUploadTransport {
 
   @override
   Future<void> confirm(List<int> sha) => _img.confirm(sha);
+
+  @override
+  Future<Set<int>> deviceImageIndexes() async {
+    try {
+      final slots = await _img.list();
+      return slots.map((s) => s.image).toSet();
+    } catch (e) {
+      // Unknown slot map — return empty so the updater skips the pre-flight
+      // rather than blocking an update that would actually have worked.
+      debugPrint('[DFU] could not read image list (skipping pre-flight): $e');
+      return const {};
+    }
+  }
 }

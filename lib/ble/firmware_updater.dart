@@ -24,6 +24,33 @@ abstract class FirmwareUploadTransport {
 
   /// Mark an uploaded image permanent by its SHA (from [uploadImage]).
   Future<void> confirm(List<int> sha);
+
+  /// Image indexes the device actually exposes (from its MCUmgr image list).
+  ///
+  /// Used to fail fast: uploading to an index the device has no flash area for
+  /// only errors *after* the whole image has transferred (minutes of BLE), and
+  /// surfaces device-side as `Failed to open flash area ID n: -2`. An **empty**
+  /// set means "couldn't determine" and the pre-flight check is skipped.
+  Future<Set<int>> deviceImageIndexes();
+}
+
+/// The package targets an image index this device has no slot for — e.g. a
+/// 2-image package on a watch whose firmware was built for a single image.
+/// Raised before any upload starts.
+class FirmwareImageUnsupported implements Exception {
+  const FirmwareImageUnsupported(this.imageIndex, this.available);
+
+  final int imageIndex;
+  final Set<int> available;
+
+  @override
+  String toString() {
+    final have = (available.toList()..sort()).join(', ');
+    return 'This firmware package contains an image for slot $imageIndex, but '
+        'the watch only exposes image slot(s) $have. Its firmware was built for '
+        'fewer images than the package provides — installing would fail after '
+        'the upload. Use a package built for this device.';
+  }
 }
 
 /// One image to flash: its MCUboot slot index plus a lazy byte [load]er. The
@@ -134,6 +161,20 @@ class FirmwareUpdater extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Pre-flight the slot map before transferring anything: a package image
+      // aimed at a slot the device lacks fails only once the whole image has
+      // been sent, which costs minutes and looks like a mid-update crash.
+      final available = await _transport.deviceImageIndexes();
+      if (available.isNotEmpty) {
+        _log?.call('DFU: device exposes image slots '
+            '${(available.toList()..sort()).join(", ")}');
+        for (final img in images) {
+          if (!available.contains(img.imageIndex)) {
+            throw FirmwareImageUnsupported(img.imageIndex, available);
+          }
+        }
+      }
+
       for (var i = 0; i < images.length; i++) {
         if (_cancelRequested) throw const FirmwareUpdateCancelled();
         final img = images[i];
