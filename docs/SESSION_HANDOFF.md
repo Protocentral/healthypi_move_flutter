@@ -125,23 +125,39 @@ is presentation-only over the proven scan/pair logic.
   durable surface in (transport + connection + SMP lock, streaming, DFU, device
   info, re-exported Health Store). Gated on the live decoders.
 
-## Recommended next step — release readiness
+## Recommended next step — release readiness (v3.0.0)
 
-The app is feature-complete for v1; what's left before release is a **hardware
-validation pass** plus housekeeping (SDK/package work is post-release):
+Version is **`3.0.0+88`**. The redesign is being merged back into the public repo
+(`Protocentral/healthypi_move_flutter`) via a branch + PR — see "Merging to the
+public repo" below. Remaining before shipping:
 
-1. **DFU (5a) on real hardware** — the top open item: download → SMP img upload +
-   confirm-per-image → reboot/reconnect. The only redesigned device flow not yet
-   driven on a Move. BPT calibration (5b) and BP display (6a) are validated /
-   picking up real data.
+1. **DFU (5a) on real hardware** — the top open item. A 2-image package currently
+   fails device-side with `Failed to open flash area ID 3: -2` when the second
+   image is confirmed: the watch's partition map has no slot for image 1. The app
+   flow is **unchanged from the previous design** (same manifest image index, same
+   confirm-only-per-image loop) — this is a firmware packaging/partition mismatch,
+   not an app regression. The app now pre-flights `ImgMgmt.list()` and fails fast
+   with `FirmwareImageUnsupported` instead of burning a 5-minute upload.
 2. **BP 6a `ts_utc` pairing check** — confirm `bp_sys`/`bp_dia` pair on a real run
    (else switch `getBpReadings` to nearest-timestamp pairing — a one-liner).
-3. **Housekeeping** — bump `version` (still `2.1.0+87`); fix the two stale
-   `DECISIONS §12` entries (deploy app-id + build artifacts are already fixed).
+3. **Housekeeping** — fix the two stale `DECISIONS §12` entries (deploy app-id +
+   build artifacts are already fixed).
 
 Post-release (not blockers): Phase 7 package publish (app bundles it via `path:`),
 Phase 8 SDK extraction (live-stream decoders, ship the package), device-reported
 BP `cal`/`cal_ts` (FIRMWARE_HANDOFF_BPT_HS §12).
+
+## Merging to the public repo
+
+`upstream` = `Protocentral/healthypi_move_flutter` (public). Its `main` HEAD
+(`0c69a8d`) is a direct **ancestor** of this repo's `main`, so the merge is clean —
+no rebase or graft. The redesign lands as a branch + PR (no GitHub Release/tag).
+
+- The app was flattened out of `move/` into the repo root; git reads that as
+  **renames** (144 × R100), so the PR stays reviewable despite ~397 files.
+- CLAUDE.md's standing "never push to upstream" rule is **suspended only for this
+  release branch**, at the owner's direction. Day-to-day work still goes to
+  `origin`.
 
 ## Heads-up: external doc deletions
 

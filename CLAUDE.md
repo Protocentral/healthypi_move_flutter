@@ -50,7 +50,7 @@ flutter build ipa --release --export-method app-store
 
 **`flutter test` currently fails**, and did before any recent changes: the single smoke test in [test/widget_test.dart](test/widget_test.dart) pumps `HealthyPiApp`, whose `/` route is the redesigned `ScrMainShell`; `ScrHome.initState` calls `HealthRepository.loadHome`, which throws a `StateError` with no database in the test env. It is an environment/wiring failure, not a logic failure in your change. (Before the legacy screens were deleted this surfaced instead as a `home.dart` layout overflow — same "smoke test is red for a pre-existing reason" caveat.) Don't treat a red `flutter test` as evidence your change broke something — confirm against `git stash` first.
 
-Version/build number live in [pubspec.yaml](pubspec.yaml) (`version: 2.1.0+87`). App id is `com.protocentral.move`. iOS deployment target is pinned to 13.1 and Android `minSdk` 21 — both are `universal_ble` requirements; don't lower them.
+Version/build number live in [pubspec.yaml](pubspec.yaml) (`version: 3.0.0+88` — the redesign release). App id is `com.protocentral.move`. iOS deployment target is pinned to 13.1 and Android `minSdk` 21 — both are `universal_ble` requirements; don't lower them.
 
 ## Architecture
 
