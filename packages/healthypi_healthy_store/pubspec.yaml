@@ -4,8 +4,8 @@ description: >-
   0x1000 on HealthyPi Move. Cursor-based sample sync, a self-describing metric
   registry, and CRC-verified raw-signal records. Bring your own transport.
 version: 0.1.0
-repository: https://github.com/Protocentral/healthypi_healthy_store
-issue_tracker: https://github.com/Protocentral/healthypi_healthy_store/issues
+repository: https://github.com/Protocentral/healthy_store_dart
+issue_tracker: https://github.com/Protocentral/healthy_store_dart/issues
 
 environment:
   sdk: ^3.3.0
