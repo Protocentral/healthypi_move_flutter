@@ -4,13 +4,14 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:move/ble/device_slots.dart';
 import 'package:move/ble/firmware_updater.dart';
 
 /// In-memory transport: records each upload, replays a fixed set of progress
 /// ticks, returns a deterministic SHA, and records confirms. No radio, no SMP.
 class FakeUploadTransport implements FirmwareUploadTransport {
   final List<({int imageIndex, int length})> uploads = [];
-  final List<List<int>> confirms = [];
+  final List<List<int>> staged = [];
 
   /// Progress ticks (fractions 0..1) replayed for every upload.
   List<double> ticks = const [0.5, 1.0];
@@ -44,14 +45,21 @@ class FakeUploadTransport implements FirmwareUploadTransport {
   }
 
   @override
-  Future<void> confirm(List<int> sha) async => confirms.add(List.of(sha));
+  Future<void> markPending(List<int> sha) async => staged.add(List.of(sha));
 
-  /// Slots the fake device exposes. Empty (default) = unknown → pre-flight
-  /// skipped, matching a device whose image list can't be read.
-  Set<int> imageIndexes = const {};
+  /// Slots the fake device exposes. Unknown (default) = the image list can't
+  /// be read, so the pre-flight is skipped.
+  DeviceSlots slots = const DeviceSlots.unknown();
+
+  /// Hash the fake device reports for a staged slot; null = "not listed",
+  /// which drives the updater onto the image's own TLV.
+  List<int>? stagedHash = const [0xAA, 0xBB];
 
   @override
-  Future<Set<int>> deviceImageIndexes() async => imageIndexes;
+  Future<List<int>?> stagedImageHash(int imageIndex) async => stagedHash;
+
+  @override
+  Future<DeviceSlots> deviceSlots() async => slots;
 }
 
 FirmwareImage _img(int slot, int len, {String? name}) => FirmwareImage(
@@ -89,10 +97,12 @@ void main() {
       (imageIndex: 0, length: 100),
       (imageIndex: 1, length: 200),
     ]);
-    // Each image is confirmed with the SHA its own upload returned.
-    expect(tx.confirms, [
-      [0, 100 & 0xFF],
-      [1, 200 & 0xFF],
+    // Each image is staged with the hash the DEVICE reported for it — not the
+    // digest upload() returned (that one is the upload-resume sha of the whole
+    // file, which `image test` does not recognise).
+    expect(tx.staged, [
+      [0xAA, 0xBB],
+      [0xAA, 0xBB],
     ]);
     expect(updater.imageCount, 2);
     expect(updater.overallProgress, 1.0);
@@ -111,13 +121,13 @@ void main() {
     expect(seen.last, 1.0);
   });
 
-  test('a confirm follows every upload (upload→confirm→upload→confirm)',
+  test('a staging step follows every upload (upload→stage→upload→stage)',
       () async {
     final order = <String>[];
     final tracer = _TracingTransport(order);
     final u = FirmwareUpdater(tracer);
     await u.run([_img(0, 10), _img(1, 10)]);
-    expect(order, ['upload', 'confirm', 'upload', 'confirm']);
+    expect(order, ['upload', 'stage', 'upload', 'stage']);
     u.dispose();
   });
 
@@ -130,10 +140,10 @@ void main() {
     );
     expect(updater.state, FirmwareUpdateState.failed);
     expect(updater.error, isA<StateError>());
-    expect(tx.confirms, isEmpty); // never confirmed a failed upload
+    expect(tx.staged, isEmpty); // never staged a failed upload
   });
 
-  test('cancel mid-upload stops the walk before confirm, with cancelled state',
+  test('cancel mid-upload stops the walk before staging, with cancelled state',
       () async {
     // Request cancellation while the first image is still uploading.
     tx.duringFirstUpload = updater.cancel;
@@ -145,10 +155,10 @@ void main() {
 
     expect(updater.state, FirmwareUpdateState.cancelled);
     expect(updater.error, isA<FirmwareUpdateCancelled>());
-    // The in-flight image finished uploading but was NOT confirmed (so the
-    // device won't swap to a half-committed update), and the second never ran.
+    // The in-flight image finished uploading but was NOT staged (so the device
+    // won't swap to a half-committed update), and the second never ran.
     expect(tx.uploads, hasLength(1));
-    expect(tx.confirms, isEmpty);
+    expect(tx.staged, isEmpty);
   });
 
   test('cancelled is a distinct type from a real failure', () async {
@@ -163,37 +173,35 @@ void main() {
     expect(caught, isNot(isA<StateError>()));
   });
 
-  group('pre-flight slot check', () {
-    test('rejects a package image the device has no slot for, before uploading',
-        () async {
-      tx.imageIndexes = {0}; // single-image device
-      await expectLater(
-        updater.run([_img(0, 100), _img(1, 100)]), // package wants slot 1
-        throwsA(isA<FirmwareImageUnsupported>()),
-      );
-      // Nothing transferred — that's the point (the real failure costs minutes).
-      expect(tx.uploads, isEmpty);
-      expect(updater.state, FirmwareUpdateState.failed);
+  group('slot map is advisory, not a gate', () {
+    test('sends to a slot the device did not list', () async {
+      // The real nRF5340 case: the net core's primary slot lives in
+      // network-core flash the app core can't read, so MCUmgr omits image 1
+      // from `image list` even though uploads to it work. Refusing here used to
+      // block every two-image update.
+      tx.slots = const DeviceSlots.known({0});
+
+      await updater.run([_img(0, 100), _img(1, 100)]);
+
+      expect(updater.state, FirmwareUpdateState.complete);
+      expect(tx.uploads, [
+        (imageIndex: 0, length: 100),
+        (imageIndex: 1, length: 100),
+      ]);
     });
 
-    test('allows the package when the device exposes every slot', () async {
-      tx.imageIndexes = {0, 1};
+    test('a fully listed slot map changes nothing', () async {
+      tx.slots = const DeviceSlots.known({0, 1});
       await updater.run([_img(0, 100), _img(1, 200)]);
       expect(updater.state, FirmwareUpdateState.complete);
       expect(tx.uploads, hasLength(2));
     });
 
     test('an unknown slot map does not block the update', () async {
-      tx.imageIndexes = const {}; // list unreadable
+      tx.slots = const DeviceSlots.unknown(); // list unreadable
       await updater.run([_img(1, 100)]);
       expect(updater.state, FirmwareUpdateState.complete);
       expect(tx.uploads, hasLength(1));
-    });
-
-    test('the error names the offending slot and what the device has', () {
-      const e = FirmwareImageUnsupported(1, {0});
-      expect(e.toString(), contains('slot 1'));
-      expect(e.toString(), contains('0'));
     });
   });
 
@@ -226,8 +234,11 @@ class _TracingTransport implements FirmwareUploadTransport {
   }
 
   @override
-  Future<void> confirm(List<int> sha) async => order.add('confirm');
+  Future<void> markPending(List<int> sha) async => order.add('stage');
 
   @override
-  Future<Set<int>> deviceImageIndexes() async => const {};
+  Future<List<int>?> stagedImageHash(int imageIndex) async => const [0xAA];
+
+  @override
+  Future<DeviceSlots> deviceSlots() async => const DeviceSlots.unknown();
 }

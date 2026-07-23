@@ -9,7 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
 
+import '../ble/device_generation.dart';
 import '../ble/device_info.dart';
+import '../ble/dfu_plan.dart';
 import '../ble/firmware_updater.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
@@ -19,6 +21,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/ble_dis_transport.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
+import '../utils/dfu_stage_state.dart';
 import '../utils/firmware_update_service.dart';
 import '../utils/manifest.dart';
 import '../utils/snackbar.dart';
@@ -32,6 +35,8 @@ enum DFUScreenState {
   downloading,        // Downloading firmware
   readyToInstall,     // Firmware downloaded and ready
   installing,         // DFU in progress
+  awaitingReboot,     // Leg 1 installed; waiting for the watch to restart on v3
+  radioUpdateReady,   // Watch is on v3; the radio (net core) image is still owed
   completed,         // Install finished successfully
   upToDate,          // No update needed
   error,             // Error occurred
@@ -39,8 +44,9 @@ enum DFUScreenState {
 
 /// DFU firmware-update screen (handoff 5a). Restyled to the redesign token
 /// system; the install flow itself is unchanged — the `DFUScreenState` machine
-/// here plus the extracted [FirmwareUpdater] (upload→confirm walk over
-/// `mcumgr_dart` `ImgMgmt`, confirm-only per image).
+/// here plus the extracted [FirmwareUpdater] (upload→stage walk over
+/// `mcumgr_dart` `ImgMgmt`: each image is uploaded then marked for the next
+/// boot, and the screen resets the watch once they all are).
 class ScrDFUNew extends StatefulWidget {
   final String? deviceMacAddress;
 
@@ -62,6 +68,15 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   String _currentFWVersion = "Unknown";
   FirmwareRelease? _latestRelease;
 
+  /// Which firmware generation the watch is running, from its DIS revision.
+  /// Decides whether the radio image may travel with the app core (v3 only) or
+  /// has to follow in a second leg — see [planDfu].
+  DeviceGeneration _generation = DeviceGeneration.unknown;
+
+  /// The plan the current/last install ran, kept so the UI can describe what is
+  /// happening ("main firmware now, radio after the restart").
+  DfuPlan? _plan;
+
   // Firmware files
   Directory? _extractedDir;
   Manifest? _manifest;
@@ -76,7 +91,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   SmpBleTransport? _dfuTransport;
   SmpClient? _dfuClient;
 
-  /// The install state machine (upload + confirm walk); the screen is its view.
+  /// The install state machine (upload + stage walk); the screen is its view.
   FirmwareUpdater? _updater;
 
   /// Token for the SMP wire, held for the duration of the image upload.
@@ -84,6 +99,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   // Advanced options
   bool _isManualMode = false;
+
+  /// A radio (second-leg) update is owed from a hand-picked package. The app
+  /// can't re-download that file, so the user has to re-select it.
+  bool _manualRadioUpdatePending = false;
   int _cacheSize = 0;
 
   @override
@@ -164,7 +183,33 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
       _latestRelease = latestRelease;
 
-      // Step 4: Compare versions
+      // Step 4: A radio image owed from a previous two-stage migration takes
+      // precedence over the version comparison. After leg one the watch reports
+      // the new version, so isUpdateAvailable() says "up to date" and the second
+      // leg would never be offered.
+      final pendingVersion = await DfuStageState.pendingRadioVersion(_deviceMac!);
+      if (pendingVersion != null && !_generation.isPreV3) {
+        if (pendingVersion == DfuStageState.manualPackageTag) {
+          // The first leg came from a hand-picked zip, which the app cannot
+          // fetch again. Flag it so the up-to-date card says so and the manual
+          // card runs the second leg once the same file is re-selected.
+          debugPrint('[DFU] radio image still owed from a manual package');
+          _manualRadioUpdatePending = true;
+        } else if (pendingVersion == latestRelease.version) {
+          debugPrint('[DFU] radio image still owed for $pendingVersion');
+          setState(() => _dfuState = DFUScreenState.radioUpdateReady);
+          _downloadFirmwareInBackground(thenState: DFUScreenState.radioUpdateReady);
+          return;
+        } else {
+          // A newer release has superseded the half-finished migration; fall
+          // through to the normal flow, which installs both images at once.
+          debugPrint('[DFU] pending radio update ($pendingVersion) superseded by '
+              '${latestRelease.version}');
+          await DfuStageState.clear();
+        }
+      }
+
+      // Step 5: Compare versions
       final updateAvailable = FirmwareUpdateService.isUpdateAvailable(
         _currentFWVersion,
         latestRelease.version,
@@ -201,11 +246,19 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     );
     final version = await reader.readFirmwareVersion();
     _currentFWVersion = version ?? 'Unknown';
-    debugPrint('[DFU] Current firmware version: "$_currentFWVersion"');
+    _generation = generationFromFwRevision(version);
+    debugPrint('[DFU] Current firmware version: "$_currentFWVersion" '
+        '→ ${_generation.label}');
   }
 
-  /// Download firmware in background
-  Future<void> _downloadFirmwareInBackground() async {
+  /// Download firmware in background.
+  ///
+  /// [thenState] is where to land once the package is extracted — normally
+  /// `readyToInstall`, but the second leg of a two-stage migration returns to
+  /// its own card instead.
+  Future<void> _downloadFirmwareInBackground({
+    DFUScreenState thenState = DFUScreenState.readyToInstall,
+  }) async {
     setState(() {
       _dfuState = DFUScreenState.downloading;
       _downloadProgress = 0.0;
@@ -237,7 +290,7 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         setState(() {
           _extractedDir = extracted.extractedDir;
           _manifest = extracted.manifest;
-          _dfuState = DFUScreenState.readyToInstall;
+          _dfuState = thenState;
           _isManualMode = false;
         });
       }
@@ -254,8 +307,11 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     }
   }
 
-  /// Start automatic firmware update
-  Future<void> _startFirmwareUpdate() async {
+  /// Start a firmware update.
+  ///
+  /// [resumingStageTwo] runs the second leg of a two-stage migration: the watch
+  /// has come back on v3 and only the radio image is left to send.
+  Future<void> _startFirmwareUpdate({bool resumingStageTwo = false}) async {
     if (_manifest == null || _extractedDir == null) {
       Snackbar.show(ABC.c, 'Firmware not ready', success: false);
       return;
@@ -269,31 +325,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     });
 
     try {
-      // Claim the SMP wire for the whole upload — a background sync landing
-      // mid-upload would interleave frames on the SMP characteristic and
-      // corrupt the image.
-      _smpToken = _conn.acquireSmp('dfu');
+      var uploadTransport = await _openSmpSession();
 
-      // SMP session riding the existing ConnectionManager link.
-      final transport = SmpBleTransport(_deviceMac!, manageConnection: false);
-      await transport.connect();
-      _dfuTransport = transport;
-      final client = SmpClient(transport);
-      _dfuClient = client;
-      final img =
-          ImgMgmt(client, maxWriteLength: () => _dfuTransport?.maxWriteLength);
-      await transport.refreshMtu(); // ensure a large chunk size
-
-      // Drive the upload + confirm walk through the extracted state machine
-      // (MCUboot confirmOnly per image); the screen just mirrors its progress.
-      final updater = FirmwareUpdater(
-        _ImgMgmtUploadTransport(img),
-        log: (m) => debugPrint('[DFU] $m'),
-      );
-      _updater = updater;
-      updater.addListener(_onUpdaterProgress);
-
-      final images = _manifest!.files
+      final packageImages = _manifest!.files
           .map((f) => FirmwareImage(
                 imageIndex: f.image,
                 name: f.file,
@@ -302,45 +336,246 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
               ))
           .toList();
 
-      try {
-        await updater.run(images);
-      } finally {
-        updater.removeListener(_onUpdaterProgress);
+      // Decide what this watch may receive *before* sending anything. Pre-v3
+      // firmware takes the app core alone; the radio follows once the watch is
+      // running v3 (see planDfu for why the two legs must not be merged).
+      final slots = await uploadTransport.deviceSlots();
+      final plan = planDfu(
+        generation: _generation,
+        slots: slots,
+        packageImages: packageImages,
+        resumingStageTwo: resumingStageTwo,
+      );
+      _plan = plan;
+      debugPrint('[DFU] ${_generation.label}, $slots — ${plan.describe()}');
+
+      if (plan.isBlocked) {
+        await _teardownSmpSession();
+        if (mounted) {
+          setState(() {
+            _dfuState = DFUScreenState.error;
+            _errorMessage = plan.blockedReason;
+          });
+        }
+        return;
       }
 
-      debugPrint('[DFU] Update completed successfully');
+      // Losing the link mid-transfer used to end the update; the user then had
+      // to start again by hand — and it worked, because MCUmgr resumes from the
+      // offset the device reports. Do that automatically: a several-minute
+      // upload over BLE on a wrist-worn device will meet the occasional RF gap,
+      // and a dropped link is not a reason to throw away 60% of a transfer.
+      const maxAttempts = 4;
+      for (var attempt = 1;; attempt++) {
+        final updater = FirmwareUpdater(
+          uploadTransport,
+          log: (m) => debugPrint('[DFU] $m'),
+        );
+        _updater = updater;
+        updater.addListener(_onUpdaterProgress);
+        try {
+          await updater.run(plan.images);
+          break;
+        } catch (e) {
+          if (attempt >= maxAttempts || !_isResumableLinkFailure(e)) rethrow;
+          debugPrint('[DFU] attempt $attempt lost the link ($e) — '
+              'reconnecting to resume');
+          await _teardownSmpSession();
+          await Future.delayed(const Duration(seconds: 3));
+          if (!mounted) return;
+          uploadTransport = await _openSmpSession();
+        } finally {
+          updater.removeListener(_onUpdaterProgress);
+        }
+      }
 
-      // Release the SMP session (keeps the ConnectionManager link).
-      await _dfuClient?.dispose();
-      _dfuClient = null;
-      await _dfuTransport?.disconnect();
-      await _dfuTransport?.dispose();
-      _dfuTransport = null;
-      _conn.releaseSmp(_smpToken);
-      _smpToken = null;
+      debugPrint('[DFU] Images staged for next boot — restarting the watch');
+
+      // MCUboot swaps on the next boot and the firmware does not restart itself,
+      // so without this the update sits staged until someone power-cycles the
+      // watch — and the second leg could never run. The device usually drops the
+      // link before acking the reset, so a failure here is expected, not fatal.
+      try {
+        // _dfuClient is whichever session survived the retry loop.
+        await OsMgmt(_dfuClient!).reset();
+      } catch (e) {
+        debugPrint('[DFU] reset request returned $e (device likely already gone)');
+      }
+
+      await _teardownSmpSession();
+
+      if (plan.stageTwoFollows) {
+        // Leg one done. Remember the debt before waiting, so a crash or a user
+        // walking away doesn't lose the second leg.
+        // A hand-picked zip has no release version to record; tag it so the
+        // second leg is still remembered and asks for the same file back.
+        await DfuStageState.setRadioUpdatePending(
+          mac: _deviceMac!,
+          version: _latestRelease?.version ?? DfuStageState.manualPackageTag,
+        );
+        if (mounted) {
+          setState(() => _dfuState = DFUScreenState.awaitingReboot);
+        }
+        await _awaitRebootThenOfferRadioUpdate();
+        return;
+      }
+
+      if (resumingStageTwo) {
+        await DfuStageState.clear();
+      }
 
       if (mounted) {
         setState(() => _dfuState = DFUScreenState.completed);
       }
     } catch (e) {
       debugPrint('[DFU] Update error: $e');
-      await _dfuClient?.dispose();
-      _dfuClient = null;
-      await _dfuTransport?.dispose();
-      _dfuTransport = null;
-      _conn.releaseSmp(_smpToken);
-      _smpToken = null;
+      await _teardownSmpSession();
       // A user-cancelled update (screen torn down mid-upload) isn't an error to
       // surface — the widget is already gone.
       if (mounted && e is! FirmwareUpdateCancelled) {
         setState(() {
           _dfuState = DFUScreenState.error;
-          _errorMessage = e is SmpBusyException
-              ? 'Device busy (${e.currentOwner}). Wait for it to finish, '
-                  'then retry the update.'
-              : 'Update failed: $e';
+          _errorMessage = _describeUpdateFailure(e);
         });
       }
+    }
+  }
+
+  /// User-facing text for an install failure. The watch's own refusals get
+  /// plain-language wording; everything else falls through to the raw error.
+  String _describeUpdateFailure(Object e) {
+    if (e is DfuBatteryTooLow) return e.toString();
+    if (e is FirmwareImageUnidentifiable) return e.toString();
+    if (e is TimeoutException) {
+      return 'The watch stopped responding. Bring it close to the phone, make '
+          'sure it is awake and charged, then try again.';
+    }
+    if (e is StateError) return e.message;
+    if (e is SmpBusyException) {
+      return 'Device busy (${e.currentOwner}). Wait for it to finish, then '
+          'retry the update.';
+    }
+    return 'Update failed: $e';
+  }
+
+  /// True for failures where the transfer can simply be picked up again: the
+  /// link went away, not the device saying no. A device-side error carries an
+  /// `rc` and means retrying would fail the same way.
+  bool _isResumableLinkFailure(Object e) =>
+      e is TimeoutException || (e is SmpException && e.rc == null);
+
+  /// Open an SMP session over the ConnectionManager link, reconnecting first if
+  /// the link is down. Sets [_smpToken], [_dfuTransport] and [_dfuClient].
+  Future<_ImgMgmtUploadTransport> _openSmpSession() async {
+    // Minutes can pass between opening this screen and tapping install — a
+    // file-picker modal, the watch restarting, the user walking out of range.
+    // Building the SMP session on a dead link fails opaquely (MTU stuck at the
+    // 23-byte default, iOS logging "API MISUSE: ... state = disconnected", and
+    // finally a bare TimeoutException), so re-establish it first.
+    if (!_conn.isConnected) {
+      debugPrint('[DFU] link is down — reconnecting');
+      await _conn.connect(_deviceMac!, name: _deviceName);
+      await Future.delayed(const Duration(milliseconds: 500));
+      // It may have restarted while we were away; the generation drives the
+      // plan, so re-read it rather than trusting the value from screen entry.
+      await _readCurrentFirmwareVersion();
+    }
+
+    // Claim the SMP wire for the whole upload — a background sync landing
+    // mid-upload would interleave frames on the SMP characteristic and corrupt
+    // the image.
+    _smpToken = _conn.acquireSmp('dfu');
+
+    final transport = SmpBleTransport(_deviceMac!, manageConnection: false);
+    await transport.connect();
+    _dfuTransport = transport;
+    final client = SmpClient(transport);
+    // The default 10 s is too tight for this watch. The MCUboot secondary slot
+    // lives on the external QSPI NOR, so a write can sit behind a block erase
+    // (hundreds of ms each, and the same die carries /lfs).
+    client.timeout = const Duration(seconds: 40);
+    _dfuClient = client;
+    final img =
+        ImgMgmt(client, maxWriteLength: () => _dfuTransport?.maxWriteLength);
+    await transport.refreshMtu(); // ensure a large chunk size
+
+    // A link that never negotiated its MTU is a broken link, not a slow one:
+    // the watch asks for 247, and at the 23-byte default a 773 KB image would
+    // need ~39,000 round-trips. Stop here with something the user can act on
+    // rather than crawling into a timeout deep in the transport.
+    final maxWrite = transport.maxWriteLength ?? 0;
+    if (maxWrite < 100) {
+      throw StateError(
+        'The connection to the watch is not ready (negotiated only $maxWrite '
+        'bytes per write). Move the watch closer to the phone and try again.',
+      );
+    }
+
+    return _ImgMgmtUploadTransport(img);
+  }
+
+  /// Close the SMP session and hand the wire back, leaving the
+  /// [ConnectionManager] link itself alone. Safe to call twice.
+  Future<void> _teardownSmpSession() async {
+    await _dfuClient?.dispose();
+    _dfuClient = null;
+    try {
+      await _dfuTransport?.disconnect();
+    } catch (_) {
+      // The watch may already be gone (e.g. it just took a reset command).
+    }
+    await _dfuTransport?.dispose();
+    _dfuTransport = null;
+    _conn.releaseSmp(_smpToken);
+    _smpToken = null;
+  }
+
+  /// Between the two legs: wait for the watch to reboot onto v3, then offer the
+  /// radio image.
+  ///
+  /// The swap is an overwrite-only copy of the whole app image out of external
+  /// flash, so the watch is away for a while — poll rather than assume a fixed
+  /// delay. If it never comes back on the new version, stop and say so: an
+  /// automatic retry against a watch in an unknown state is the one thing that
+  /// could turn a recoverable situation into an SWD recovery.
+  Future<void> _awaitRebootThenOfferRadioUpdate() async {
+    const attemptGap = Duration(seconds: 8);
+    const maxAttempts = 15; // ~2 minutes
+
+    await _conn.disconnect();
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (!mounted) return;
+      await Future.delayed(attemptGap);
+      try {
+        await _conn.connect(_deviceMac!, name: _deviceName);
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _readCurrentFirmwareVersion();
+        debugPrint('[DFU] post-reboot attempt $attempt: '
+            '$_currentFWVersion (${_generation.label})');
+
+        if (!_generation.isPreV3) {
+          if (mounted) {
+            setState(() => _dfuState = DFUScreenState.radioUpdateReady);
+          }
+          return;
+        }
+        // Reachable but still on the old firmware: the swap did not happen.
+        // Keep trying — the watch may have reconnected before rebooting.
+      } catch (e) {
+        debugPrint('[DFU] post-reboot attempt $attempt failed: $e');
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _dfuState = DFUScreenState.error;
+        _errorMessage =
+            'The watch did not come back on the new firmware. It now reports '
+            '$_currentFWVersion. Check that it restarted and is charged, then '
+            'reopen this screen — the radio update is still pending and will '
+            'be offered again.';
+      });
     }
   }
 
@@ -420,9 +655,12 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   bool get _installing => _dfuState == DFUScreenState.installing;
 
-  /// Installing or completed — a focused card with no device/advanced chrome.
+  /// Installing, waiting out the reboot, or completed — a focused card with no
+  /// device/advanced chrome. (The radio-update step keeps the chrome: it is a
+  /// normal actionable state, not a flow the user is locked into.)
   bool get _terminal =>
       _dfuState == DFUScreenState.installing ||
+      _dfuState == DFUScreenState.awaitingReboot ||
       _dfuState == DFUScreenState.completed;
 
   // --- Presentation: redesigned firmware-update flow (handoff 5a) -----------
@@ -588,6 +826,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         return _isManualMode ? _manualCard() : _updateAvailableCard();
       case DFUScreenState.installing:
         return _installingCard();
+      case DFUScreenState.awaitingReboot:
+        return _awaitingRebootCard();
+      case DFUScreenState.radioUpdateReady:
+        return _radioUpdateCard();
       case DFUScreenState.completed:
         return _completeCard();
       case DFUScreenState.upToDate:
@@ -634,6 +876,19 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           if (_latestRelease?.body.isNotEmpty ?? false) ...[
             const SizedBox(height: 14),
             _whatsNew(_latestRelease!.body),
+          ],
+          // Set expectations before the first tap: a watch on pre-v3 firmware
+          // is migrated in two legs, and the second one needs the user to still
+          // be here after the restart.
+          if (_generation.isPreV3) ...[
+            const SizedBox(height: 14),
+            _noticeBanner(
+              Symbols.looks_two,
+              HpiColors.temp,
+              'This watch (${_generation.label}) updates in two steps: the main '
+              'firmware now, then the radio firmware after it restarts. Keep '
+              'the watch nearby and on charge until both are done.',
+            ),
           ],
           const SizedBox(height: 14),
           Text(
@@ -740,7 +995,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
                   children: [
                     Text('Manual firmware loaded', style: HpiText.appBarTitle),
                     const SizedBox(height: 2),
-                    Text('${_manifest?.files.length ?? 0} images ready',
+                    Text(
+                        _manualRadioUpdatePending
+                            ? 'Step 2 of 2 · radio firmware'
+                            : '${_manifest?.files.length ?? 0} images ready',
                         style: HpiText.supporting),
                   ],
                 ),
@@ -753,12 +1011,37 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             HpiColors.temp,
             'Advanced mode — ensure firmware compatibility with this watch.',
           ),
+          // Same two-step rule as an automatic update: a watch on pre-v3
+          // firmware takes the main firmware first, the radio after it
+          // restarts. Selecting the package by hand does not change that.
+          if (_generation.isPreV3) ...[
+            const SizedBox(height: 12),
+            _noticeBanner(
+              Symbols.looks_two,
+              HpiColors.temp,
+              'This watch (${_generation.label}) installs in two steps — the '
+              'main firmware now, the radio firmware after it restarts. Keep '
+              'this file: you will be asked to select it again for step 2.',
+            ),
+          ],
+          if (_manualRadioUpdatePending) ...[
+            const SizedBox(height: 12),
+            _noticeBanner(
+              Symbols.info,
+              HpiColors.hr,
+              'Only the radio firmware will be installed — the main firmware '
+              'is already on the watch.',
+            ),
+          ],
           const SizedBox(height: 16),
           HpiFilledButton(
-            label: 'Install manual firmware',
+            label: _manualRadioUpdatePending
+                ? 'Install radio firmware'
+                : 'Install manual firmware',
             icon: Symbols.upgrade,
             color: HpiColors.temp,
-            onPressed: _startFirmwareUpdate,
+            onPressed: () =>
+                _startFirmwareUpdate(resumingStageTwo: _manualRadioUpdatePending),
           ),
         ],
       ),
@@ -767,8 +1050,13 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
 
   /// DFU in progress — amber ring, image counter, "do not disconnect".
   Widget _installingCard() {
-    final total = _manifest?.files.length ?? 1;
+    final total = _plan?.images.length ?? _manifest?.files.length ?? 1;
     final current = _currentImageIndex + 1;
+    final stageNote = switch (_plan?.stage) {
+      DfuStage.appCoreFirst => 'Main firmware · step 1 of 2',
+      DfuStage.netCore => 'Radio firmware · step 2 of 2',
+      _ => null,
+    };
     return HpiCard(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -800,6 +1088,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
           const SizedBox(height: 6),
           Text('Image $current of $total',
               style: HpiText.mono.copyWith(fontSize: 11)),
+          if (stageNote != null) ...[
+            const SizedBox(height: 4),
+            Text(stageNote, style: HpiText.supporting),
+          ],
           const SizedBox(height: 16),
           _linearBar(_dfuProgress),
           const SizedBox(height: 18),
@@ -807,6 +1099,96 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             Symbols.warning,
             HpiColors.error,
             'Do not disconnect the watch while installing.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Between the legs: the app core is installed, the watch is restarting, and
+  /// the radio image is still owed.
+  Widget _awaitingRebootCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const SizedBox(
+            width: 44,
+            height: 44,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(HpiColors.hr),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Main firmware installed', style: HpiText.appBarTitle),
+          const SizedBox(height: 8),
+          Text(
+            'The watch is restarting on the new firmware. This takes up to a '
+            'couple of minutes — keep it nearby and on charge.',
+            style: HpiText.body.copyWith(fontSize: 12.5),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          _noticeBanner(
+            Symbols.info,
+            HpiColors.temp,
+            'One step left: the radio firmware is installed after the restart.',
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Second leg: the watch is on v3 and only the radio image is left.
+  Widget _radioUpdateCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              HpiIconSquare(
+                  icon: Symbols.settings_input_antenna,
+                  color: HpiColors.hr,
+                  size: 40,
+                  iconSize: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Radio firmware update', style: HpiText.appBarTitle),
+                    const SizedBox(height: 2),
+                    Text('Step 2 of 2 · watch now on $_currentFWVersion',
+                        style: HpiText.supporting),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'The main firmware is installed. This last step updates the '
+            "watch's Bluetooth radio firmware to match.",
+            style: HpiText.body.copyWith(fontSize: 12.5),
+          ),
+          const SizedBox(height: 14),
+          _noticeBanner(
+            Symbols.battery_alert,
+            HpiColors.temp,
+            'Keep the watch on charge — it refuses updates below 30% battery.',
+          ),
+          const SizedBox(height: 16),
+          HpiFilledButton(
+            label: _dfuState == DFUScreenState.downloading
+                ? 'Preparing…'
+                : 'Install radio firmware',
+            icon: Symbols.upgrade,
+            onPressed: (_manifest != null && _extractedDir != null)
+                ? () => _startFirmwareUpdate(resumingStageTwo: true)
+                : null,
           ),
         ],
       ),
@@ -856,6 +1238,19 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             const SizedBox(height: 4),
             Text('Latest available: ${_latestRelease!.version}',
                 style: HpiText.supporting),
+          ],
+          // The version matches the latest release, but the migration this
+          // watch started is not finished: its radio image is still owed and
+          // came from a package only the user has.
+          if (_manualRadioUpdatePending) ...[
+            const SizedBox(height: 16),
+            _noticeBanner(
+              Symbols.looks_two,
+              HpiColors.temp,
+              'One step left: the radio firmware update for this watch is still '
+              'pending. Open Advanced options and select the same firmware .zip '
+              'again to finish it.',
+            ),
           ],
           if (_errorMessage != null) ...[
             const SizedBox(height: 16),
@@ -1008,27 +1403,61 @@ class _ImgMgmtUploadTransport implements FirmwareUploadTransport {
 
   final ImgMgmt _img;
 
+  /// MCUmgr `MGMT_ERR_EBADSTATE`. The firmware answers the img-mgmt upload hook
+  /// with this when the battery is under its DFU floor (30 %).
+  static const int _rcBadState = 6;
+
   @override
   Future<List<int>> uploadImage(
     Uint8List image, {
     required int imageIndex,
     void Function(int sent, int total)? onProgress,
-  }) =>
-      _img.upload(image, imageIndex: imageIndex, onProgress: onProgress);
+  }) async {
+    try {
+      return await _img.upload(image,
+          imageIndex: imageIndex, onProgress: onProgress);
+    } on SmpException catch (e) {
+      // Translate the watch's own refusal into something a user can act on;
+      // a raw "bad state (rc=6)" reads like a crash.
+      if (e.rc == _rcBadState) throw const DfuBatteryTooLow();
+      rethrow;
+    }
+  }
 
   @override
-  Future<void> confirm(List<int> sha) => _img.confirm(sha);
+  Future<void> markPending(List<int> sha) => _img.test(sha);
 
   @override
-  Future<Set<int>> deviceImageIndexes() async {
+  Future<List<int>?> stagedImageHash(int imageIndex) async {
     try {
       final slots = await _img.list();
-      return slots.map((s) => s.image).toSet();
+      for (final s in slots) {
+        // slot 1 = secondary: where an upload lands, and where the device
+        // publishes the hash to hand back in `image test`.
+        if (s.image == imageIndex && s.slot == 1 && s.hash.isNotEmpty) {
+          return s.hash;
+        }
+      }
     } catch (e) {
-      // Unknown slot map — return empty so the updater skips the pre-flight
-      // rather than blocking an update that would actually have worked.
-      debugPrint('[DFU] could not read image list (skipping pre-flight): $e');
-      return const {};
+      debugPrint('[DFU] could not read staged hash from image list: $e');
+    }
+    return null;
+  }
+
+  @override
+  Future<DeviceSlots> deviceSlots() async {
+    try {
+      final slots = await _img.list();
+      // An answer with no entries is not a usable slot map either — treat it
+      // as unknown rather than "this device has no images".
+      if (slots.isEmpty) return const DeviceSlots.unknown();
+      return DeviceSlots.known(slots.map((s) => s.image).toSet());
+    } catch (e) {
+      // Older firmware can fail this query outright (or answer rc=1 on the
+      // net-core slot). Unknown ⇒ skip the cross-check rather than block an
+      // update that would have worked.
+      debugPrint('[DFU] could not read image list (slot check skipped): $e');
+      return const DeviceSlots.unknown();
     }
   }
 }

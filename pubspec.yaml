@@ -43,6 +43,10 @@ dev_dependencies:
   json_serializable: ^6.7.1
   flutter_launcher_icons: ^0.14.3
   flutter_lints: ^6.0.0
+  # Used by test/mcuboot_image_test.dart to show that the MCUboot image hash is
+  # NOT sha256 of the file (transitive via mcumgr_dart; declared so the test may
+  # import it directly).
+  crypto: ^3.0.0
 
 flutter:
   uses-material-design: true
