@@ -1,6 +1,29 @@
 # Uncomment this line to define a global platform for your project
 platform :ios, '13.1'
 
+# file_picker: build the document picker only.
+#
+# Its podspec gates each picker behind a constant (`Pod.const_defined?`), and by
+# default pulls in DKImagePickerController/PhotoGallery for media picking — which
+# drags in DKPhotoGallery, SDWebImage and SwiftyGif, links the camera and photo
+# library, and makes the App Store ask what we use them for. The app picks
+# exactly one thing: a firmware .zip, via `FileType.custom` in
+# `scr_dfu_new.dart` — that is the DOCUMENT path (UIDocumentPickerViewController)
+# and needs none of it.
+#
+# These must be set before flutter_install_all_ios_pods evaluates the podspec.
+# They also compile out the corresponding code (`#ifdef PICKER_MEDIA` in
+# FilePickerPlugin.m), so requesting media/audio at runtime would fail — nothing
+# does. If a future screen needs image or audio picking, flip the flag back on
+# and restore the matching NS*UsageDescription in Info.plist.
+# Object.const_set, not a plain `PICKER_MEDIA = false`: a Podfile is eval'd with
+# its cref inside Pod::Podfile, so a plain assignment lands at
+# Pod::Podfile::PICKER_MEDIA, where the podspec's Pod.const_defined?(:PICKER_MEDIA)
+# cannot see it — the guard silently stays enabled and the pods come back.
+Object.const_set(:PICKER_MEDIA, false)
+Object.const_set(:PICKER_AUDIO, false)
+Object.const_set(:PICKER_DOCUMENT, true)
+
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
