@@ -31,7 +31,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
-	<string>13.0</string>
+	<string>13.1</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>HealthyPi Move App need the Bluetooth permission to scan for and connect to Move devices</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
