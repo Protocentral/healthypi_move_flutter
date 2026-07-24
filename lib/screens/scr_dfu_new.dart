@@ -4,7 +4,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
@@ -593,13 +593,20 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   /// Manual firmware selection
   Future<void> _onLoadFirmwareManual() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['zip'],
-        dialogTitle: 'Select Firmware ZIP File',
+      // file_selector, not file_picker: the latter pulls in
+      // DKImagePickerController on iOS (camera + photo-library), which this
+      // screen never uses. On iOS the document picker filters by UTI, not
+      // extension — `extensions` is ignored there and an empty
+      // `uniformTypeIdentifiers` throws, so the zip UTI must be spelled out.
+      const XTypeGroup firmwareZip = XTypeGroup(
+        label: 'Firmware',
+        extensions: ['zip'], // Android / desktop
+        uniformTypeIdentifiers: ['public.zip-archive'], // iOS / macOS
+        mimeTypes: ['application/zip'], // Android SAF
       );
+      final XFile? picked = await openFile(acceptedTypeGroups: [firmwareZip]);
 
-      if (result == null) {
+      if (picked == null) {
         return; // User cancelled
       }
 
@@ -608,7 +615,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         _downloadProgress = 0.0;
       });
 
-      final file = File(result.files.first.path!);
+      // The iOS picker runs in `.import` mode, so this path is a readable copy
+      // in the app's temp dir, not a security-scoped URL — safe to open here.
+      final file = File(picked.path);
 
       // Extract and validate
       final extracted = await FirmwareUpdateService.extractFirmware(file);
