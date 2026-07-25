@@ -1,8 +1,13 @@
 // Copyright (c) 2024-2026 ProtoCentral
 // SPDX-License-Identifier: MIT
 
+import 'dart:io';
+
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../data/health_repository.dart';
 import '../globals.dart';
@@ -69,10 +74,13 @@ class TrendDetailView extends StatefulWidget {
   final bool showHeader;
 
   @override
-  State<TrendDetailView> createState() => _TrendDetailViewState();
+  State<TrendDetailView> createState() => TrendDetailViewState();
 }
 
-class _TrendDetailViewState extends State<TrendDetailView> {
+/// Public so the pushed route ([TrendDetailScreen]) can drive [exportCsv] from
+/// its app-bar action — the selected range and loaded detail live here, not in
+/// the wrapper.
+class TrendDetailViewState extends State<TrendDetailView> {
   MetricDetail? _detail;
 
   /// HRV rides along on the HR screen (handoff 3a) — it is a second metric, so
@@ -80,6 +88,7 @@ class _TrendDetailViewState extends State<TrendDetailView> {
   MetricDetail? _hrv;
 
   TrendRange _range = TrendRange.day;
+  bool _exporting = false;
   final _repo = HealthRepository();
 
   @override
@@ -119,6 +128,79 @@ class _TrendDetailViewState extends State<TrendDetailView> {
     if (v == null) return '--';
     if (widget.metricKey == 'temp') return v.toStringAsFixed(1);
     return v.round().toString();
+  }
+
+  /// Export the **selected range** as CSV and hand it to the share sheet.
+  ///
+  /// The share icon was decoration for a while — a bare `Icon` with no handler
+  /// on either the inline header or the pushed route's app bar. Exporting the
+  /// selected range (rather than everything) keeps the file matching what the
+  /// user is looking at.
+  Future<void> exportCsv() => _export();
+
+  /// True while an export is in flight, so a host app bar can disable its action.
+  bool get isExporting => _exporting;
+
+  Future<void> _export() async {
+    final d = _detail;
+    if (d == null || _exporting) return;
+    final series = d.series(_range);
+    if (series.isEmpty) {
+      _toast('Nothing to export in this range.');
+      return;
+    }
+
+    setState(() => _exporting = true);
+    try {
+      final style = TrendMetricStyle.of(widget.metricKey);
+      final bucket = _range == TrendRange.day
+          ? 'hour'
+          : (_range == TrendRange.sixMonths ? 'week' : 'day');
+      final rows = <List<dynamic>>[
+        ['bucket_start_local', 'bucket', 'metric', 'unit', 'min', 'avg', 'max'],
+        for (final p in series)
+          [
+            p.t.toIso8601String(),
+            bucket,
+            widget.metricKey,
+            style.unit,
+            p.min,
+            p.avg,
+            p.max,
+          ],
+      ];
+
+      final dir = await getApplicationDocumentsDirectory();
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(RegExp(r'[:.]'), '-')
+          .substring(0, 19);
+      final file = File(
+          '${dir.path}/healthypi_${widget.metricKey}_${_range.name}_$stamp.csv');
+      await file.writeAsString(const ListToCsvConverter().convert(rows));
+      if (!mounted) return;
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)],
+        text: '${style.title} · ${_rangeLabel()}',
+      ));
+    } catch (e) {
+      _toast('Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  String _rangeLabel() => switch (_range) {
+        TrendRange.day => 'today',
+        TrendRange.week => 'last 7 days',
+        TrendRange.month => 'last 30 days',
+        TrendRange.sixMonths => 'last 6 months',
+      };
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -165,7 +247,17 @@ class _TrendDetailViewState extends State<TrendDetailView> {
           const SizedBox(width: 8),
           Text(style.title, style: HpiText.appBarTitle),
           const Spacer(),
-          const Icon(Symbols.ios_share, size: 20, color: HpiColors.onSurfaceBright),
+          IconButton(
+            icon: _exporting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Symbols.ios_share,
+                    size: 20, color: HpiColors.onSurfaceBright),
+            tooltip: 'Export CSV',
+            onPressed: _exporting ? null : _export,
+          ),
         ],
       ),
     );
@@ -288,15 +380,25 @@ class _TrendDetailViewState extends State<TrendDetailView> {
     void add(String v, String l, {Color? c}) => chips.add(Expanded(
         child: HpiStatChip(value: v, label: l, valueColor: c)));
 
+    // Stats for the *selected* range. These used to read d.min/avg/max, which
+    // are today-only — so they never moved when you changed range, and showed
+    // "--" whenever today was empty even with a full chart next to them.
+    final s = d.statsFor(_range);
+    final hasRange = s.avg != null;
+    final avg = hasRange ? s.avg : d.avg;
+    final min = hasRange ? s.min : d.min;
+    final max = hasRange ? s.max : d.max;
+
     if (widget.metricKey == 'activity') {
-      add(_fmt(d.max), 'Peak hr', c: style.color);
-      add(_fmt(d.avg), 'Avg');
+      add(_fmt(max), _range == TrendRange.day ? 'Peak hr' : 'Best day',
+          c: style.color);
+      add(_fmt(avg), _range == TrendRange.day ? 'Avg' : 'Avg/day');
       if (d.baseline != null) add(_fmt(d.baseline), 'Daily avg');
     } else {
       if (d.baseline != null) add(_fmt(d.baseline), 'Baseline', c: HpiColors.spo2);
-      add(_fmt(d.avg), 'Avg');
-      add(_fmt(d.min), 'Min');
-      add(_fmt(d.max), 'Max', c: style.color);
+      add(_fmt(avg), 'Avg');
+      add(_fmt(min), 'Min');
+      add(_fmt(max), 'Max', c: style.color);
     }
     final row = <Widget>[];
     for (var i = 0; i < chips.length; i++) {
@@ -472,21 +574,38 @@ class _TrendDetailViewState extends State<TrendDetailView> {
 
   // --- axis labels ---
 
+  /// Axis ticks for the selected range.
+  ///
+  /// Every non-day range used to print weekday names, so Month and 6M both read
+  /// "Tue … Fri" — indistinguishable from Week, and meaningless once the window
+  /// is longer than seven days. Each range now labels in its own units: hours,
+  /// weekdays, dates, months.
   Widget _xAxis(List<TrendPoint> s) {
-    List<String> labels;
+    String tick(DateTime t) => switch (_range) {
+          TrendRange.day => _hourShort(t),
+          TrendRange.week => _weekdayShort(t),
+          TrendRange.month => '${_monthShort(t.month)} ${t.day}',
+          TrendRange.sixMonths => _monthShort(t.month),
+        };
+
+    final List<String> labels;
     if (_range == TrendRange.day) {
       labels = ['12A', '6A', '12P', '6P', '11P'];
+    } else if (s.isEmpty) {
+      labels = const [];
+    } else if (s.length == 1) {
+      labels = [tick(s.first.t)];
     } else {
-      labels = s.isEmpty
-          ? const []
-          : [
-              _weekdayShort(s.first.t),
-              if (s.length > 2) _weekdayShort(s[s.length ~/ 2].t),
-              _weekdayShort(s.last.t),
-            ];
+      labels = [
+        tick(s.first.t),
+        if (s.length > 2) tick(s[s.length ~/ 2].t),
+        tick(s.last.t),
+      ];
     }
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: labels.length == 1
+          ? MainAxisAlignment.center
+          : MainAxisAlignment.spaceBetween,
       children: [
         for (final l in labels)
           Text(l, style: HpiText.mono.copyWith(fontSize: 9, color: HpiColors.faint)),
@@ -517,6 +636,10 @@ class _TrendDetailViewState extends State<TrendDetailView> {
       '${_weekdayShort(t)}, ${_monthShort(t.month)} ${t.day}';
   String _weekdayShort(DateTime t) =>
       const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][t.weekday - 1];
+  String _hourShort(DateTime t) {
+    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+    return '$h${t.hour < 12 ? 'A' : 'P'}';
+  }
   String _monthShort(int m) => const [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -525,26 +648,40 @@ class _TrendDetailViewState extends State<TrendDetailView> {
 
 /// Compact pushed route wrapping [TrendDetailView] with an app bar (back +
 /// share), used when the layout isn't wide enough for the two-pane detail.
-class TrendDetailScreen extends StatelessWidget {
+class TrendDetailScreen extends StatefulWidget {
   const TrendDetailScreen({super.key, required this.metricKey});
   final String metricKey;
 
   @override
+  State<TrendDetailScreen> createState() => _TrendDetailScreenState();
+}
+
+class _TrendDetailScreenState extends State<TrendDetailScreen> {
+  /// Drives the app-bar share action, which would otherwise have no way to
+  /// reach the selected range — this action was a decorative `Icon` before.
+  final _viewKey = GlobalKey<TrendDetailViewState>();
+
+  @override
   Widget build(BuildContext context) {
-    final style = TrendMetricStyle.of(metricKey);
+    final style = TrendMetricStyle.of(widget.metricKey);
     return Scaffold(
       backgroundColor: HpiColors.background,
       appBar: AppBar(
         title: Text(style.title),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 12),
-            child: Icon(Symbols.ios_share, size: 20),
+        actions: [
+          IconButton(
+            icon: const Icon(Symbols.ios_share, size: 20),
+            tooltip: 'Export CSV',
+            onPressed: () => _viewKey.currentState?.exportCsv(),
           ),
         ],
       ),
       body: SafeArea(
-        child: TrendDetailView(metricKey: metricKey, showHeader: false),
+        child: TrendDetailView(
+          key: _viewKey,
+          metricKey: widget.metricKey,
+          showHeader: false,
+        ),
       ),
     );
   }

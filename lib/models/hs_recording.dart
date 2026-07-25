@@ -44,20 +44,24 @@ class HsRecording {
     return (nSamples / sr).round().clamp(0, 24 * 3600);
   }
 
-  /// Filter bucket for the library chips (PPG / GSR / IMU / other).
+  /// Filter bucket for the library chips (ECG / PPG / GSR / IMU / other).
+  ///
+  /// Keyed off [HsSignal], which is **1-based** — the firmware's own enum. These
+  /// used to be raw 0-based literals, so every session landed one bucket off
+  /// (ECG→GSR, GSR→PPG) and `ecg`/`imu` were unreachable.
   HsRecordingKind get kind {
     switch (signal) {
-      case 1:
-        return HsRecordingKind.gsr;
-      case 2:
-      case 3:
-        return HsRecordingKind.ppg;
-      case 5:
-        return HsRecordingKind.imu;
-      case 0:
+      case HsSignal.ecg:
         return HsRecordingKind.ecg;
-      case 4:
+      case HsSignal.bioz:
+        return HsRecordingKind.gsr;
+      case HsSignal.ppgWrist:
+      case HsSignal.ppgFinger:
+        return HsRecordingKind.ppg;
+      case HsSignal.hrvRr:
         return HsRecordingKind.hrv;
+      case HsSignal.acc:
+        return HsRecordingKind.imu;
       default:
         return HsRecordingKind.other;
     }

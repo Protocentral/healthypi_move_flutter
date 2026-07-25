@@ -164,7 +164,7 @@ Device emits `{id, sig, fmt, ch, rate, ns, len, crc, flags, ts}`:
 |---|---|
 | `id` | session id |
 | `ts` | start timestamp (UTC seconds) |
-| `sig` | signal type (ECG / BioZ / PPG / HRV / IMU) |
+| `sig` | signal type — `enum hpi_hs_signal`, **1-based**, see below |
 | `fmt` | sample encoding (`enum hpi_hs_sfmt`) — pins bytes-per-sample |
 | `ch` | channel count |
 | `rate` | sample rate (Hz) |
@@ -175,6 +175,25 @@ Device emits `{id, sig, fmt, ch, rate, ns, len, crc, flags, ts}`:
 
 Verify `crc` before trusting a decoded payload, and store `PARTIAL` sessions
 flagged rather than dropping them.
+
+### Signal codes (`sig`)
+
+Pinned against `enum hpi_hs_signal` in the firmware's `hpi_hs_types.h`. **The
+enum starts at 1** — `0` is not a signal.
+
+| `sig` | Signal | Source |
+|---|---|---|
+| `0x01` | ECG | MAX30001, int32 raw |
+| `0x02` | BioZ / GSR | MAX30001, int32 raw |
+| `0x03` | PPG wrist | MAX32664C, multi-LED |
+| `0x04` | PPG finger | MAX32664D, multi-LED |
+| `0x05` | HRV R-R | uint16 ms |
+| `0x06` | IMU accel | int16 x/y/z |
+
+A 0-based reading of this table shifts every code by one and is silent about
+it: ECG sessions list as GSR, GSR as PPG, IMU disappears, and the ECG bucket
+can never be filled because nothing emits `0`. Regression-tested in
+`packages/healthypi_healthy_store/test/hs_record_wire_test.dart`.
 
 ## 8. SUMMARY
 

@@ -199,12 +199,23 @@ class BleManager {
       UniversalBle.characteristicValueStream(deviceId, characteristic);
 
   /// Convenience: subscribe + return the value stream in one call.
+  ///
+  /// [onSubscribeError] receives a failed notify-enable. Without it the failure
+  /// is only a `debugPrint`, and a screen that fires this and waits shows a
+  /// live, connected-looking view that can never receive a byte — the caller
+  /// must be able to tell "no data yet" from "this will never work".
   Stream<Uint8List> subscribeStream(
-      String deviceId, String service, String characteristic) {
+    String deviceId,
+    String service,
+    String characteristic, {
+    void Function(Object error)? onSubscribeError,
+  }) {
     // Fire-and-forget the subscribe; the stream is broadcast so values flow once
     // notifications are enabled.
-    unawaited(subscribe(deviceId, service, characteristic)
-        .catchError((Object e) => debugPrint('[BleManager] subscribe failed: $e')));
+    unawaited(subscribe(deviceId, service, characteristic).catchError((Object e) {
+      debugPrint('[BleManager] subscribe failed: $e');
+      onSubscribeError?.call(e);
+    }));
     return notifications(deviceId, characteristic);
   }
 

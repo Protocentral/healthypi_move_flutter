@@ -66,6 +66,19 @@ extension on LiveSignal {
         LiveSignal.gsr => 'GSR · 32 SPS',
       };
 
+  /// The watch only produces this signal during an on-device spot check.
+  ///
+  /// ECG and GSR share the MAX30001 front end, and the firmware only queues its
+  /// samples while `get_ecg_active() || get_gsr_active()` — both set by the
+  /// Start button on the watch's own screen. Wrist PPG, by contrast, runs
+  /// continuously. Subscribing is therefore not enough for ECG/GSR, and an idle
+  /// trace is normal rather than a fault.
+  bool get watchGated => switch (this) {
+        LiveSignal.ecg => true,
+        LiveSignal.gsr => true,
+        LiveSignal.ppg => false,
+      };
+
   /// Decode a notification payload into samples. Copy into a fresh, offset-0
   /// buffer first: universal_ble hands back views into a larger buffer, so
   /// reinterpreting `value.buffer` directly would be misaligned.
@@ -97,12 +110,24 @@ class _ScrLiveState extends State<ScrLive> {
   final _buffers = <LiveSignal, SweepBuffer>{};
   final _subs = <LiveSignal, StreamSubscription<Uint8List>>{};
 
+  /// When each signal last delivered a sample, so the UI can distinguish
+  /// "subscribed and waiting" from "streaming".
+  final _lastSample = <LiveSignal, DateTime>{};
+
+  /// Drives the "waiting for data" hint without rebuilding on every packet.
+  Timer? _idleTicker;
+
   @override
   void initState() {
     super.initState();
     _cm.addListener(_onLink);
     // Kept alive in the shell's IndexedStack — re-resolve when pairing changes.
     DeviceManager.pairingRevision.addListener(_init);
+    // Cheap repaint so "waiting for the watch" appears without coupling the
+    // hint to packet arrival (which by definition isn't happening).
+    _idleTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _cm.isConnected) setState(() {});
+    });
     _init();
   }
 
@@ -110,6 +135,7 @@ class _ScrLiveState extends State<ScrLive> {
   void dispose() {
     _cm.removeListener(_onLink);
     DeviceManager.pairingRevision.removeListener(_init);
+    _idleTicker?.cancel();
     for (final s in _subs.values) {
       s.cancel();
     }
@@ -125,11 +151,18 @@ class _ScrLiveState extends State<ScrLive> {
   void _onLink() {
     if (!mounted) return;
     setState(() {});
-    if (!_cm.isConnected) {
+    if (_cm.isConnected) {
+      // The link just came up. This used to only ever *tear down* on
+      // disconnect, never start on connect — so opening Live before the link
+      // settled, or any reconnect, left the default signal (ECG) permanently
+      // unsubscribed while the header still read CONNECTED.
+      _startAll();
+    } else {
       for (final s in _subs.values) {
         s.cancel();
       }
       _subs.clear();
+      _lastSample.clear();
     }
   }
 
@@ -171,9 +204,22 @@ class _ScrLiveState extends State<ScrLive> {
     final buffer = _buffers.putIfAbsent(signal, () => SweepBuffer());
     try {
       _subs[signal] = _cm
-          .subscribe(signal.service, signal.characteristic)
+          .subscribe(
+        signal.service,
+        signal.characteristic,
+        // A failed notify-enable was previously swallowed into a debugPrint,
+        // leaving a connected-looking screen that could never receive a byte.
+        onSubscribeError: (e) {
+          if (mounted) {
+            setState(() => _error = 'Could not start ${signal.label}: $e');
+          }
+        },
+      )
           .listen(
-        (value) => buffer.addAll(signal.decode(value)),
+        (value) {
+          _lastSample[signal] = DateTime.now();
+          buffer.addAll(signal.decode(value));
+        },
         onError: (Object e) => debugPrint('live ${signal.label}: $e'),
         cancelOnError: true,
       );
@@ -182,8 +228,23 @@ class _ScrLiveState extends State<ScrLive> {
     }
   }
 
+  /// Subscribed, but the watch has not sent this signal for a while.
+  ///
+  /// ECG and GSR are **spot checks**: the firmware only queues samples while a
+  /// measurement is running on the watch (`get_ecg_active() || get_gsr_active()`
+  /// gates `q_ecg_sample`), and ECG additionally needs leads on. So an idle
+  /// grid here is the normal resting state, not a fault — say so instead of
+  /// showing an empty chart under a CONNECTED badge.
+  bool _awaitingWatch(LiveSignal s) {
+    if (!_cm.isConnected || !_subs.containsKey(s)) return false;
+    final last = _lastSample[s];
+    return last == null ||
+        DateTime.now().difference(last) > const Duration(seconds: 3);
+  }
+
   Future<void> _stop(LiveSignal signal) async {
     await _subs.remove(signal)?.cancel();
+    _lastSample.remove(signal);
     _buffers[signal]?.clear();
     if (_cm.isConnected) {
       await _cm
@@ -203,9 +264,22 @@ class _ScrLiveState extends State<ScrLive> {
   }
 
   Future<void> _selectPrimary(LiveSignal signal) async {
-    if (signal == _primary) return;
+    if (signal == _primary) {
+      // Re-tapping the active chip re-arms it. This used to return early, which
+      // made the *default* signal (ECG) the one you could never restart by
+      // tapping: if its initial subscribe was missed you had to switch to
+      // another signal and back. That is exactly the "worked on the second try"
+      // report.
+      setState(() => _error = null);
+      await _stop(signal);
+      _start(signal);
+      return;
+    }
     final old = _primary;
-    setState(() => _primary = signal);
+    setState(() {
+      _primary = signal;
+      _error = null;
+    });
     await _stop(old);
     _start(signal);
   }
@@ -312,6 +386,7 @@ class _ScrLiveState extends State<ScrLive> {
 
   Widget _waveformCard(LiveSignal s) {
     final buffer = _buffers.putIfAbsent(s, () => SweepBuffer());
+    final idle = _awaitingWatch(s);
     return HpiCard(
       waveform: true,
       padding: const EdgeInsets.all(12),
@@ -327,7 +402,32 @@ class _ScrLiveState extends State<ScrLive> {
             ],
           ),
           const SizedBox(height: 8),
-          Expanded(child: HpiSweepWaveform(buffer: buffer, color: s.color)),
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                    child: HpiSweepWaveform(buffer: buffer, color: s.color)),
+                if (idle)
+                  Positioned.fill(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Text(
+                          s.watchGated
+                              ? 'Start a ${s.label} measurement on your watch to '
+                                  'stream here.\n${s.label} only runs during a '
+                                  'spot check.'
+                              : 'Waiting for ${s.label} data from the watch…',
+                          textAlign: TextAlign.center,
+                          style: HpiText.body.copyWith(
+                              fontSize: 12, color: HpiColors.onSurfaceVariant),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );

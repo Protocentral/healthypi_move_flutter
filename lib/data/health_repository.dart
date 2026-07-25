@@ -104,6 +104,7 @@ class MetricDetail {
     this.daily = const [],
     this.weekly = const [],
     this.monthly = const [],
+    this.sixMonthly = const [],
   });
 
   final String key;
@@ -115,11 +116,16 @@ class MetricDetail {
   final double? avg;
   final double? baseline;
   final List<TrendPoint> daily; // today, hourly
-  final List<TrendPoint> weekly; // last 7 days
-  final List<TrendPoint> monthly; // current month, daily
+  final List<TrendPoint> weekly; // last 7 days, daily
+  final List<TrendPoint> monthly; // last 30 days, daily
+  final List<TrendPoint> sixMonthly; // last ~183 days, weekly bins
 
   bool get hasData => availability == MetricAvailability.available;
 
+  /// The series backing [r].
+  ///
+  /// `month` and `sixMonths` used to both return [monthly], so the 6M tab was a
+  /// relabelled copy of Month — nothing on screen changed when you tapped it.
   List<TrendPoint> series(TrendRange r) {
     switch (r) {
       case TrendRange.day:
@@ -127,9 +133,40 @@ class MetricDetail {
       case TrendRange.week:
         return weekly;
       case TrendRange.month:
+        return monthly;
       case TrendRange.sixMonths:
-        return monthly; // 30-day retention caps the real window at ~a month
+        return sixMonthly;
     }
+  }
+
+  /// Min / avg / max over [r]'s own series.
+  ///
+  /// The stat chips used to read [min]/[avg]/[max], which are computed from
+  /// *today* only — so they never changed with the segmented control, and they
+  /// read `--` whenever the newest data predated midnight even though the chart
+  /// beside them was drawing a week of it.
+  ///
+  /// For a cumulative metric (steps) the "avg" of a range is the mean daily
+  /// total, and min/max are the quietest and busiest buckets — so it reads off
+  /// [TrendPoint.max] (the bucket total), not the min/max envelope.
+  ({double? min, double? max, double? avg}) statsFor(TrendRange r) {
+    final s = series(r);
+    if (s.isEmpty) return (min: null, max: null, avg: null);
+
+    final cumulative = key == hPi4Global.PREFIX_ACTIVITY;
+    if (cumulative) {
+      final totals = s.map((p) => p.max).toList();
+      return (
+        min: totals.reduce((a, b) => a < b ? a : b),
+        max: totals.reduce((a, b) => a > b ? a : b),
+        avg: totals.reduce((a, b) => a + b) / totals.length,
+      );
+    }
+    return (
+      min: s.map((p) => p.min).reduce((a, b) => a < b ? a : b),
+      max: s.map((p) => p.max).reduce((a, b) => a > b ? a : b),
+      avg: s.map((p) => p.avg).reduce((a, b) => a + b) / s.length,
+    );
   }
 }
 
@@ -637,6 +674,7 @@ class HealthRepository {
         daily: detail.daily,
         weekly: detail.weekly,
         monthly: detail.monthly,
+        sixMonthly: detail.sixMonthly,
       );
     }
     if (key == hPi4Global.PREFIX_STRESS_EDA) {
@@ -647,7 +685,13 @@ class HealthRepository {
     final results = await Future.wait([
       _db.getHourlyTrends(key, today),
       _db.getWeeklyTrends(key, now.subtract(const Duration(days: 6))),
-      _db.getMonthlyTrends(key, now.year, now.month),
+      // Rolling windows, not calendar ones: `getMonthlyTrends(year, month)`
+      // collapsed the Month tab to a point or two every 1st of the month.
+      _db.getDailyAveragesSince(key, days: 30),
+      _db.getDailyAveragesSince(key, days: 183),
+      // The newest bucket we have at all, so a metric last measured days ago
+      // still headlines a value instead of "--" while its chart draws data.
+      _db.getLatestHourlyTrend(key, withinDays: 7),
     ]);
 
     List<TrendPoint> map(List<Map<String, dynamic>> rows, String tsCol) => rows
@@ -661,9 +705,26 @@ class HealthRepository {
             ))
         .toList();
 
-    final daily = map(results[0], 'hour_start');
-    final weekly = map(results[1], 'day_start');
-    final monthly = map(results[2], 'day_start');
+    // getDailyAveragesSince names its aggregates avg/min/max, not *_value.
+    List<TrendPoint> mapDaily(List<Map<String, dynamic>> rows) => rows
+        .map((r) => TrendPoint(
+              t: DateTime.fromMillisecondsSinceEpoch(
+                  (r['day_start'] as int) * 1000,
+                  isUtc: false),
+              min: _display(key, r['min'] as num),
+              max: _display(key, r['max'] as num),
+              avg: _display(key, r['avg'] as num),
+            ))
+        .toList();
+
+    final daily = map(results[0] as List<Map<String, dynamic>>, 'hour_start');
+    final weekly = map(results[1] as List<Map<String, dynamic>>, 'day_start');
+    final monthly = mapDaily(results[2] as List<Map<String, dynamic>>);
+    // 183 daily points is more than a phone-width chart can resolve, so bin to
+    // weeks — ~26 points, each keeping the true min/max of its week.
+    final sixMonthly =
+        _binWeekly(mapDaily(results[3] as List<Map<String, dynamic>>));
+    final latestRow = results[4] as Map<String, dynamic>?;
 
     if (daily.isEmpty && weekly.isEmpty && monthly.isEmpty) {
       // Stress: prefer SUMMARY baselining over a blank "no data" when the
@@ -704,6 +765,18 @@ class HealthRepository {
           ? daily.map((p) => p.max).reduce((a, b) => a + b)
           : daily.last.avg;
       latestAt = daily.last.t;
+    } else if (latestRow != null) {
+      // Nothing today, but the store holds a reading from the last few days.
+      // The home card has always fallen back like this; the detail screen did
+      // not, which is why a metric measured 3 days ago (SpO₂ especially, it is
+      // a spot check) headlined "--" here while Home showed the value.
+      latest = _display(key, latestRow['avg_value'] as num);
+      latestAt = DateTime.fromMillisecondsSinceEpoch(
+          (latestRow['hour_start'] as int) * 1000,
+          isUtc: false);
+      minV = _display(key, latestRow['min_value'] as num);
+      maxV = _display(key, latestRow['max_value'] as num);
+      avgV = latest;
     }
 
     return MetricDetail(
@@ -718,7 +791,34 @@ class HealthRepository {
       daily: daily,
       weekly: weekly,
       monthly: monthly,
+      sixMonthly: sixMonthly,
     );
+  }
+
+  /// Collapse daily points into ISO-week bins, keeping each week's true extremes
+  /// (min of mins, max of maxes) and the mean of its daily averages.
+  ///
+  /// Averaging the extremes away would flatten exactly the excursions a 6-month
+  /// view exists to show.
+  static List<TrendPoint> _binWeekly(List<TrendPoint> daily) {
+    if (daily.isEmpty) return const [];
+    final bins = <DateTime, List<TrendPoint>>{};
+    for (final p in daily) {
+      final d = DateTime(p.t.year, p.t.month, p.t.day);
+      final weekStart = d.subtract(Duration(days: d.weekday - 1));
+      bins.putIfAbsent(weekStart, () => []).add(p);
+    }
+    final keys = bins.keys.toList()..sort();
+    return [
+      for (final k in keys)
+        TrendPoint(
+          t: k,
+          min: bins[k]!.map((p) => p.min).reduce((a, b) => a < b ? a : b),
+          max: bins[k]!.map((p) => p.max).reduce((a, b) => a > b ? a : b),
+          avg: bins[k]!.map((p) => p.avg).reduce((a, b) => a + b) /
+              bins[k]!.length,
+        ),
+    ];
   }
 
   /// 30-day rolling baseline: the median of daily averages. Null until at least

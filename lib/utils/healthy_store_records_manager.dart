@@ -8,10 +8,12 @@ import 'package:flutter/foundation.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../globals.dart';
 import '../models/hs_recording.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
 import 'healthy_store_client.dart';
+import 'signal_view.dart';
 
 /// On-demand list / download / CRC / ack for HPI_HS **RECORDS** (episodic
 /// raw-signal sessions: ECG, GSR, PPG, HRV, IMU).
@@ -219,23 +221,41 @@ class HealthyStoreRecordsManager {
   }
 
   /// CSV export for a RECORDS payload (channel columns + timestamps).
+  ///
+  /// Each channel gets a raw column **and** a `_detrended` column (raw minus a
+  /// centred moving average, ~1 s wide). The raw counts stay the record of
+  /// truth, but plotting them directly in a spreadsheet gives a flat line: wrist
+  /// PPG rides a DC pedestal thousands of times larger than its pulsatile
+  /// component, so a min/max autoscale spends the whole axis on the offset and
+  /// the session's settling transient. The detrended column is what a user
+  /// actually wants to chart.
   Future<File> exportCsv(HsRecording recording, Uint8List payload) async {
     final samples = HsRecordSamples.decode(recording.header, payload);
     final sr = recording.sampleRate <= 0 ? 1 : recording.sampleRate;
     final start = recording.startTime.toUtc();
+
+    final detrended = [
+      for (final ch in samples.data) detrend(ch, window: sr.clamp(3, 512)),
+    ];
+
     final rows = <List<dynamic>>[
       [
         'timestamp_utc',
-        for (var c = 0; c < samples.channels; c++) 'ch$c',
+        't_ms',
+        for (var c = 0; c < samples.channels; c++) ...['ch$c', 'ch${c}_detrended'],
       ],
     ];
     final n = samples.sampleCount;
     for (var i = 0; i < n; i++) {
+      final tMs = i * 1000 / sr;
       final ts = start.add(Duration(microseconds: (i * 1e6 / sr).round()));
       rows.add([
         ts.toIso8601String(),
-        for (var c = 0; c < samples.channels; c++)
+        tMs.toStringAsFixed(1),
+        for (var c = 0; c < samples.channels; c++) ...[
           samples.data[c][i].toString(),
+          detrended[c][i].toStringAsFixed(2),
+        ],
       ]);
     }
 
@@ -297,18 +317,22 @@ class HealthyStoreRecordsManager {
     );
   }
 
+  /// Map an [HsSignal] into the legacy research bit mask (research UI filters).
+  ///
+  /// Keyed off the firmware's **1-based** enum. The literals here used to be
+  /// 0-based, so a GSR session was mirrored as PPG-wrist and so on.
   static int _signalMask(int signal) {
-    // Best-effort map into the legacy bit mask (research UI filters).
     switch (signal) {
-      case 1:
-        return 0x10; // GSR
-      case 2:
-        return 0x01; // PPG wrist
-      case 3:
-        return 0x02; // PPG finger
-      case 5:
-        return 0x04 | 0x08; // accel|gyro
+      case HsSignal.bioz:
+        return hPi4Global.SIGNAL_GSR;
+      case HsSignal.ppgWrist:
+        return hPi4Global.SIGNAL_PPG_WRIST;
+      case HsSignal.ppgFinger:
+        return hPi4Global.SIGNAL_PPG_FINGER;
+      case HsSignal.acc:
+        return hPi4Global.SIGNAL_ACCEL | hPi4Global.SIGNAL_GYRO;
       default:
+        // ECG and HRV have no bit in the legacy research mask.
         return 0;
     }
   }

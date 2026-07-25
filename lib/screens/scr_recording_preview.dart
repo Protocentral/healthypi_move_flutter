@@ -14,6 +14,7 @@ import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_records_manager.dart';
+import '../utils/signal_view.dart';
 
 /// Recording preview + CSV export (handoff 2d) for HPI_HS **RECORDS** payloads.
 ///
@@ -336,16 +337,10 @@ class _MinimapPainter extends CustomPainter {
     if (channel.isEmpty) return;
     final cols = size.width.floor().clamp(1, 4096);
     final per = (channel.length / cols).ceil().clamp(1, channel.length);
-    var lo = double.infinity, hi = -double.infinity;
-    for (final v in channel) {
-      if (v < lo) lo = v;
-      if (v > hi) hi = v;
-    }
-    if ((hi - lo).abs() < 1e-9) {
-      lo -= 1;
-      hi += 1;
-    }
-    double y(double v) => size.height * (1 - (v - lo) / (hi - lo));
+    final r = robustRange(channel);
+    final lo = r.lo, hi = r.hi;
+    double y(double v) =>
+        size.height * (1 - (v - lo) / (hi - lo)).clamp(0.0, 1.0);
 
     final path = Path();
     final tops = <Offset>[];
@@ -423,17 +418,13 @@ class _DetailPainter extends CustomPainter {
     final from = (n * windowStart).floor().clamp(0, n - 1);
     final to = (n * (windowStart + windowWidth)).ceil().clamp(from + 1, n);
 
-    var lo = double.infinity, hi = -double.infinity;
-    for (final ch in channels) {
-      for (var i = from; i < to && i < ch.length; i++) {
-        if (ch[i] < lo) lo = ch[i];
-        if (ch[i] > hi) hi = ch[i];
-      }
-    }
-    if (!lo.isFinite || !hi.isFinite || (hi - lo).abs() < 1e-9) {
-      lo -= 1;
-      hi += 1;
-    }
+    // Robust over the *visible window* only, so zooming into a quiet stretch
+    // rescales to it instead of staying pinned to a transient off-screen.
+    final r = robustRange([
+      for (final ch in channels)
+        for (var i = from; i < to && i < ch.length; i++) ch[i],
+    ]);
+    final lo = r.lo, hi = r.hi;
     final span = to - from;
     double y(double v) =>
         size.height * (1 - (v - lo) / (hi - lo)).clamp(0.0, 1.0);

@@ -13,6 +13,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_records_manager.dart';
+import '../utils/healthy_store_sync_manager.dart';
 import 'scr_recording_preview.dart';
 
 /// Recordings library (handoff 2c). Lists episodic sessions via HPI_HS
@@ -25,7 +26,9 @@ class ScrRecordings extends StatefulWidget {
   State<ScrRecordings> createState() => _ScrRecordingsState();
 }
 
-enum _Filter { all, ppg, gsr, imu }
+/// Order must match the segmented control's labels — the control reports an
+/// index straight into [_Filter.values].
+enum _Filter { all, ecg, ppg, gsr, imu }
 
 class _ScrRecordingsState extends State<ScrRecordings> {
   List<HsRecording>? _sessions;
@@ -41,6 +44,24 @@ class _ScrRecordingsState extends State<ScrRecordings> {
   @override
   void initState() {
     super.initState();
+    HealthyStoreSyncManager.dataRevision.addListener(_onStoreChanged);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    HealthyStoreSyncManager.dataRevision.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  /// The local store was wiped (or re-synced) underneath us.
+  ///
+  /// [_payloads] and the `onPhone` flags on [_sessions] are both caches of state
+  /// that no longer exists, so a stale screen would keep offering "open" on a
+  /// payload whose file has just been unlinked. Drop the cache and re-list.
+  void _onStoreChanged() {
+    if (!mounted) return;
+    _payloads.clear();
     _refresh();
   }
 
@@ -137,6 +158,8 @@ class _ScrRecordingsState extends State<ScrRecordings> {
     switch (_filter) {
       case _Filter.all:
         return true;
+      case _Filter.ecg:
+        return s.kind == HsRecordingKind.ecg;
       case _Filter.ppg:
         return s.kind == HsRecordingKind.ppg;
       case _Filter.gsr:
@@ -167,7 +190,7 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             HpiSegmentedControl(
-              segments: const ['All', 'PPG', 'GSR', 'IMU'],
+              segments: const ['All', 'ECG', 'PPG', 'GSR', 'IMU'],
               selectedIndex: _filter.index,
               onChanged: (i) => setState(() => _filter = _Filter.values[i]),
             ),
@@ -268,8 +291,8 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           Text('No recordings', style: HpiText.appBarTitle),
           const SizedBox(height: 6),
           Text(
-              'Long PPG, GSR and IMU sessions are started on the watch. '
-              'ECG spot checks live under Live.',
+              'ECG, PPG, GSR and IMU sessions are all started on the watch, '
+              'then downloaded here on demand.',
               textAlign: TextAlign.center,
               style: HpiText.body.copyWith(fontSize: 12)),
         ],

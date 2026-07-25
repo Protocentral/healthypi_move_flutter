@@ -63,3 +63,5 @@ docs/*.zip
 packages/*/pubspec.lock
 /flutter_01.png
 /flutter_02.png
+CLAUDE.md
+/tmp_local

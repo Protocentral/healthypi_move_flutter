@@ -136,4 +136,45 @@ void main() {
           reason: 'the UI must be able to flag this as unverified');
     });
   });
+
+  /// `enum hpi_hs_signal` is **1-based**. This table was 0-based for a while,
+  /// which shifted every code by one: ECG sessions were listed as GSR, GSR as
+  /// PPG, IMU fell off the end, and nothing ever produced code 0 — so the ECG
+  /// bucket was unreachable and ECG recordings could not be seen at all.
+  ///
+  /// Each expectation below is a firmware constant, not a preference. Changing
+  /// one means the firmware changed.
+  group('signal codes (enum hpi_hs_signal, 1-based)', () {
+    test('the constants match hpi_hs_types.h', () {
+      expect(HsSignal.ecg, 0x01);
+      expect(HsSignal.bioz, 0x02);
+      expect(HsSignal.ppgWrist, 0x03);
+      expect(HsSignal.ppgFinger, 0x04);
+      expect(HsSignal.hrvRr, 0x05);
+      expect(HsSignal.acc, 0x06);
+    });
+
+    test('every code names the signal the firmware actually sent', () {
+      expect(hsSignalName(HsSignal.ecg), 'ECG');
+      expect(hsSignalName(HsSignal.bioz), 'BioZ/GSR');
+      expect(hsSignalName(HsSignal.ppgWrist), 'PPG (wrist)');
+      expect(hsSignalName(HsSignal.ppgFinger), 'PPG (finger)');
+      expect(hsSignalName(HsSignal.hrvRr), 'HRV (R-R)');
+      expect(hsSignalName(HsSignal.acc), 'IMU');
+    });
+
+    test('code 0 is not a signal — the enum starts at 1', () {
+      // The off-by-one is only visible as a *shift*, so assert the boundary:
+      // 0 must be unknown, and 6 must resolve. A table that starts at 0 passes
+      // neither.
+      expect(hsSignalName(0), 'signal 0');
+      expect(hsSignalName(6), isNot(startsWith('signal ')));
+    });
+
+    test('a header carries the signal through unshifted', () {
+      final h = HsRecordHeader.fromMap(deviceHeader(sig: HsSignal.ecg));
+      expect(h.signal, HsSignal.ecg);
+      expect(h.signalName, 'ECG', reason: 'an ECG record must not read as GSR');
+    });
+  });
 }

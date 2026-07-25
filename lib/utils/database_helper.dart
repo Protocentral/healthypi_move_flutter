@@ -3,9 +3,12 @@
 
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart'
     show HsQuality, HsRecordHeader;
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1916,9 +1919,32 @@ class DatabaseHelper {
   ///
   /// The pairing is **kept** (that lives in SharedPreferences, not here), so the
   /// watch stays paired and its own data is untouched — this only deletes the
-  /// phone's copy. Returns the number of rows removed per table.
+  /// phone's copy. Returns the number of rows removed per table, plus a
+  /// `_files` entry counting the downloaded payloads unlinked from disk.
+  ///
+  /// **Deleting the index is not deleting the data.** Downloaded RECORDS
+  /// payloads live on the filesystem, not in SQLite; dropping only the rows left
+  /// every `.bin` orphaned under the documents directory with nothing left
+  /// pointing at it, so it could never be found or freed again. The files go
+  /// first, and the directory sweep also collects orphans left behind by earlier
+  /// index-only deletes.
   Future<Map<String, int>> deleteAllHealthData() async {
     final db = await database;
+
+    // Collect payload paths *before* the rows that name them are dropped.
+    final indexed = <String>{};
+    for (final table in ['hs_records', 'research_files']) {
+      try {
+        final rows = await db.query(table, columns: ['file_path']);
+        for (final r in rows) {
+          final p = r['file_path'] as String?;
+          if (p != null && p.isNotEmpty) indexed.add(p);
+        }
+      } catch (e) {
+        debugPrint('[DB] could not read $table.file_path: $e');
+      }
+    }
+
     const tables = [
       'hs_samples',
       'hs_types',
@@ -1937,7 +1963,60 @@ class DatabaseHelper {
         removed[table] = await txn.delete(table);
       }
     });
+
+    removed['_files'] = await _deleteRecordingFiles(indexed);
     return removed;
+  }
+
+  /// Unlink downloaded recording payloads and exported CSVs.
+  ///
+  /// Deletes [indexed] paths, then sweeps the `HealthyPiRecordings` tree and the
+  /// `hs_record_*.csv` exports, which no table indexes. Never throws: a file the
+  /// OS refuses to remove must not abort the wipe, since the rows are already
+  /// gone by the time this runs.
+  Future<int> _deleteRecordingFiles(Set<String> indexed) async {
+    var deleted = 0;
+
+    Future<void> unlink(FileSystemEntity e) async {
+      try {
+        if (await e.exists()) {
+          await e.delete(recursive: e is Directory);
+          if (e is File) deleted++;
+        }
+      } catch (err) {
+        debugPrint('[DB] could not delete ${e.path}: $err');
+      }
+    }
+
+    for (final p in indexed) {
+      await unlink(File(p));
+    }
+
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+
+      // Whole-tree sweep: catches payloads orphaned by earlier index-only
+      // deletes, which nothing else can ever find again.
+      final recordings = Directory('${docs.path}/HealthyPiRecordings');
+      if (await recordings.exists()) {
+        await for (final e in recordings.list(recursive: true)) {
+          if (e is File) await unlink(e);
+        }
+        await unlink(recordings);
+      }
+
+      // Exported CSVs sit loose in the documents root (see
+      // HealthyStoreRecordsManager.exportCsv) and are indexed by nothing.
+      await for (final e in docs.list()) {
+        if (e is File && basename(e.path).startsWith('hs_record_')) {
+          await unlink(e);
+        }
+      }
+    } catch (e) {
+      debugPrint('[DB] recording-file sweep failed: $e');
+    }
+
+    return deleted;
   }
 
   /// Close database

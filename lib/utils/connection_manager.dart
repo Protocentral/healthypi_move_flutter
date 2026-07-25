@@ -179,12 +179,20 @@ class ConnectionManager extends ChangeNotifier {
   // --- Streaming helpers (delegate to BleManager with the owned deviceId) ---
 
   /// Subscribe to a characteristic on the current link and get its value stream.
-  Stream<Uint8List> subscribe(String service, String characteristic) {
+  ///
+  /// [onSubscribeError] reports a failed notify-enable, which is otherwise
+  /// silent — the stream simply stays empty forever.
+  Stream<Uint8List> subscribe(
+    String service,
+    String characteristic, {
+    void Function(Object error)? onSubscribeError,
+  }) {
     final id = _deviceId;
     if (id == null) {
       throw StateError('ConnectionManager: not connected');
     }
-    return _ble.subscribeStream(id, service, characteristic);
+    return _ble.subscribeStream(id, service, characteristic,
+        onSubscribeError: onSubscribeError);
   }
 
   Future<void> unsubscribe(String service, String characteristic) async {

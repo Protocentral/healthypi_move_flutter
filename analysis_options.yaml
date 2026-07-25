@@ -11,9 +11,15 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
-    # Standalone pure-Dart package with its own analysis_options + test suite.
+    # Standalone pure-Dart package with its own analysis_options + test suite
+    # (run it with `cd packages/healthypi_healthy_store && dart test`).
     # App usage is still type-checked against its public API via the path dep.
-    - packages/hpi_health_store/**
+    #
+    # Must track the package directory name: this said `hpi_health_store/**`
+    # for a while after the rename, so root `flutter analyze` walked the
+    # package's tests without its `test` dev-dependency resolved and reported
+    # ~150 phantom "undefined_function: test/group/expect" errors.
+    - packages/healthypi_healthy_store/**
 
 linter:
   # The lint rules applied to this project can be customized in the

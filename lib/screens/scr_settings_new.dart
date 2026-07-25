@@ -10,6 +10,7 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/database_helper.dart';
+import '../utils/healthy_store_sync_manager.dart';
 import 'scr_developer.dart';
 
 /// Settings (handoff 1i). A pushed route (no nav bar). Preference rows that
@@ -49,7 +50,7 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
           'Your watch is not touched and stays paired — its own data is intact, '
           'so the next sync re-pulls whatever the watch still holds. Anything '
           'the watch has already aged out is gone for good.\n\n'
-          'CSV files you have already exported are not affected.',
+          'CSVs you have already shared or saved elsewhere are not affected.',
         ),
         actions: [
           TextButton(
@@ -68,10 +69,19 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     setState(() => _deleting = true);
     try {
       final removed = await DatabaseHelper.instance.deleteAllHealthData();
+      final files = removed.remove('_files') ?? 0;
       final total = removed.values.fold<int>(0, (a, b) => a + b);
+
+      // Every screen that reads the store is kept alive in the shell's
+      // IndexedStack and loads in initState, so without this they keep showing
+      // the data we just deleted until the app is relaunched.
+      HealthyStoreSyncManager.dataRevision.value++;
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Deleted $total rows. Sync to re-pull from the watch.'),
+          content: Text('Deleted $total rows'
+              '${files > 0 ? ' and $files recording file${files == 1 ? '' : 's'}' : ''}'
+              '. Sync to re-pull from the watch.'),
           backgroundColor: HpiColors.steps,
         ));
       }

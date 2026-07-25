@@ -91,15 +91,32 @@ class HsRecordHeader {
   int get effectiveChannels => channels <= 0 ? 1 : channels;
 }
 
-/// Best-effort signal-type names (firmware codes not pinned in the contract).
+/// Signal-type codes, pinned against the firmware's `enum hpi_hs_signal`
+/// (`app/src/health/hpi_hs_types.h`).
+///
+/// **The enum is 1-based.** This table used to start at 0, which shifted every
+/// code by one: an ECG record (1) was reported as GSR, a GSR record (2) as PPG,
+/// and IMU (6) fell off the end entirely. Nothing ever emitted 0, so
+/// [HsSignal.ecg] was unreachable and ECG sessions could never be listed.
+/// Values here are a wire contract — do not renumber them.
+abstract final class HsSignal {
+  static const int ecg = 0x01; // MAX30001 ECG, int32 raw
+  static const int bioz = 0x02; // MAX30001 BioZ / GSR, int32 raw
+  static const int ppgWrist = 0x03; // MAX32664C PPG (multi-LED)
+  static const int ppgFinger = 0x04; // MAX32664D PPG (multi-LED)
+  static const int hrvRr = 0x05; // R-R intervals, uint16 ms
+  static const int acc = 0x06; // IMU accel, int16 x/y/z
+}
+
+/// Human-readable name for a firmware [HsSignal] code.
 String hsSignalName(int code) {
   const names = {
-    0: 'ECG',
-    1: 'BioZ/GSR',
-    2: 'PPG (wrist)',
-    3: 'PPG (finger)',
-    4: 'HRV (R-R)',
-    5: 'IMU',
+    HsSignal.ecg: 'ECG',
+    HsSignal.bioz: 'BioZ/GSR',
+    HsSignal.ppgWrist: 'PPG (wrist)',
+    HsSignal.ppgFinger: 'PPG (finger)',
+    HsSignal.hrvRr: 'HRV (R-R)',
+    HsSignal.acc: 'IMU',
   };
   return names[code] ?? 'signal $code';
 }

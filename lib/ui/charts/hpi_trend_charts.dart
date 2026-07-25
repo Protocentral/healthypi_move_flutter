@@ -268,7 +268,7 @@ class _LinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.length < 2) return;
+    if (values.isEmpty) return;
     final plotW = size.width - _rightGutter;
     double lo, hi;
     if (yRange != null) {
@@ -278,6 +278,24 @@ class _LinePainter extends CustomPainter {
       final r = _fit(values.reduce(math.min), values.reduce(math.max));
       lo = r.lo;
       hi = r.hi;
+    }
+    // A single bucket used to bail out here, painting nothing — so a metric with
+    // one reading in the window (a spot check like SpO₂) showed an empty card
+    // that read as "broken" rather than "one reading". Draw the grid and mark
+    // the point instead.
+    if (values.length < 2) {
+      _drawGrid(canvas, size, plotW, lo, hi, label: yLabel);
+      final only = values.first;
+      if (only >= lo && only <= hi) {
+        final cy = _padY +
+            (size.height - 2 * _padY) * (1 - (only - lo) / (hi - lo));
+        canvas.drawCircle(
+          Offset(plotW / 2, cy),
+          3.5,
+          Paint()..color = color,
+        );
+      }
+      return;
     }
     double x(int i) => plotW * i / (values.length - 1);
     double y(double v) =>

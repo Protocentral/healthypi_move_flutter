@@ -410,11 +410,20 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     );
     if (ok != true) return;
     final removed = await DatabaseHelper.instance.deleteAllHealthData();
+    final files = removed.remove('_files') ?? 0;
     final total = removed.values.fold<int>(0, (a, b) => a + b);
-    await _load(); // refresh the trend-bin count and last-sync time
+
+    // Refreshes this screen; the notifier refreshes Home/Trends/Recordings,
+    // which are alive in the shell's IndexedStack and would otherwise keep
+    // showing the deleted data until the app is relaunched.
+    await _load();
+    HealthyStoreSyncManager.dataRevision.value++;
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Deleted $total rows. Sync to re-pull from the watch.'),
+        content: Text('Deleted $total rows'
+            '${files > 0 ? ' and $files recording file${files == 1 ? '' : 's'}' : ''}'
+            '. Sync to re-pull from the watch.'),
         backgroundColor: HpiColors.steps,
       ));
     }
