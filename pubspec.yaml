@@ -1,0 +1,92 @@
+name: move
+description: "HealthyPi Move"
+publish_to: 'none'
+version: 3.0.1+89
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Local store + platform paths.
+  path_provider: ^2.0.11
+  sqflite: ^2.3.0
+  shared_preferences: ^2.0.18
+  intl: ^0.20.2
+
+  # Firmware update / recordings / app plumbing.
+  http: ^1.1.2
+  # Document picker only. Deliberately NOT file_picker: its iOS pod pulls in
+  # DKImagePickerController (camera + photo library) for media picking this app
+  # never does. file_selector (flutter.dev, BSD-3) uses UIDocumentPickerViewController
+  # alone — see scr_dfu_new.dart, the sole picker call.
+  file_selector: ^1.0.0
+  flutter_archive: ^6.0.0
+  csv: ^6.0.0
+  share_plus: ^12.0.0
+  package_info_plus: ^8.3.1
+  upgrader: ^12.1.0
+  json_annotation: ^4.8.1
+  # >=4.2892 required on Flutter 3.44+ (IconData became a `final class`).
+  material_symbols_icons: ^4.2892.0
+
+  # BLE stack. universal_ble handles runtime BLE permissions natively; SMP/MCUmgr
+  # (mcumgr_dart) brings cbor + crypto transitively. See docs/HEALTH_STORE_SYNC_DESIGN.md.
+  universal_ble: ^2.0.1
+  mcumgr_dart: ^0.1.0
+  # HPI_HS Health Store client (group 0x1000); path dep until the repo is public.
+  healthypi_healthy_store:
+    path: packages/healthypi_healthy_store
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  build_runner: ^2.1.2
+  json_serializable: ^6.7.1
+  flutter_launcher_icons: ^0.14.3
+  flutter_lints: ^6.0.0
+  # Used by test/mcuboot_image_test.dart to show that the MCUboot image hash is
+  # NOT sha256 of the file (transitive via mcumgr_dart; declared so the test may
+  # import it directly).
+  crypto: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+
+  # Bundled OFL variable TTFs (not google_fonts — this is a BLE app used offline).
+  fonts:
+    - family: Rubik
+      fonts:
+        - asset: assets/fonts/Rubik.ttf
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
+    - family: JetBrains Mono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono.ttf
+    - family: Saira
+      fonts:
+        - asset: assets/fonts/Saira.ttf
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    background_color: "#FFD550"
+    theme_color: "#165369"
+  windows:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: "assets/icon/icon.png"

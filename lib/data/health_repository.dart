@@ -1,0 +1,836 @@
+// Copyright (c) 2024-2026 ProtoCentral
+// SPDX-License-Identifier: MIT
+
+import '../globals.dart';
+import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
+import '../utils/database_helper.dart';
+
+/// Whether a metric can be shown, and if not, why. Drives the redesign's
+/// honest zero-states (docs/REDESIGN_PLAN.md): the UI never fabricates a value.
+enum MetricAvailability {
+  /// Real data exists and is shown.
+  available,
+
+  /// The metric is supported end-to-end but no rows have synced yet.
+  /// UI: a "Sync your watch" placeholder.
+  noData,
+
+  /// The metric has no producing code in this build (HRV/stress/EDA and the
+  /// derived analytics they need). UI: an explanatory zero-state, e.g. EDA's
+  /// "Measure on watch" — never a made-up number.
+  unsupported,
+
+  /// The device produces this metric but has no score *yet*: it is still
+  /// building the user's personal baseline. UI: "Building your baseline",
+  /// **never a zero**.
+  ///
+  /// This exists because HRV stress is scored against the user's own rolling
+  /// RMSSD baseline, which takes ~20 valid 5-minute windows (realistically one
+  /// decent night) to establish. Until then the firmware reports
+  /// `stress_hrv_v == false`, and a 0 rendered there is a number the user would
+  /// believe and that means nothing — it is not "calm". Collapsing this into
+  /// [noData] would lose the distinction between "sync your watch" and "your
+  /// watch is still learning you".
+  baselining,
+}
+
+/// A metric's dashboard view: headline value, today's sparkline series, and an
+/// optional 30-day baseline. Values are in each metric's stored display unit
+/// (temp already divided out of centi-degrees; HR/SpO₂/steps raw).
+class MetricTrend {
+  const MetricTrend({
+    required this.key,
+    required this.availability,
+    this.latest,
+    this.latestAt,
+    this.min,
+    this.max,
+    this.spark = const [],
+    this.baseline,
+  });
+
+  final String key; // hPi4Global.PREFIX_*
+  final MetricAvailability availability;
+  final double? latest;
+  final DateTime? latestAt;
+  final double? min;
+  final double? max;
+
+  /// Today's hourly values (chronological) for the mini sparkline/bars.
+  final List<double> spark;
+
+  /// 30-day rolling baseline (median of daily averages) in display units, or
+  /// null when there aren't enough days yet.
+  final double? baseline;
+
+  bool get hasData => availability == MetricAvailability.available;
+
+  /// Signed deviation of [latest] from [baseline], or null if either is absent.
+  double? get baselineDelta =>
+      (latest != null && baseline != null) ? latest! - baseline! : null;
+
+  static const MetricTrend unsupportedStress =
+      MetricTrend(key: 'stress', availability: MetricAvailability.unsupported);
+  static const MetricTrend unsupportedEda =
+      MetricTrend(key: 'eda', availability: MetricAvailability.unsupported);
+}
+
+/// One aggregated point in a trend series (hour or day), in display units.
+class TrendPoint {
+  const TrendPoint(
+      {required this.t, required this.min, required this.max, required this.avg});
+  final DateTime t;
+  final double min;
+  final double max;
+  final double avg;
+}
+
+/// A named time range for the trend detail's segmented control.
+enum TrendRange { day, week, month, sixMonths }
+
+/// Everything a trend-detail screen (1d/3a–3d) needs for one metric: headline
+/// stats plus the day/week/month series, all in display units. [availability]
+/// tells the screen whether to render charts or an honest zero-state.
+class MetricDetail {
+  const MetricDetail({
+    required this.key,
+    required this.availability,
+    this.latest,
+    this.latestAt,
+    this.min,
+    this.max,
+    this.avg,
+    this.baseline,
+    this.daily = const [],
+    this.weekly = const [],
+    this.monthly = const [],
+    this.sixMonthly = const [],
+  });
+
+  final String key;
+  final MetricAvailability availability;
+  final double? latest;
+  final DateTime? latestAt;
+  final double? min;
+  final double? max;
+  final double? avg;
+  final double? baseline;
+  final List<TrendPoint> daily; // today, hourly
+  final List<TrendPoint> weekly; // last 7 days, daily
+  final List<TrendPoint> monthly; // last 30 days, daily
+  final List<TrendPoint> sixMonthly; // last ~183 days, weekly bins
+
+  bool get hasData => availability == MetricAvailability.available;
+
+  /// The series backing [r].
+  ///
+  /// `month` and `sixMonths` used to both return [monthly], so the 6M tab was a
+  /// relabelled copy of Month — nothing on screen changed when you tapped it.
+  List<TrendPoint> series(TrendRange r) {
+    switch (r) {
+      case TrendRange.day:
+        return daily;
+      case TrendRange.week:
+        return weekly;
+      case TrendRange.month:
+        return monthly;
+      case TrendRange.sixMonths:
+        return sixMonthly;
+    }
+  }
+
+  /// Min / avg / max over [r]'s own series.
+  ///
+  /// The stat chips used to read [min]/[avg]/[max], which are computed from
+  /// *today* only — so they never changed with the segmented control, and they
+  /// read `--` whenever the newest data predated midnight even though the chart
+  /// beside them was drawing a week of it.
+  ///
+  /// For a cumulative metric (steps) the "avg" of a range is the mean daily
+  /// total, and min/max are the quietest and busiest buckets — so it reads off
+  /// [TrendPoint.max] (the bucket total), not the min/max envelope.
+  ({double? min, double? max, double? avg}) statsFor(TrendRange r) {
+    final s = series(r);
+    if (s.isEmpty) return (min: null, max: null, avg: null);
+
+    final cumulative = key == hPi4Global.PREFIX_ACTIVITY;
+    if (cumulative) {
+      final totals = s.map((p) => p.max).toList();
+      return (
+        min: totals.reduce((a, b) => a < b ? a : b),
+        max: totals.reduce((a, b) => a > b ? a : b),
+        avg: totals.reduce((a, b) => a + b) / totals.length,
+      );
+    }
+    return (
+      min: s.map((p) => p.min).reduce((a, b) => a < b ? a : b),
+      max: s.map((p) => p.max).reduce((a, b) => a > b ? a : b),
+      avg: s.map((p) => p.avg).reduce((a, b) => a + b) / s.length,
+    );
+  }
+}
+
+/// Everything the home dashboard (2a / 1a) needs, in one aggregate so the screen
+/// makes a single call. Metrics with no producing code are reported as
+/// [MetricAvailability.unsupported] rather than omitted, so the layout is stable.
+class HomeDashboard {
+  const HomeDashboard({
+    required this.hr,
+    required this.spo2,
+    required this.temp,
+    required this.steps,
+    required this.stress,
+    required this.eda,
+    this.lastSync,
+  });
+
+  final MetricTrend hr;
+  final MetricTrend spo2;
+  final MetricTrend temp;
+  final MetricTrend steps;
+  final MetricTrend stress; // HRV-derived continuous score from SUMMARY
+  final MetricTrend eda; // manual EDA spot-check stress (or unsupported)
+  final DateTime? lastSync;
+
+  bool get anyData =>
+      hr.hasData ||
+      spo2.hasData ||
+      temp.hasData ||
+      steps.hasData ||
+      stress.hasData;
+}
+
+/// One manual EDA / GSR spot check, derived from the MANUAL-bit `stress`
+/// samples (`PREFIX_STRESS_EDA`).
+class EdaSpotCheck {
+  const EdaSpotCheck({required this.at, required this.score});
+  final DateTime at;
+  final double score;
+}
+
+/// Everything the Stress & EDA screen needs in one load.
+class StressEdaView {
+  const StressEdaView({
+    required this.stress,
+    required this.hrv,
+    required this.spotChecks,
+    this.rmssdBaselineMs,
+    this.hrvWindows,
+  });
+
+  /// Continuous HRV-derived stress (SUMMARY headline + trend samples).
+  final MetricTrend stress;
+
+  /// Today's continuous stress series for a sparkline (may be empty).
+  final MetricDetail hrv;
+
+  /// Recent manual EDA spot checks (stress_eda), newest first.
+  final List<EdaSpotCheck> spotChecks;
+
+  /// User's 7-day RMSSD baseline in ms, when known.
+  final double? rmssdBaselineMs;
+
+  /// How many 5-min windows back the stress baseline.
+  final int? hrvWindows;
+}
+
+/// One blood-pressure **wellness estimate** — a paired systolic/diastolic value
+/// the watch produced from finger PPG after the baseline was set. An
+/// `HsClass.event`: a discrete timestamped estimate, never averaged into a
+/// per-hour value.
+///
+/// The chip (MAX32664D) returns single sys/dia values, but a raw single number
+/// overstates PPG precision. So the raw values are **stored, not displayed** —
+/// the UI shows the derived [sysRange]/[diaRange] instead. This is both honest
+/// and the WHOOP/FDA-consistent framing (design 6a): a *range*, not a cuff
+/// reading, and never a clinical category.
+class BpReading {
+  const BpReading({
+    required this.at,
+    required this.sysRaw,
+    required this.diaRaw,
+    this.quality,
+  });
+
+  final DateTime at;
+
+  /// Raw single values from the algorithm — internal only, not shown directly.
+  final int sysRaw;
+  final int diaRaw;
+
+  /// Firmware quality/confidence byte, when present.
+  final int? quality;
+
+  /// Per-reading half-width (mmHg) from reported confidence, anchored to the
+  /// algorithm's ~±5–7 mmHg validation error vs cuff: a clean reading is tighter
+  /// (±3), a flagged one wider (±6). The exact confidence encoding is not
+  /// firmware-pinned yet, so this maps off the quality byte with a safe default.
+  int get halfWidth {
+    final q = quality;
+    if (q == null) return 5;
+    if ((q & HsQuality.valid) != 0 && (q & HsQuality.onSkin) != 0) return 3;
+    if (q == 0) return 6;
+    return 5;
+  }
+
+  /// Displayed estimate as a `[lo, hi]` mmHg range (the raw value ± [halfWidth]).
+  List<int> get sysRange => [sysRaw - halfWidth, sysRaw + halfWidth];
+  List<int> get diaRange => [diaRaw - halfWidth, diaRaw + halfWidth];
+
+  /// Combined estimate range for compact rows, e.g. `118–124/76–80`.
+  String get rangeLabel =>
+      '${sysRange[0]}–${sysRange[1]}/${diaRange[0]}–${diaRange[1]}';
+}
+
+/// Everything the Blood-pressure screen (6a/6b) needs in one load.
+///
+/// **Relative wellness trend, not a measurement** (design 6a/6b, WHOOP/FDA
+/// framing). BP is `HsClass.event` — sparse estimates, never averaged into a
+/// fake daily value. The view exposes only *relative* framing built on the
+/// user's own [usualSys]/[usualDia] baseline; it deliberately provides **no**
+/// clinical category, threshold, or "normal/high" verdict. The screen never
+/// fabricates a value: no readings means no numbers.
+class BloodPressureView {
+  const BloodPressureView({this.baselineSetAt, this.readings = const []});
+
+  /// When the BP baseline was last set (BPT calibration completed) **on this
+  /// phone**, or null. A *local hint only* — drives the "Baseline set X ago"
+  /// footer, not the 6a/6b gate. See `docs/FIRMWARE_HANDOFF_BPT_HS.md` §12.
+  final DateTime? baselineSetAt;
+
+  /// Estimates, newest first.
+  final List<BpReading> readings;
+
+  /// This phone recorded the baseline being set. Informational — not the gate.
+  bool get hasBaseline => baselineSetAt != null;
+  bool get hasReadings => readings.isNotEmpty;
+
+  /// True → render 6a (set-up); false → render 6b (gate). Gated on **device
+  /// evidence**: the watch only emits estimates once a baseline is set, so any
+  /// synced estimate proves set-up even when this phone never ran 5b.
+  bool get showValues => hasReadings;
+
+  BpReading? get latest => readings.isEmpty ? null : readings.first;
+
+  /// Short relative status of the latest estimate for compact rows: `Typical` /
+  /// `Higher` / `Lower` (for you), or null when not set up. Relative and
+  /// personal — never a clinical category.
+  String? get latestRelativeShort {
+    final r = latest;
+    if (r == null) return null;
+    if (readings.length < 2) return 'Typical';
+    final d = deviation(r);
+    if (d <= -5) return 'Lower';
+    if (d >= 5) return 'Higher';
+    return 'Typical';
+  }
+
+  /// "Your usual" — the median raw sys/dia over the estimate history. The
+  /// personal reference the relative framing is built on (never a clinical
+  /// target).
+  int get usualSys => _median(readings.map((r) => r.sysRaw));
+  int get usualDia => _median(readings.map((r) => r.diaRaw));
+
+  /// A reading's deviation from "your usual", in mmHg (mean of sys+dia shift).
+  double deviation(BpReading r) =>
+      ((r.sysRaw - usualSys) + (r.diaRaw - usualDia)) / 2.0;
+
+  /// How far ±[_usualSpan] mmHg from "your usual" the continuous gradient spans.
+  static const double _usualSpan = 12.0;
+
+  /// Latest estimate's position on the continuous "vs your usual" scale, 0..1
+  /// (0.5 = at your usual; lower/higher shifts toward the ends). Relative and
+  /// personal — there are no clinical thresholds anywhere in this mapping.
+  double get todayVsUsual {
+    final r = latest;
+    if (r == null || readings.length < 2) return 0.5;
+    return (0.5 + deviation(r) / (2 * _usualSpan)).clamp(0.0, 1.0);
+  }
+
+  /// Estimates within [range] of now (for the segmented chart window).
+  List<BpReading> inRange(TrendRange range) {
+    final cutoff = switch (range) {
+      TrendRange.day => const Duration(days: 1),
+      TrendRange.week => const Duration(days: 7),
+      TrendRange.month => const Duration(days: 31),
+      TrendRange.sixMonths => const Duration(days: 183),
+    };
+    final since = DateTime.now().subtract(cutoff);
+    return readings.where((r) => r.at.isAfter(since)).toList();
+  }
+
+  static int _median(Iterable<int> xs) {
+    final list = xs.toList()..sort();
+    if (list.isEmpty) return 0;
+    return list[list.length ~/ 2];
+  }
+}
+
+/// The single read path the redesigned screens use. Composes the existing
+/// derived `health_trends` store (via [DatabaseHelper]) into typed view models,
+/// and is the one place that decides data availability. It reads only; the write
+/// side (`HealthyStoreSyncManager`, which derives `health_trends` from the raw
+/// `hs_samples` store) is unchanged.
+class HealthRepository {
+  HealthRepository({DatabaseHelper? db})
+      : _db = db ?? DatabaseHelper.instance;
+
+  final DatabaseHelper _db;
+
+  /// Metrics stored in centi-units — divided by 100 for display, matching
+  /// scr_skin_temp.dart. HR/SpO₂/steps are stored raw.
+  static const Set<String> _centiMetrics = {hPi4Global.PREFIX_TEMP};
+
+  double _display(String key, num stored) =>
+      _centiMetrics.contains(key) ? stored / 100.0 : stored.toDouble();
+
+  Future<HomeDashboard> loadHome() async {
+    final results = await Future.wait([
+      _loadMetric(hPi4Global.PREFIX_HR),
+      _loadMetric(hPi4Global.PREFIX_SPO2),
+      _loadMetric(hPi4Global.PREFIX_TEMP),
+      _loadMetric(hPi4Global.PREFIX_ACTIVITY, cumulative: true),
+      _db.getLastSyncTime(),
+      _loadHrvStress(),
+      _loadEdaSpotMetric(),
+    ]);
+    return HomeDashboard(
+      hr: results[0] as MetricTrend,
+      spo2: results[1] as MetricTrend,
+      temp: results[2] as MetricTrend,
+      steps: results[3] as MetricTrend,
+      stress: results[5] as MetricTrend,
+      eda: results[6] as MetricTrend,
+      lastSync: results[4] as DateTime?,
+    );
+  }
+
+  /// Full Stress & EDA screen payload: SUMMARY stress + continuous series +
+  /// recent manual EDA spot checks.
+  Future<StressEdaView> loadStressEda() async {
+    final results = await Future.wait([
+      _loadHrvStress(),
+      loadMetricDetail(hPi4Global.PREFIX_STRESS),
+      _loadEdaSpotChecks(limit: 12),
+      _db.latestHsSummary(),
+    ]);
+    final stress = results[0] as MetricTrend;
+    final detail = results[1] as MetricDetail;
+    final spots = results[2] as List<EdaSpotCheck>;
+    final raw = results[3] as Map<String, Object?>?;
+    final summary = raw == null ? null : HsSummary.fromMap(raw);
+    return StressEdaView(
+      stress: stress,
+      hrv: detail,
+      spotChecks: spots,
+      rmssdBaselineMs: summary?.rmssdBaselineMs ?? stress.baseline,
+      hrvWindows: summary?.hrvWindows,
+    );
+  }
+
+  /// `app_metadata` key holding the last BPT-calibration completion time. Set by
+  /// the calibration screen (5b) on success; read here to gate the BP screen.
+  static const String bpCalibratedAtKey = 'bp_calibrated_at';
+
+  /// Full Blood-pressure screen payload (6a/6b): calibration state + the recent
+  /// event-class BP spot readings. Returns an un-calibrated view (→ 6b) when the
+  /// watch has never calibrated or no readings have synced — never a fake value.
+  Future<BloodPressureView> loadBloodPressure() async {
+    final calAt = await _db.getMetadata<DateTime>(bpCalibratedAtKey);
+    // hs_samples / hs_types are keyed by the Healthy Store device (HELLO `uid`,
+    // e.g. `892f58a633dc8e82`) that the sync wrote under — NOT the BLE
+    // deviceId/MAC. Use that store key, or BP readings never resolve.
+    final device = await _db.getHealthyStoreDeviceKey();
+    final rows =
+        device == null ? const <Map<String, Object?>>[] : await _db.getBpReadings(device);
+    final readings = rows
+        .map((r) => BpReading(
+              // ts_utc is epoch seconds UTC; show in local time like other cards.
+              at: DateTime.fromMillisecondsSinceEpoch((r['ts'] as int) * 1000,
+                      isUtc: true)
+                  .toLocal(),
+              sysRaw: (r['sys'] as num).round(),
+              diaRaw: (r['dia'] as num).round(),
+              quality: (r['quality'] as num?)?.toInt(),
+            ))
+        .toList();
+    return BloodPressureView(baselineSetAt: calAt, readings: readings);
+  }
+
+  /// Latest manual EDA spot-check metric for the home / trends cards.
+  Future<MetricTrend> _loadEdaSpotMetric() async {
+    final latest =
+        await _db.getLatestHourlyTrend(hPi4Global.PREFIX_STRESS_EDA, withinDays: 30);
+    if (latest == null) {
+      // EDA remains a manual action — no samples means "measure on watch",
+      // not "unsupported firmware". Use noData once we know HPI_HS works;
+      // fall back to unsupported only when we have never synced anything.
+      final lastSync = await _db.getLastSyncTime();
+      if (lastSync == null) return MetricTrend.unsupportedEda;
+      return const MetricTrend(
+          key: 'eda', availability: MetricAvailability.noData);
+    }
+    final score = (latest['avg_value'] as num).toDouble();
+    final at = DateTime.fromMillisecondsSinceEpoch(
+        (latest['hour_start'] as int) * 1000,
+        isUtc: false);
+    return MetricTrend(
+      key: 'eda',
+      availability: MetricAvailability.available,
+      latest: score,
+      latestAt: at,
+    );
+  }
+
+  Future<List<EdaSpotCheck>> _loadEdaSpotChecks({int limit = 12}) async {
+    // Walk recent days of derived hourly stress_eda rows and flatten to
+    // individual spot-check-like points (one per hour that has a reading).
+    final now = DateTime.now();
+    final checks = <EdaSpotCheck>[];
+    for (var back = 0; back < 14 && checks.length < limit; back++) {
+      final day = DateTime(now.year, now.month, now.day)
+          .subtract(Duration(days: back));
+      final hourly =
+          await _db.getHourlyTrends(hPi4Global.PREFIX_STRESS_EDA, day);
+      for (final row in hourly.reversed) {
+        checks.add(EdaSpotCheck(
+          at: DateTime.fromMillisecondsSinceEpoch(
+              (row['hour_start'] as int) * 1000,
+              isUtc: false),
+          score: (row['avg_value'] as num).toDouble(),
+        ));
+        if (checks.length >= limit) break;
+      }
+    }
+    return checks;
+  }
+
+  /// Stress, read from the device's own `SUMMARY` rather than derived here.
+  ///
+  /// Prefer the continuous HRV score over the legacy EDA one: it needs no user
+  /// action (the EDA spot check needs 30 deliberate seconds), and it is scored
+  /// against the user's *own* rolling RMSSD baseline rather than an absolute
+  /// skin-conductance scale, which is not comparable between people or even
+  /// between two sessions on one person. Handoff §6.
+  ///
+  /// The three outcomes are deliberately distinct, and collapsing any two of
+  /// them would put a misleading number on screen:
+  ///  - a score            → [MetricAvailability.available]
+  ///  - `stress_hrv_v` false → [MetricAvailability.baselining] ("still learning
+  ///    you"), **never 0**
+  ///  - key absent entirely  → [MetricAvailability.unsupported] (pre-P3 firmware)
+  Future<MetricTrend> _loadHrvStress() async {
+    final raw = await _db.latestHsSummary();
+    if (raw == null) return MetricTrend.unsupportedStress;
+
+    final summary = HsSummary.fromMap(raw);
+    final score = summary.stressHrv;
+    if (score != null) {
+      return MetricTrend(
+        key: hPi4Global.PREFIX_STRESS,
+        availability: MetricAvailability.available,
+        latest: score.toDouble(),
+        baseline: summary.rmssdBaselineMs,
+      );
+    }
+    if (summary.isBuildingHrvBaseline) {
+      return const MetricTrend(
+        key: hPi4Global.PREFIX_STRESS,
+        availability: MetricAvailability.baselining,
+      );
+    }
+    return MetricTrend.unsupportedStress;
+  }
+
+  /// Build a [MetricTrend] for one supported metric from today's hourly rows
+  /// plus a 30-day baseline. [cumulative] metrics (steps) sum today's hourly
+  /// values into the headline rather than taking the latest reading.
+  Future<MetricTrend> _loadMetric(String key, {bool cumulative = false}) async {
+    if (cumulative) return _loadCumulative(key);
+
+    // A rolling 24-hour window, not a calendar day. "Today" goes blank at 00:05,
+    // and on a device whose newest data predates midnight it shows nothing at all
+    // even though there is plenty of recent data to draw.
+    final recent = await _db.getRecentHourlyTrends(key, hours: 24);
+
+    // The headline is the last reading we have, even if it's older than the
+    // window — better to show "98% · 6 h ago" than an empty card.
+    final latestRow = await _db.getLatestHourlyTrend(key, withinDays: 7);
+    if (recent.isEmpty && latestRow == null) {
+      return MetricTrend(key: key, availability: MetricAvailability.noData);
+    }
+
+    final spark = <double>[];
+    double? minV, maxV;
+    for (final row in recent) {
+      final avg = _display(key, row['avg_value'] as num);
+      final rmin = _display(key, row['min_value'] as num);
+      final rmax = _display(key, row['max_value'] as num);
+      spark.add(avg);
+      minV = (minV == null || rmin < minV) ? rmin : minV;
+      maxV = (maxV == null || rmax > maxV) ? rmax : maxV;
+    }
+
+    double? latest;
+    DateTime? latestAt;
+    if (latestRow != null) {
+      latest = _display(key, latestRow['avg_value'] as num);
+      latestAt = DateTime.fromMillisecondsSinceEpoch(
+          (latestRow['hour_start'] as int) * 1000,
+          isUtc: false);
+      // Window empty but a recent reading exists: still show min/max from it.
+      minV ??= _display(key, latestRow['min_value'] as num);
+      maxV ??= _display(key, latestRow['max_value'] as num);
+    }
+
+    return MetricTrend(
+      key: key,
+      availability: MetricAvailability.available,
+      latest: latest,
+      latestAt: latestAt,
+      min: minV,
+      max: maxV,
+      spark: spark,
+      baseline: await _baseline(key),
+    );
+  }
+
+  /// Cumulative metrics (steps) headline the **day's total**, so they need a
+  /// calendar day rather than a rolling window.
+  ///
+  /// If today has no data yet, fall back to the most recent day that does. A
+  /// bare "0 steps" would be a claim we can't support — it reads as "you walked
+  /// nowhere", when the truth is "we have nothing for today".
+  Future<MetricTrend> _loadCumulative(String key) async {
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day);
+
+    List<Map<String, dynamic>> hourly = const [];
+    DateTime day = midnight;
+    for (var back = 0; back <= 7; back++) {
+      day = midnight.subtract(Duration(days: back));
+      hourly = await _db.getHourlyTrends(key, day);
+      if (hourly.isNotEmpty) break;
+    }
+    if (hourly.isEmpty) {
+      return MetricTrend(key: key, availability: MetricAvailability.noData);
+    }
+
+    // Derived rows hold each hour's INCREMENT (deriveTrends differences the
+    // device's running counter), so the day's total is their sum.
+    final spark = <double>[];
+    num total = 0;
+    DateTime? latestAt;
+    for (final row in hourly) {
+      final v = _display(key, row['max_value'] as num);
+      spark.add(v);
+      total += v;
+      latestAt = DateTime.fromMillisecondsSinceEpoch(
+          (row['hour_start'] as int) * 1000,
+          isUtc: false);
+    }
+
+    return MetricTrend(
+      key: key,
+      availability: MetricAvailability.available,
+      latest: total.toDouble(),
+      latestAt: latestAt,
+      min: null,
+      max: null,
+      spark: spark,
+      baseline: null,
+    );
+  }
+
+  /// Load the full trend detail for one metric. All values are in display units.
+  ///
+  /// `stress` and `hrv` are derived into `health_trends` from the sample stream
+  /// (continuous HRV RMSSD, and the non-MANUAL `stress` samples). For stress,
+  /// when the derived series is empty we still honour SUMMARY baselining so the
+  /// detail screen never shows a fake 0 while the watch is learning the user.
+  ///
+  /// EDA (`eda`) maps to the manual `stress_eda` trend (MANUAL-bit spot checks).
+  Future<MetricDetail> loadMetricDetail(String key) async {
+    if (key == 'eda') {
+      // Reuse the stress_eda derived rows under the UI key "eda".
+      final detail =
+          await loadMetricDetail(hPi4Global.PREFIX_STRESS_EDA);
+      if (detail.availability == MetricAvailability.noData) {
+        final lastSync = await _db.getLastSyncTime();
+        if (lastSync == null) {
+          return const MetricDetail(
+              key: 'eda', availability: MetricAvailability.unsupported);
+        }
+      }
+      return MetricDetail(
+        key: 'eda',
+        availability: detail.availability,
+        latest: detail.latest,
+        latestAt: detail.latestAt,
+        min: detail.min,
+        max: detail.max,
+        avg: detail.avg,
+        baseline: detail.baseline,
+        daily: detail.daily,
+        weekly: detail.weekly,
+        monthly: detail.monthly,
+        sixMonthly: detail.sixMonthly,
+      );
+    }
+    if (key == hPi4Global.PREFIX_STRESS_EDA) {
+      // Fall through to the generic loader with the real trend key.
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final results = await Future.wait([
+      _db.getHourlyTrends(key, today),
+      _db.getWeeklyTrends(key, now.subtract(const Duration(days: 6))),
+      // Rolling windows, not calendar ones: `getMonthlyTrends(year, month)`
+      // collapsed the Month tab to a point or two every 1st of the month.
+      _db.getDailyAveragesSince(key, days: 30),
+      _db.getDailyAveragesSince(key, days: 183),
+      // The newest bucket we have at all, so a metric last measured days ago
+      // still headlines a value instead of "--" while its chart draws data.
+      _db.getLatestHourlyTrend(key, withinDays: 7),
+    ]);
+
+    List<TrendPoint> map(List<Map<String, dynamic>> rows, String tsCol) => rows
+        .map((r) => TrendPoint(
+              t: DateTime.fromMillisecondsSinceEpoch(
+                  (r[tsCol] as int) * 1000,
+                  isUtc: false),
+              min: _display(key, r['min_value'] as num),
+              max: _display(key, r['max_value'] as num),
+              avg: _display(key, r['avg_value'] as num),
+            ))
+        .toList();
+
+    // getDailyAveragesSince names its aggregates avg/min/max, not *_value.
+    List<TrendPoint> mapDaily(List<Map<String, dynamic>> rows) => rows
+        .map((r) => TrendPoint(
+              t: DateTime.fromMillisecondsSinceEpoch(
+                  (r['day_start'] as int) * 1000,
+                  isUtc: false),
+              min: _display(key, r['min'] as num),
+              max: _display(key, r['max'] as num),
+              avg: _display(key, r['avg'] as num),
+            ))
+        .toList();
+
+    final daily = map(results[0] as List<Map<String, dynamic>>, 'hour_start');
+    final weekly = map(results[1] as List<Map<String, dynamic>>, 'day_start');
+    final monthly = mapDaily(results[2] as List<Map<String, dynamic>>);
+    // 183 daily points is more than a phone-width chart can resolve, so bin to
+    // weeks — ~26 points, each keeping the true min/max of its week.
+    final sixMonthly =
+        _binWeekly(mapDaily(results[3] as List<Map<String, dynamic>>));
+    final latestRow = results[4] as Map<String, dynamic>?;
+
+    if (daily.isEmpty && weekly.isEmpty && monthly.isEmpty) {
+      // Stress: prefer SUMMARY baselining over a blank "no data" when the
+      // watch is still learning the user's RMSSD baseline.
+      if (key == hPi4Global.PREFIX_STRESS) {
+        final headline = await _loadHrvStress();
+        if (headline.availability == MetricAvailability.baselining) {
+          return const MetricDetail(
+              key: hPi4Global.PREFIX_STRESS,
+              availability: MetricAvailability.baselining);
+        }
+        if (headline.availability == MetricAvailability.available &&
+            headline.latest != null) {
+          return MetricDetail(
+            key: hPi4Global.PREFIX_STRESS,
+            availability: MetricAvailability.available,
+            latest: headline.latest,
+            baseline: headline.baseline,
+          );
+        }
+        if (headline.availability == MetricAvailability.unsupported) {
+          return const MetricDetail(
+              key: hPi4Global.PREFIX_STRESS,
+              availability: MetricAvailability.unsupported);
+        }
+      }
+      return MetricDetail(key: key, availability: MetricAvailability.noData);
+    }
+
+    final cumulative = key == hPi4Global.PREFIX_ACTIVITY;
+    double? minV, maxV, avgV, latest;
+    DateTime? latestAt;
+    if (daily.isNotEmpty) {
+      minV = daily.map((p) => p.min).reduce((a, b) => a < b ? a : b);
+      maxV = daily.map((p) => p.max).reduce((a, b) => a > b ? a : b);
+      avgV = daily.map((p) => p.avg).reduce((a, b) => a + b) / daily.length;
+      latest = cumulative
+          ? daily.map((p) => p.max).reduce((a, b) => a + b)
+          : daily.last.avg;
+      latestAt = daily.last.t;
+    } else if (latestRow != null) {
+      // Nothing today, but the store holds a reading from the last few days.
+      // The home card has always fallen back like this; the detail screen did
+      // not, which is why a metric measured 3 days ago (SpO₂ especially, it is
+      // a spot check) headlined "--" here while Home showed the value.
+      latest = _display(key, latestRow['avg_value'] as num);
+      latestAt = DateTime.fromMillisecondsSinceEpoch(
+          (latestRow['hour_start'] as int) * 1000,
+          isUtc: false);
+      minV = _display(key, latestRow['min_value'] as num);
+      maxV = _display(key, latestRow['max_value'] as num);
+      avgV = latest;
+    }
+
+    return MetricDetail(
+      key: key,
+      availability: MetricAvailability.available,
+      latest: latest,
+      latestAt: latestAt,
+      min: minV,
+      max: maxV,
+      avg: avgV,
+      baseline: cumulative ? null : await _baseline(key),
+      daily: daily,
+      weekly: weekly,
+      monthly: monthly,
+      sixMonthly: sixMonthly,
+    );
+  }
+
+  /// Collapse daily points into ISO-week bins, keeping each week's true extremes
+  /// (min of mins, max of maxes) and the mean of its daily averages.
+  ///
+  /// Averaging the extremes away would flatten exactly the excursions a 6-month
+  /// view exists to show.
+  static List<TrendPoint> _binWeekly(List<TrendPoint> daily) {
+    if (daily.isEmpty) return const [];
+    final bins = <DateTime, List<TrendPoint>>{};
+    for (final p in daily) {
+      final d = DateTime(p.t.year, p.t.month, p.t.day);
+      final weekStart = d.subtract(Duration(days: d.weekday - 1));
+      bins.putIfAbsent(weekStart, () => []).add(p);
+    }
+    final keys = bins.keys.toList()..sort();
+    return [
+      for (final k in keys)
+        TrendPoint(
+          t: k,
+          min: bins[k]!.map((p) => p.min).reduce((a, b) => a < b ? a : b),
+          max: bins[k]!.map((p) => p.max).reduce((a, b) => a > b ? a : b),
+          avg: bins[k]!.map((p) => p.avg).reduce((a, b) => a + b) /
+              bins[k]!.length,
+        ),
+    ];
+  }
+
+  /// 30-day rolling baseline: the median of daily averages. Null until at least
+  /// a week of days exist, so the UI can hide "vs baseline" affordances honestly
+  /// rather than compare against one noisy day.
+  Future<double?> _baseline(String key) async {
+    final daily = await _db.getDailyAveragesSince(key, days: 30);
+    if (daily.length < 7) return null;
+    final avgs = daily
+        .map((r) => _display(key, r['avg'] as num))
+        .toList()
+      ..sort();
+    return avgs[avgs.length ~/ 2];
+  }
+}

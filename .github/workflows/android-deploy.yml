@@ -51,37 +51,30 @@ jobs:
         with:
           path: |
             ~/.pub-cache
-            move/.dart_tool
-          key: ${{ runner.os }}-pub-${{ hashFiles('move/pubspec.yaml') }}
+            .dart_tool
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.yaml') }}
 
       - name: Install dependencies
         run: |
-          cd move
           flutter pub get
           flutter pub upgrade
 
       - name: Run analyzer
-        run: |
-          cd move
-          flutter analyze || true
+        run: flutter analyze || true
 
       - name: Build AAB (release)
-        run: |
-          cd move
-          flutter build appbundle --release --no-shrink
+        run: flutter build appbundle --release --no-shrink
 
       - name: Build APK (release)
-        run: |
-          cd move
-          flutter build apk --release --no-shrink
+        run: flutter build apk --release --no-shrink
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: android-builds
           path: |
-            move/build/app/outputs/bundle/release/*.aab
-            move/build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/bundle/release/*.aab
+            build/app/outputs/flutter-apk/app-release.apk
 
   publish:
     name: Publish to Google Play (Internal)
@@ -101,7 +94,7 @@ jobs:
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: 'com.protocentral.healthypi_move'
+          packageName: 'com.protocentral.move'
           releaseFiles: |
-            move/build/app/outputs/bundle/release/*.aab
+            bundle/release/*.aab
           track: internal

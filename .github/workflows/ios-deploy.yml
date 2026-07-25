@@ -28,7 +28,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd move
           flutter pub get
           cd ios
           pod install --repo-update
@@ -36,9 +35,7 @@ jobs:
       - name: Build iOS (ipa)
         env:
           LANG: en_US.UTF-8
-        run: |
-          cd move
-          flutter build ipa --release --export-method app-store
+        run: flutter build ipa --release --export-method app-store
 
       - name: Setup Fastlane credentials
         run: |
@@ -46,7 +43,7 @@ jobs:
           echo "${{ secrets.APP_STORE_CONNECT_API_KEY }}" > ~/fastlane/app_store_connect_api_key.json
 
       - name: Upload to App Store via Fastlane
-        working-directory: move/ios
+        working-directory: ios
         run: |
           # ensure bundler deps (if present)
           bundle install || true
