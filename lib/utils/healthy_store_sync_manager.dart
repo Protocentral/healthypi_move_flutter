@@ -7,9 +7,12 @@ import 'package:flutter/foundation.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ble/device_info.dart';
+import 'ble_dis_transport.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
 import 'device_time_service.dart';
+import 'firmware_update_checker.dart';
 import 'healthy_store_client.dart';
 import 'sync_models.dart';
 
@@ -168,6 +171,7 @@ class HealthyStoreSyncManager {
 
     var totalStored = 0;
     String? lastError;
+    var firmwareTooOld = false;
 
     try {
       // A catch-up drain is long and the link can drop mid-way. The cursor is
@@ -181,6 +185,7 @@ class HealthyStoreSyncManager {
 
         totalStored += outcome.stored;
         lastError = outcome.error;
+        firmwareTooOld = outcome.firmwareTooOld;
 
         if (outcome.done) {
           await DatabaseHelper.instance.updateLastSyncTime();
@@ -227,6 +232,7 @@ class HealthyStoreSyncManager {
         message: lastError ?? 'Sync failed',
         recordCounts: const {},
         duration: DateTime.now().difference(started),
+        firmwareTooOld: firmwareTooOld,
       );
     } finally {
       _isSyncing = false;
@@ -261,6 +267,21 @@ class HealthyStoreSyncManager {
   bool _shouldStop(DateTime deadline) =>
       _cancelled || DateTime.now().isAfter(deadline);
 
+  /// Read the DIS firmware revision off the live link and hand it to the
+  /// firmware update check. Best-effort throughout: [DeviceInfoReader] returns
+  /// null rather than throwing when the link is down or the characteristic is
+  /// absent, and `recordFirmwareVersion` no-ops on null or an unchanged value —
+  /// so this can never sink a sync.
+  Future<void> _cacheFirmwareVersion(String deviceId) async {
+    try {
+      final version = await DeviceInfoReader(BleDisTransport(deviceId))
+          .readFirmwareVersion();
+      await FirmwareUpdateChecker.recordFirmwareVersion(version);
+    } catch (e) {
+      debugPrint('[HS-Sync] firmware version cache failed: $e');
+    }
+  }
+
   /// One connect → drain → disconnect cycle.
   Future<_SessionOutcome> _runSession(
     String deviceMacAddress,
@@ -277,6 +298,13 @@ class HealthyStoreSyncManager {
       if (!conn.isConnected || conn.deviceId != deviceMacAddress) {
         await conn.connect(deviceMacAddress);
       }
+
+      // Cache the DIS firmware revision while we have a link. This is the only
+      // routine flow that connects, so it is what keeps the (radio-free)
+      // firmware update check supplied with a current version. Deliberately not
+      // awaited: it is metadata, and the sync's wall-clock budget should not
+      // pay for a GATT read that nothing here depends on.
+      unawaited(_cacheFirmwareVersion(deviceMacAddress));
 
       // Claims the SMP wire (acquireSmp), settles the MTU, probes HELLO.
       client = HealthyStoreClient(deviceMacAddress,
@@ -318,7 +346,10 @@ class HealthyStoreSyncManager {
             : 'Healthy Store is not available on this watch. Update the '
                 'firmware and try again.';
         onStatus(msg);
-        return _SessionOutcome(error: msg);
+        // Only `rc != null` is a verdict about the firmware; a silent probe
+        // (rc == null) is a timeout and tells us nothing, so it must not send
+        // the user to a firmware update they may not need.
+        return _SessionOutcome(error: msg, firmwareTooOld: rc != null);
       }
 
       return await _drain(client, deadline, onProgress, onStatus);
@@ -696,6 +727,7 @@ class _SessionOutcome {
     this.stored = 0,
     this.done = false,
     this.error,
+    this.firmwareTooOld = false,
   });
 
   /// Samples durably stored in this session.
@@ -705,4 +737,9 @@ class _SessionOutcome {
   final bool done;
 
   final String? error;
+
+  /// The watch answered HELLO with a refusal — a *verdict* that its firmware
+  /// predates the Healthy Store, not a timeout. Lets the UI offer the firmware
+  /// update instead of leaving the user with an instruction and no button.
+  final bool firmwareTooOld;
 }

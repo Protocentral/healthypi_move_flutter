@@ -65,3 +65,7 @@ packages/*/pubspec.lock
 /flutter_02.png
 CLAUDE.md
 /tmp_local
+
+# Internal planning docs (roadmap, decisions log, firmware handoffs). Kept out
+# of the public repo deliberately; a local copy may live here for reference.
+docs/internal/

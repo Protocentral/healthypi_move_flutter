@@ -61,11 +61,34 @@ class ConnectionManager extends ChangeNotifier {
   String? _smpOwner;
   Object? _smpToken;
 
+  bool _streaming = false;
+
   String? get deviceId => _deviceId;
   String? get deviceName => _deviceName;
   LinkState get state => _state;
   String? get error => _error;
   bool get isConnected => _state == LinkState.connected;
+
+  // --- Streaming arbitration ------------------------------------------------
+
+  /// True while the Live screen holds notify subscriptions on the custom
+  /// streaming characteristics.
+  ///
+  /// The SMP lock only arbitrates SMP flows against each other; it says nothing
+  /// about the *other* logical mode on the same radio. Streaming and SMP must
+  /// not overlap on the wire, and a user-initiated sync at least happens with
+  /// the user watching. An automatic one does not — so [AutoSyncController]
+  /// consults this before starting, and the Live screen is the authority on it.
+  bool get isStreaming => _streaming;
+
+  /// Reported by the Live screen whenever its subscription set changes. Pass
+  /// `subs.isNotEmpty` rather than toggling on each subscribe/unsubscribe, so a
+  /// teardown that unsubscribes a signal twice cannot leave this stuck on.
+  void setStreaming(bool streaming) {
+    if (_streaming == streaming) return;
+    _streaming = streaming;
+    notifyListeners();
+  }
 
   // --- SMP arbitration ------------------------------------------------------
 
@@ -144,6 +167,8 @@ class ConnectionManager extends ChangeNotifier {
           // The link dropped under whoever held the SMP wire; free it so the
           // next sync/DFU isn't locked out by a dead session.
           _forceReleaseSmp();
+          // Notify subscriptions died with the link.
+          _streaming = false;
           _setState(LinkState.disconnected);
         }
       });
@@ -161,6 +186,7 @@ class ConnectionManager extends ChangeNotifier {
     await _connSub?.cancel();
     _connSub = null;
     _forceReleaseSmp();
+    _streaming = false;
     final id = _deviceId;
     if (id != null) {
       try {

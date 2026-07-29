@@ -9,9 +9,11 @@ import '../models/device_info.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../ble/firmware_compatibility.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/firmware_update_checker.dart';
 import '../utils/healthy_store_sync_manager.dart';
 import 'scr_dfu_new.dart';
 import 'scr_recordings.dart';
@@ -100,7 +102,19 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(result.message),
             backgroundColor:
-                result.success ? HpiColors.steps : HpiColors.error));
+                result.success ? HpiColors.steps : HpiColors.error,
+            // "Update the watch firmware and try again" used to be a dead end —
+            // an instruction with nothing to press.
+            action: result.firmwareTooOld
+                ? SnackBarAction(
+                    label: 'Update',
+                    textColor: HpiColors.onSurfaceBright,
+                    onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => ScrDFUNew(
+                                deviceMacAddress: device.macAddress))),
+                  )
+                : null));
       }
     } catch (e) {
       if (mounted) {
@@ -325,13 +339,20 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
 
   Widget _actionsCard(DeviceInfo device) {
     return HpiGroupedCard(rows: [
-      HpiListRow(
-        icon: Symbols.system_update,
-        iconColor: HpiColors.hr,
-        title: 'Firmware update',
-        supporting: 'Current ${device.firmwareVersion ?? "unknown"}',
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => ScrDFUNew(deviceMacAddress: device.macAddress))),
+      // The firmware row carries the verdict from the startup/resume check, so
+      // an available update is visible here instead of only to whoever thinks
+      // to open the DFU screen and wait for it to poll GitHub.
+      ValueListenableBuilder<FirmwareUpdateStatus>(
+        valueListenable: FirmwareUpdateChecker.status,
+        builder: (context, status, _) => HpiListRow(
+          icon: Symbols.system_update,
+          iconColor: status.needsAttention ? HpiColors.temp : HpiColors.hr,
+          title: 'Firmware update',
+          supporting: _firmwareSupporting(status, device),
+          trailing: _firmwarePill(status),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ScrDFUNew(deviceMacAddress: device.macAddress))),
+        ),
       ),
       HpiListRow(
         icon: Symbols.receipt_long,
@@ -360,6 +381,39 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
             Navigator.of(context).pushNamed('/device/bpt-calibration'),
       ),
     ]);
+  }
+
+  /// The firmware row's second line. Falls back to the stored version when we
+  /// have no verdict — an unknown state must read exactly as it did before the
+  /// check existed, never as "up to date".
+  String _firmwareSupporting(FirmwareUpdateStatus status, DeviceInfo device) {
+    final current = status.currentVersion ?? device.firmwareVersion ?? 'unknown';
+    switch (status.state) {
+      case FirmwareUpdateState.updateAvailable:
+        return '${status.latestVersion} available · on $current';
+      case FirmwareUpdateState.updateRequired:
+        return 'Required: $current is too old to sync';
+      case FirmwareUpdateState.appUpdateRequired:
+        return 'Update the app first to install ${status.latestVersion}';
+      case FirmwareUpdateState.upToDate:
+        return 'Up to date · $current';
+      case FirmwareUpdateState.unknown:
+        return 'Current $current';
+    }
+  }
+
+  Widget? _firmwarePill(FirmwareUpdateStatus status) {
+    switch (status.state) {
+      case FirmwareUpdateState.updateAvailable:
+        return const HpiPill(label: 'UPDATE', color: HpiColors.temp, filled: true);
+      case FirmwareUpdateState.updateRequired:
+        return const HpiPill(label: 'REQUIRED', color: HpiColors.error, filled: true);
+      case FirmwareUpdateState.appUpdateRequired:
+        return const HpiPill(label: 'APP UPDATE', color: HpiColors.temp);
+      case FirmwareUpdateState.upToDate:
+      case FirmwareUpdateState.unknown:
+        return null;
+    }
   }
 
   Widget _dangerCard() {

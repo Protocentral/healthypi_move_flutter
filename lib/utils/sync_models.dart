@@ -48,10 +48,17 @@ class SyncResult {
   final Map<String, int> recordCounts;
   final Duration duration;
 
+  /// The sync failed because the watch answered HELLO with a refusal — its
+  /// firmware predates the Healthy Store. A *verdict*, never set for a timeout
+  /// (which teaches us nothing about the firmware), so the UI can safely turn
+  /// it into a "Update" action straight to the DFU screen.
+  final bool firmwareTooOld;
+
   SyncResult({
     required this.success,
     required this.message,
     required this.recordCounts,
     required this.duration,
+    this.firmwareTooOld = false,
   });
 }

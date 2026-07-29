@@ -17,6 +17,7 @@ import '../ui/charts/hpi_sparkline.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_sync_manager.dart';
+import 'scr_dfu_new.dart';
 import 'scr_stress_eda.dart';
 import 'scr_trend_detail.dart';
 
@@ -117,7 +118,19 @@ class _ScrHomeState extends State<ScrHome> {
       await _load();
       if (mounted) {
         _snack(result.message,
-            result.success ? HpiColors.steps : HpiColors.error);
+            result.success ? HpiColors.steps : HpiColors.error,
+            // A watch that refused HELLO can't be fixed by syncing again, so
+            // hand the user the firmware screen rather than the instruction.
+            action: result.firmwareTooOld
+                ? SnackBarAction(
+                    label: 'Update',
+                    textColor: HpiColors.onSurfaceBright,
+                    onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => ScrDFUNew(
+                                deviceMacAddress: device.macAddress))),
+                  )
+                : null);
       }
     } catch (e) {
       if (mounted) _snack('Sync error: $e', HpiColors.error);
@@ -134,10 +147,10 @@ class _ScrHomeState extends State<ScrHome> {
     }
   }
 
-  void _snack(String msg, Color bg) {
+  void _snack(String msg, Color bg, {SnackBarAction? action}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), backgroundColor: bg));
+        SnackBar(content: Text(msg), backgroundColor: bg, action: action));
   }
 
   // --- Metric presentation config ---------------------------------------
