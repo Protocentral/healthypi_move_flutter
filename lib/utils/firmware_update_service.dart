@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_archive/flutter_archive.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/firmware_release.dart';
 import 'manifest.dart';
 
@@ -15,8 +16,32 @@ class FirmwareUpdateService {
   static const String _repoName = 'healthypi-move-fw';
   static const String _apiBase = 'https://api.github.com';
 
-  /// Fetch the latest firmware release from GitHub
-  static Future<FirmwareRelease?> getLatestRelease() async {
+  /// Last release payload we successfully fetched, and when. Persisted so a
+  /// startup check does not have to hit the network on every cold start.
+  static const String _cachedReleaseKey = 'fw_latest_release_json';
+  static const String _cachedReleaseAtKey = 'fw_latest_release_fetched_at';
+
+  /// Fetch the latest firmware release from GitHub.
+  ///
+  /// [cacheTtl] serves the persisted copy without a network call while it is
+  /// younger than that. The GitHub releases API is unauthenticated here and
+  /// therefore rate-limited to 60 requests/hour **per IP** — shared by every
+  /// user behind one NAT — so the periodic background check must not poll it
+  /// freshly each time. Pass `null` (the default) for a user-initiated check,
+  /// which should always try the network.
+  ///
+  /// Whatever the TTL, a failed fetch falls back to the cached copy at **any**
+  /// age: a stale version number is strictly more useful than "could not check",
+  /// and the DFU flow re-validates against the device before flashing anything.
+  static Future<FirmwareRelease?> getLatestRelease({Duration? cacheTtl}) async {
+    if (cacheTtl != null) {
+      final cached = await _readCachedRelease(maxAge: cacheTtl);
+      if (cached != null) {
+        print('[FirmwareUpdateService] Using cached release: ${cached.version}');
+        return cached;
+      }
+    }
+
     try {
       final url = Uri.parse('$_apiBase/repos/$_repoOwner/$_repoName/releases/latest');
       print('[FirmwareUpdateService] Fetching latest release from: $url');
@@ -27,14 +52,52 @@ class FirmwareUpdateService {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         final release = FirmwareRelease.fromGitHubJson(json);
         print('[FirmwareUpdateService] Latest release: ${release.version}');
+        await _writeCachedRelease(response.body);
         return release;
       } else {
         print('[FirmwareUpdateService] Failed to fetch latest release: ${response.statusCode}');
-        return null;
+        return await _readCachedRelease();
       }
     } catch (e) {
       print('[FirmwareUpdateService] Error fetching latest release: $e');
+      return await _readCachedRelease();
+    }
+  }
+
+  /// The cached release, or null when absent, unparseable, or older than
+  /// [maxAge]. Omit [maxAge] to accept it at any age (the offline fallback).
+  static Future<FirmwareRelease?> _readCachedRelease({Duration? maxAge}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final body = prefs.getString(_cachedReleaseKey);
+      if (body == null || body.isEmpty) return null;
+
+      if (maxAge != null) {
+        final at = prefs.getInt(_cachedReleaseAtKey);
+        if (at == null) return null;
+        final age = DateTime.now()
+            .difference(DateTime.fromMillisecondsSinceEpoch(at));
+        // A negative age means the phone's clock moved backwards; treat that as
+        // expired rather than trusting a cache that claims to be from the future.
+        if (age.isNegative || age > maxAge) return null;
+      }
+
+      return FirmwareRelease.fromGitHubJson(
+          jsonDecode(body) as Map<String, dynamic>);
+    } catch (e) {
+      print('[FirmwareUpdateService] Cached release unreadable: $e');
       return null;
+    }
+  }
+
+  static Future<void> _writeCachedRelease(String body) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cachedReleaseKey, body);
+      await prefs.setInt(
+          _cachedReleaseAtKey, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      print('[FirmwareUpdateService] Could not cache release: $e');
     }
   }
 

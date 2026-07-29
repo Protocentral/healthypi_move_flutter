@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../theme/hpi_colors.dart';
 import '../ui/adaptive/adaptive_scaffold.dart';
+import '../utils/auto_sync_controller.dart';
 import 'scr_device_new.dart';
 import 'scr_home.dart';
 import 'scr_live.dart';
@@ -38,6 +39,16 @@ class ScrMainShell extends StatefulWidget {
 
 class _ScrMainShellState extends State<ScrMainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Foreground auto-sync + the proactive firmware check both hang off the
+    // shell's lifetime rather than `main()`, so they start once the app has a
+    // UI and restart cleanly after `returnToRoot` (notably straight after a DFU,
+    // where the firmware version has just changed). Both are idempotent.
+    AutoSyncController.instance.start();
+  }
 
   static const _destinations = [
     HpiDestination(icon: Symbols.home, label: 'Home'),

@@ -142,11 +142,19 @@ class _ScrLiveState extends State<ScrLive> {
     for (final b in _buffers.values) {
       b.dispose();
     }
+    _subs.clear();
+    _publishStreaming();
     // Leave the link itself alone — ConnectionManager owns it and other flows
     // (sync, DFU) may still need it.
     unawaited(_unsubscribeAll());
     super.dispose();
   }
+
+  /// Tell [ConnectionManager] whether the streaming half of the radio is in
+  /// use, so an automatic sync doesn't start SMP traffic underneath a live
+  /// chart. Derived from the subscription set rather than toggled per call, so
+  /// a double unsubscribe can't leave it stuck on.
+  void _publishStreaming() => _cm.setStreaming(_subs.isNotEmpty);
 
   void _onLink() {
     if (!mounted) return;
@@ -163,6 +171,7 @@ class _ScrLiveState extends State<ScrLive> {
       }
       _subs.clear();
       _lastSample.clear();
+      _publishStreaming();
     }
   }
 
@@ -223,6 +232,7 @@ class _ScrLiveState extends State<ScrLive> {
         onError: (Object e) => debugPrint('live ${signal.label}: $e'),
         cancelOnError: true,
       );
+      _publishStreaming();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
@@ -244,6 +254,7 @@ class _ScrLiveState extends State<ScrLive> {
 
   Future<void> _stop(LiveSignal signal) async {
     await _subs.remove(signal)?.cancel();
+    _publishStreaming();
     _lastSample.remove(signal);
     _buffers[signal]?.clear();
     if (_cm.isConnected) {

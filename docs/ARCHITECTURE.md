@@ -48,6 +48,62 @@ Three load-bearing properties, each learned the hard way:
   early-return or an error path can strand the lock, or a busy-exception handler
   can tear down the link a legitimately-running flow owns.
 
+## Automatic sync is foreground-only, and defers to both radio modes
+
+[`AutoSyncController`](../lib/utils/auto_sync_controller.dart) syncs on app start,
+on resume, and on a tick while the app is open — never while backgrounded. That is
+not a shortcut: real background sync needs iOS BLE state restoration, which
+`universal_ble` does not expose, and a `Timer.periodic` in a suspended app buys a
+wakeup iOS will not honour. The ticker is cancelled when the app is paused.
+
+The guards live in `AutoSyncPolicy`, pure and unit-tested, because an automatic
+flow is the one flow nobody is watching when it collides with something:
+
+- **`isSmpBusy`** — the SMP lock above would throw anyway, but skipping earlier
+  keeps a "skipped (smpBusy)" line in the log instead of an exception during a DFU.
+- **`isStreaming`** — *the lock does not cover this.* It arbitrates SMP against
+  SMP; streaming is the other logical mode on the same radio, and the two must not
+  overlap on the wire. `ConnectionManager.isStreaming` is published by the Live
+  screen from its subscription set (not toggled per call, so a double unsubscribe
+  cannot leave it stuck on).
+- **A persisted throttle** — the stamp is written *before* the run, so a sync that
+  dies mid-way cannot become a retry loop across rapid foreground flips, and the
+  interval survives a force-quit.
+
+A sync is resumable from a persisted cursor, so the short 45 s budget running out
+is not lost work — the next trigger carries on.
+
+## Firmware updates: checked proactively, gated on app compatibility
+
+The version check runs from the same lifecycle hook, through
+[`FirmwareUpdateChecker`](../lib/utils/firmware_update_checker.dart), so an
+available update reaches the Device screen instead of only whoever thinks to open
+the DFU screen. **It never touches the radio**: the current version is the DIS
+revision cached on the paired device by whatever last held a link (sync does this
+on every session), and the latest comes from a 6-hour release cache — the GitHub
+releases API is unauthenticated and rate-limited to 60 requests/hour *per IP*, so
+a startup check must not fetch fresh each time. Connecting just to check would
+burn battery and contend for the SMP lock against a sync or an in-flight DFU.
+
+Firmware and app ship on independent schedules, so a firmware release can need
+protocol support only a newer app has. A release declares that in its notes:
+
+    [Minimum app version: 3.1.0]      or      [:mav: 3.1.0]
+
+mirroring the store-listing convention `upgrader` already reads for the app
+itself. **Absence means compatible** — the entire back catalogue is untagged, and
+treating absence as "unknown, block it" would kill the update path for all of it.
+When the tag does exceed the running build, `ScrDFUNew` shows *update the app
+first* with no install button: MCUboot here is overwrite-only with no auto-revert,
+so installing anyway would strand the user on a watch this app cannot talk to.
+The gate sits *after* the pending-radio branch, because a half-finished two-stage
+migration must always be allowed to finish.
+
+`FirmwareUpdateState` has five values for the same reason `MetricAvailability` has
+four. `unknown` is not `upToDate` — we have not checked, or could not read a
+version, and nagging on a guess is a support ticket. `updateRequired` (pre-3.0
+firmware, which cannot answer HPI_HS at all) is not `updateAvailable`.
+
 ## The health-store protocol is a pure-Dart package
 
 The HPI_HS protocol (the `HpiHs` client, the `Hs*` wire models, `Crc32`) lives in

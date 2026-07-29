@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/auto_sync_controller.dart';
 import '../utils/database_helper.dart';
 import '../utils/healthy_store_sync_manager.dart';
 import 'scr_developer.dart';
@@ -32,6 +33,7 @@ class ScrSettingsNew extends StatefulWidget {
 
 class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _devMode = false;
+  bool _autoSync = true;
   bool _deleting = false;
   String _version = '';
 
@@ -108,6 +110,7 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     if (!mounted) return;
     setState(() {
       _devMode = prefs.getBool(ScrSettingsNew.devModePrefKey) ?? false;
+      _autoSync = prefs.getBool(AutoSyncController.enabledPrefKey) ?? true;
       _version = '${info.version}+${info.buildNumber}';
     });
   }
@@ -116,6 +119,14 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     setState(() => _devMode = v);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(ScrSettingsNew.devModePrefKey, v);
+  }
+
+  /// Auto-sync is on by default, but it is the user's radio and battery — and
+  /// turning it off must not also disable the manual "Sync now" buttons, which
+  /// never consult this.
+  Future<void> _setAutoSync(bool v) async {
+    setState(() => _autoSync = v);
+    await AutoSyncController.setEnabled(v);
   }
 
   @override
@@ -138,6 +149,23 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
             const SizedBox(height: 20),
             const HpiSectionLabel('DATA'),
             HpiGroupedCard(rows: [
+              HpiListRow(
+                icon: Symbols.sync,
+                iconColor: _autoSync ? HpiColors.hr : HpiColors.onSurfaceVariant,
+                title: 'Auto-sync',
+                supporting: _autoSync
+                    ? 'On opening the app, at most every '
+                        '${AutoSyncPolicy.minInterval.inMinutes} min'
+                    : 'Off — sync only when you tap Sync now',
+                showChevron: false,
+                trailing: Switch(
+                  value: _autoSync,
+                  onChanged: _setAutoSync,
+                  activeThumbColor: HpiColors.onHr,
+                  activeTrackColor: HpiColors.hr,
+                ),
+                onTap: () => _setAutoSync(!_autoSync),
+              ),
               _row(Symbols.description, 'Export data', 'CSV · EDF'),
               _row(Symbols.cloud_off, 'Cloud sync', 'Off — local only'),
               HpiListRow(

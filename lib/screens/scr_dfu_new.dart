@@ -8,10 +8,12 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../ble/device_generation.dart';
 import '../ble/device_info.dart';
 import '../ble/dfu_plan.dart';
+import '../ble/firmware_compatibility.dart';
 import '../ble/firmware_updater.dart';
 import '../models/firmware_release.dart';
 import '../smp/smp_ble_transport.dart';
@@ -22,6 +24,7 @@ import '../utils/ble_dis_transport.dart';
 import '../utils/connection_manager.dart';
 import '../utils/device_manager.dart';
 import '../utils/dfu_stage_state.dart';
+import '../utils/firmware_update_checker.dart';
 import '../utils/firmware_update_service.dart';
 import '../utils/manifest.dart';
 import '../utils/snackbar.dart';
@@ -39,6 +42,7 @@ enum DFUScreenState {
   radioUpdateReady,   // Watch is on v3; the radio (net core) image is still owed
   completed,         // Install finished successfully
   upToDate,          // No update needed
+  appUpdateRequired, // Newer firmware exists, but it needs a newer app first
   error,             // Error occurred
 }
 
@@ -67,6 +71,10 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
   String? _errorMessage;
   String _currentFWVersion = "Unknown";
   FirmwareRelease? _latestRelease;
+
+  /// App version the pending release demands, when it demands one above this
+  /// build. Set only alongside [DFUScreenState.appUpdateRequired].
+  FirmwareVersion? _requiredAppVersion;
 
   /// Which firmware generation the watch is running, from its DIS revision.
   /// Decides whether the radio image may travel with the app core (v3 only) or
@@ -216,11 +224,35 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
       );
 
       if (updateAvailable) {
+        // Step 6: Compatibility gate. Firmware and app ship on independent
+        // schedules, so a release can require protocol support only a newer app
+        // has. Installing it anyway would leave the user holding a watch this
+        // build cannot talk to — and MCUboot here is overwrite-only with no
+        // auto-revert, so there is no way back. The tag is opt-in per release;
+        // an untagged release is compatible by definition (see
+        // minAppVersionFromReleaseNotes).
+        //
+        // Deliberately *after* the pending-radio branch above: a half-finished
+        // two-stage migration must always be allowed to finish, or the watch
+        // stays split across two firmware versions.
+        final minApp = minAppVersionFromReleaseNotes(latestRelease.body);
+        final appVersion =
+            FirmwareVersion.tryParse((await PackageInfo.fromPlatform()).version);
+        if (minApp != null && appVersion != null && appVersion < minApp) {
+          debugPrint('[DFU] ${latestRelease.version} needs app >= $minApp, '
+              'this build is $appVersion — blocking install');
+          setState(() {
+            _requiredAppVersion = minApp;
+            _dfuState = DFUScreenState.appUpdateRequired;
+          });
+          return;
+        }
+
         setState(() {
           _dfuState = DFUScreenState.updateAvailable;
         });
 
-        // Step 5: Auto-download firmware in background
+        // Step 7: Auto-download firmware in background
         _downloadFirmwareInBackground();
       } else {
         setState(() {
@@ -247,6 +279,9 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
     final version = await reader.readFirmwareVersion();
     _currentFWVersion = version ?? 'Unknown';
     _generation = generationFromFwRevision(version);
+    // Keep the Device-screen badge honest: this screen is where the version
+    // changes, and the radio-free checker has no other way to learn it.
+    await FirmwareUpdateChecker.recordFirmwareVersion(version);
     debugPrint('[DFU] Current firmware version: "$_currentFWVersion" '
         '→ ${_generation.label}');
   }
@@ -843,6 +878,8 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
         return _completeCard();
       case DFUScreenState.upToDate:
         return _upToDateCard();
+      case DFUScreenState.appUpdateRequired:
+        return _appUpdateRequiredCard();
       case DFUScreenState.error:
         return _errorCard();
       default:
@@ -1265,6 +1302,40 @@ class _ScrDFUNewState extends State<ScrDFUNew> {
             const SizedBox(height: 16),
             _noticeBanner(Symbols.info, HpiColors.temp, _errorMessage!),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// A newer firmware exists, but it declares a minimum app version above this
+  /// build. No install button: the fix is in the app store, and offering the
+  /// firmware here would walk the user into a watch this app cannot talk to.
+  Widget _appUpdateRequiredCard() {
+    return HpiCard(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        children: [
+          const Icon(Symbols.mobile_friendly, size: 64, color: HpiColors.temp),
+          const SizedBox(height: 14),
+          Text('Update the app first',
+              style: HpiText.screenTitle.copyWith(fontSize: 20)),
+          const SizedBox(height: 8),
+          Text(
+            'Firmware ${_latestRelease?.version ?? ""} needs app version '
+            '${_requiredAppVersion ?? ""} or newer. Update HealthyPi Move from '
+            'the store, then come back here.',
+            style: HpiText.body.copyWith(fontSize: 12.5),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text('Watch is on $_currentFWVersion', style: HpiText.supporting),
+          const SizedBox(height: 16),
+          _noticeBanner(
+            Symbols.info,
+            HpiColors.temp,
+            'Your watch keeps working on its current firmware — nothing is '
+            'wrong with it, and there is nothing to do on the watch itself.',
+          ),
         ],
       ),
     );
