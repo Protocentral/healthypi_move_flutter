@@ -390,7 +390,7 @@ class TrendDetailViewState extends State<TrendDetailView> {
     final max = hasRange ? s.max : d.max;
 
     if (widget.metricKey == 'activity') {
-      add(_fmt(max), _range == TrendRange.day ? 'Peak hr' : 'Best day',
+      add(_fmt(max), _range == TrendRange.day ? 'Best day' : 'Best day',
           c: style.color);
       add(_fmt(avg), _range == TrendRange.day ? 'Avg' : 'Avg/day');
       if (d.baseline != null) add(_fmt(d.baseline), 'Daily avg');
