@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_archive/flutter_archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/firmware_release.dart';
+import '../ble/device_generation.dart';
 import 'manifest.dart';
 
 /// Service for managing firmware updates from GitHub releases
@@ -101,59 +102,31 @@ class FirmwareUpdateService {
     }
   }
 
-  /// Check if an update is available by comparing versions
+  /// Check if [latestVersion] is strictly newer than [currentVersion].
+  ///
+  /// Both strings are parsed with [FirmwareVersion], which strips MCUboot build
+  /// metadata and pre-release suffixes (`"3.0.2+0"`, `"v3.0.2"`, `"3.0.2-rc1"`
+  /// all compare as `3.0.2`). The `+0` is the MCUboot image build number and is
+  /// present on every device's DIS firmware-revision string — comparing it
+  /// literally makes every equal-version release look like an upgrade, which
+  /// nags the user forever and then fails the re-flash (MCUboot rejects an image
+  /// that is not strictly higher than the running one). See the note on the
+  /// `3.0.2+0` wire format in device_generation.dart.
   static bool isUpdateAvailable(String currentVersion, String latestVersion) {
-    try {
-      // Remove 'v' prefix if present
-      final current = currentVersion.trim().toLowerCase();
-      final latest = latestVersion.trim().toLowerCase();
+    final current = FirmwareVersion.tryParse(currentVersion);
+    final latest = FirmwareVersion.tryParse(latestVersion);
 
-      final currentClean = current.startsWith('v') ? current.substring(1) : current;
-      final latestClean = latest.startsWith('v') ? latest.substring(1) : latest;
-
-      // Parse version parts (major.minor.patch)
-      final currentParts = currentClean.split('.').map((p) {
-        try {
-          return int.parse(p);
-        } catch (e) {
-          return 0;
-        }
-      }).toList();
-
-      final latestParts = latestClean.split('.').map((p) {
-        try {
-          return int.parse(p);
-        } catch (e) {
-          return 0;
-        }
-      }).toList();
-
-      // Ensure we have at least 3 parts
-      while (currentParts.length < 3) {
-        currentParts.add(0);
-      }
-      while (latestParts.length < 3) {
-        latestParts.add(0);
-      }
-
-      // Compare major.minor.patch
-      for (int i = 0; i < 3; i++) {
-        if (latestParts[i] > currentParts[i]) {
-          print('[FirmwareUpdateService] Update available: $currentClean -> $latestClean');
-          return true;
-        }
-        if (latestParts[i] < currentParts[i]) {
-          print('[FirmwareUpdateService] Current version is newer: $currentClean > $latestClean');
-          return false;
-        }
-      }
-
-      print('[FirmwareUpdateService] Versions are equal: $currentClean == $latestClean');
-      return false; // Versions are equal
-    } catch (e) {
-      print('[FirmwareUpdateService] Version comparison error: $e');
+    // Unparseable input tells us nothing — do not nag on nothing.
+    if (current == null || latest == null) {
+      print('[FirmwareUpdateService] Unparseable version '
+          '(current: "$currentVersion", latest: "$latestVersion") — treating as up to date');
       return false;
     }
+
+    final available = latest > current; // strictly newer only; equal ⇒ false
+    print('[FirmwareUpdateService] $current vs $latest -> '
+        '${available ? "update available" : "up to date"}');
+    return available;
   }
 
   /// Download firmware to cache directory

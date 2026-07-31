@@ -119,6 +119,8 @@ class FirmwareVersion implements Comparable<FirmwareVersion> {
 
   bool operator >=(FirmwareVersion other) => compareTo(other) >= 0;
   bool operator <(FirmwareVersion other) => compareTo(other) < 0;
+  bool operator >(FirmwareVersion other) => compareTo(other) > 0;
+  bool operator <=(FirmwareVersion other) => compareTo(other) <= 0;
 
   @override
   bool operator ==(Object other) =>
