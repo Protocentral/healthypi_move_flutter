@@ -1,7 +1,7 @@
 name: move
 description: "HealthyPi Move"
 publish_to: 'none'
-version: 3.0.4+92
+version: 3.0.5+93
 
 environment:
   sdk: ^3.7.0
