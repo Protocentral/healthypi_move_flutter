@@ -19,7 +19,17 @@ jobs:
 
       - name: Install CocoaPods
         run: |
-          sudo gem install cocoapods -v 1.12.0 || true
+          # Use a CocoaPods version known to avoid recent validator issues
+          # Uninstall the default 1.12.0 if present, then install 1.11.3
+          sudo gem uninstall cocoapods -v 1.12.0 -a -x || true
+          sudo gem install cocoapods -v 1.11.3 || true
+
+      - name: CocoaPods diagnostics
+        run: |
+          echo "== pod --version =="
+          pod --version || true
+          echo "== gem list cocoapods =="
+          gem list cocoapods || true
 
       - name: Install Flutter
         uses: subosito/flutter-action@v2
@@ -37,6 +47,13 @@ jobs:
           LANG: en_US.UTF-8
         run: flutter build ipa --release --export-method app-store
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-builds
+          path: |
+            build/ios/ipa/*.ipa
+
       - name: Setup Fastlane credentials
         run: |
           mkdir -p ~/fastlane
@@ -45,9 +62,39 @@ jobs:
       - name: Upload to App Store via Fastlane
         working-directory: ios
         run: |
-          # ensure bundler deps (if present)
-          bundle install || true
-          # run fastlane with the app-specific password and API key path
-          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD="${{ secrets.APP_SPECIFIC_PASSWORD }}" \
-          APP_STORE_CONNECT_API_KEY_PATH=~/fastlane/app_store_connect_api_key.json \
-          bundle exec fastlane ios release
+          # (disabled) Upload to App Store via Fastlane is commented out to
+          # prevent automatic App Store uploads from CI. To re-enable, remove
+          # the leading hashes below and ensure secrets are configured.
+#          # ensure bundler deps (if present)
+#          bundle install || true
+#          # run fastlane with the app-specific password and API key path
+#          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD="${{ secrets.APP_SPECIFIC_PASSWORD }}" \
+#          APP_STORE_CONNECT_API_KEY_PATH=~/fastlane/app_store_connect_api_key.json \
+#          bundle exec fastlane ios release
+
+  release:
+    name: Create GitHub Release and upload iOS build assets
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-builds
+          path: ios-builds
+
+      - name: Create GitHub Release and upload artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          files: |
+            ios-builds/build/ios/ipa/*.ipa
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

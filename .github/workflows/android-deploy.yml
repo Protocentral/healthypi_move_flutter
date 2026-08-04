@@ -76,8 +76,35 @@ jobs:
             build/app/outputs/bundle/release/*.aab
             build/app/outputs/flutter-apk/app-release.apk
 
-  publish:
-    name: Publish to Google Play (Internal)
+  # The original Google Play publish job is commented out to disable
+  # automatic publishing from CI. Instead we create a GitHub Release and
+  # attach the built AAB and APK as assets when a tag is pushed.
+  #
+  #publish:
+  #  name: Publish to Google Play (Internal)
+  #  needs: build
+  #  runs-on: ubuntu-latest
+  #  if: startsWith(github.ref, 'refs/tags/')
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v4
+  #
+  #    - name: Download build artifacts
+  #      uses: actions/download-artifact@v4
+  #      with:
+  #        name: android-builds
+  #
+  #    - name: Publish to Google Play
+  #      uses: r0adkll/upload-google-play@v1
+  #      with:
+  #        serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+  #        packageName: 'com.protocentral.move'
+  #        releaseFiles: |
+  #          bundle/release/*.aab
+  #        track: internal
+
+  release:
+    name: Create GitHub Release and upload build assets
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
@@ -89,12 +116,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: android-builds
+          path: android-builds
 
-      - name: Publish to Google Play
-        uses: r0adkll/upload-google-play@v1
+      - name: Create GitHub Release and upload artifacts
+        uses: ncipollo/release-action@v1
         with:
-          serviceAccountJson: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: 'com.protocentral.move'
-          releaseFiles: |
-            bundle/release/*.aab
-          track: internal
+          tag: ${{ github.ref_name }}
+          release_name: ${{ github.ref_name }}
+          files: |
+            android-builds/build/app/outputs/bundle/release/*.aab
+            android-builds/build/app/outputs/flutter-apk/app-release.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
