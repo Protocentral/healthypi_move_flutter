@@ -122,10 +122,11 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          files: |
+          name: ${{ github.ref_name }}
+          artifacts: |
             android-builds/build/app/outputs/bundle/release/*.aab
             android-builds/build/app/outputs/flutter-apk/app-release.apk
+          allowUpdates: true
           draft: false
           prerelease: false
         env:
