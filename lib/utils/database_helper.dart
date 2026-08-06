@@ -112,6 +112,11 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
+  /// `app_metadata` key set by the v8 upgrade when it removed pre-3.0 trend rows.
+  /// Its value is how many rows went. Present == "the user has history missing
+  /// and has not been told yet"; [acknowledgeLegacyDataCleared] clears it.
+  static const String legacyDataClearedKey = 'legacy_data_cleared';
+
   DatabaseHelper._init();
 
   Future<Database> get database async {
@@ -126,7 +131,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 7, // v7: hs_records index for HPI_HS RECORDS tier
+      version: 8, // v8: purge of pre-3.0 (session_id != 0) trend rows
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -162,19 +167,11 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_device_mac ON health_trends(device_mac)');
     await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp, device_mac)');
     
-    // Table to track synced sessions (prevents re-downloading)
-    await db.execute('''
-      CREATE TABLE synced_sessions (
-        session_id INTEGER NOT NULL,
-        trend_type TEXT NOT NULL,
-        record_count INTEGER NOT NULL,
-        synced_at INTEGER DEFAULT (strftime('%s', 'now')),
-        PRIMARY KEY (session_id, trend_type)
-      )
-    ''');
-    
-    await db.execute('CREATE INDEX idx_synced_trend ON synced_sessions(trend_type)');
-    
+    /* `synced_sessions` is deliberately NOT created. It deduped the pre-3.0 BLE
+     * trend-file pull, a path removed from both firmware and app; the v8 upgrade
+     * drops it on existing installs. Historical CREATEs are left in _onUpgrade
+     * because an upgrading DB really does pass through those versions. */
+
     // Table to store app metadata (replaces SharedPreferences for health-related metadata)
     await db.execute('''
       CREATE TABLE app_metadata (
@@ -414,6 +411,45 @@ class DatabaseHelper {
       print('DatabaseHelper: Upgraded to version 7 - hs_records index');
     }
 
+    if (oldVersion < 8) {
+      // v8: drop everything the pre-3.0 sync path left behind.
+      //
+      // `session_id != 0` marks a row pulled by the legacy BLE trend-file path
+      // (0x50/0x54 + /lfs/tr*). That path was removed from both firmware and app
+      // — insertBulkTrendData, the only writer, now has no callers — so these
+      // rows are frozen forever, and rebuildAllTrends deliberately spares them
+      // (it deletes only session_id = 0). They would sit next to Healthy Store
+      // data indefinitely.
+      //
+      // They also cannot be trusted next to it. Pre-3.0 firmware had no SET_TZ
+      // and stored wall-clock time, so these timestamps carry an unknown, no
+      // longer discoverable UTC offset — the user may have travelled. Charting
+      // them beside correctly bucketed HS rows means two differently-offset
+      // series on one axis. Deleting is the honest option; there is nothing to
+      // migrate them *to*.
+      final legacyRows = await db.delete('health_trends',
+          where: 'session_id != 0');
+      await db.execute('DROP TABLE IF EXISTS synced_sessions');
+
+      // Remembered so the UI can explain the gap ONCE, rather than letting a
+      // user watch months of history disappear with no account of why.
+      if (legacyRows > 0) {
+        await db.insert(
+          'app_metadata',
+          {
+            'key': legacyDataClearedKey,
+            'value': '$legacyRows',
+            'value_type': 'int',
+            'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            'description': 'Pre-3.0 trend rows removed by the v8 migration',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      print('DatabaseHelper: Upgraded to version 8 - '
+          'removed $legacyRows pre-3.0 trend row(s)');
+    }
+
     // Migrate lastSynced from SharedPreferences to database (moved outside version check)
     if (oldVersion < 3) {
       try {
@@ -433,126 +469,6 @@ class DatabaseHelper {
         print('DatabaseHelper: Failed to migrate lastSynced: $e');
       }
     }
-  }
-
-  /// Insert trends from binary data
-  Future<int> insertTrendsFromBinary(
-    List<int> binaryData,
-    String trendType,
-    int sessionId, {
-    String? deviceMac,
-  }) async {
-    final db = await database;
-    int offset = (binaryData.isNotEmpty && binaryData[0] == 0x0A) ? 1 : 0;
-    int recordCount = ((binaryData.length - offset) ~/ 16);
-    int inserted = 0;
-    
-    print('DatabaseHelper.insertTrendsFromBinary: trendType=$trendType, sessionId=$sessionId');
-    print('  Binary data length: ${binaryData.length}, offset: $offset, expected records: $recordCount');
-    
-    await db.transaction((txn) async {
-      for (int i = 0; i < recordCount; i++) {
-        int pos = i * 16 + offset;
-        
-        // Read little-endian values
-        int timestamp = _readInt64LE(binaryData, pos);
-        
-        // SPO2 binary format has min/max fields swapped compared to HR/Temp
-        int valueMax, valueMin;
-        if (trendType == hPi4Global.PREFIX_SPO2) {
-          valueMin = _readInt16LE(binaryData, pos + 8);  // SPO2: min at offset 8
-          valueMax = _readInt16LE(binaryData, pos + 10); // SPO2: max at offset 10
-        } else {
-          valueMax = _readInt16LE(binaryData, pos + 8);  // HR/Temp: max at offset 8
-          valueMin = _readInt16LE(binaryData, pos + 10); // HR/Temp: min at offset 10
-        }
-        
-        int valueAvg = _readInt16LE(binaryData, pos + 12);
-        int valueLatest = _readInt16LE(binaryData, pos + 14);
-
-        // Special-case sanitization for SpO2 prefix values
-        // Some device binary formats pack flags or unused bytes into fields
-        // which can yield values like 8194 (0x2002). Prefer plausible human
-        // SpO2 range (30-100) and collapse values to a single sane number when
-        // only one field contains a valid reading.
-        if (trendType == hPi4Global.PREFIX_SPO2) {
-          bool maxValid = valueMax >= 30 && valueMax <= 100;
-          bool minValid = valueMin >= 30 && valueMin <= 100;
-          bool avgValid = valueAvg >= 30 && valueAvg <= 100;
-          bool latestValid = valueLatest >= 30 && valueLatest <= 100;
-
-          if (maxValid || minValid || avgValid || latestValid) {
-            final int chosen = maxValid
-                ? valueMax
-                : (minValid ? valueMin : (avgValid ? valueAvg : valueLatest));
-            valueMax = chosen;
-            valueMin = chosen;
-            valueAvg = chosen;
-            valueLatest = chosen;
-          } else {
-            // Try low-byte heuristic: some firmware packs value in low byte
-            final int lowByte = valueMax & 0xFF;
-            if (lowByte >= 30 && lowByte <= 100) {
-              valueMax = lowByte;
-              valueMin = lowByte;
-              valueAvg = lowByte;
-              valueLatest = lowByte;
-            } else {
-              // Unusual values; log for later inspection but still insert raw values
-              print('DatabaseHelper: Unusual SPO2 parsed values max=$valueMax min=$valueMin avg=$valueAvg latest=$valueLatest at ts $timestamp');
-            }
-          }
-        }
-        
-        if (i < 3 || i == recordCount - 1) {
-          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false)}), '
-                'max=$valueMax, min=$valueMin, avg=$valueAvg, latest=$valueLatest');
-        }
-        
-        // Validate timestamp (reject if invalid - must be between 2020 and 2030)
-        if (timestamp < 1577836800 || timestamp > 1893456000) {
-          print('DatabaseHelper: Skipping invalid timestamp: $timestamp');
-          continue;
-        }
-        
-        try {
-          await txn.insert(
-            'health_trends',
-            {
-              'timestamp': timestamp,
-              'trend_type': trendType,
-              'session_id': sessionId,
-              'device_mac': deviceMac ?? 'unknown',
-              'value_max': valueMax,
-              'value_min': valueMin,
-              'value_avg': valueAvg,
-              'value_latest': valueLatest,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-          inserted++;
-        } catch (e) {
-          print('DatabaseHelper: Error inserting record $i: $e');
-        }
-      }
-      
-      // Mark session as synced after successful insertion
-      if (inserted > 0) {
-        await txn.insert(
-          'synced_sessions',
-          {
-            'session_id': sessionId,
-            'trend_type': trendType,
-            'record_count': inserted,
-            'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-    });
-    
-    print('DatabaseHelper: Inserted $inserted/$recordCount records for $trendType (session $sessionId)');
-    return inserted;
   }
 
   /// Get trends for a specific day
@@ -808,94 +724,28 @@ class DatabaseHelper {
     return stats;
   }
 
-  /// Check if a session has already been synced
-  Future<bool> isSessionSynced(int sessionId, String trendType) async {
-    final db = await database;
-    final result = await db.query(
-      'synced_sessions',
-      where: 'session_id = ? AND trend_type = ?',
-      whereArgs: [sessionId, trendType],
-    );
-    return result.isNotEmpty;
-  }
-
-  /// Mark a session as synced
-  Future<void> markSessionSynced(int sessionId, String trendType, int recordCount) async {
-    final db = await database;
-    await db.insert(
-      'synced_sessions',
-      {
-        'session_id': sessionId,
-        'trend_type': trendType,
-        'record_count': recordCount,
-        'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    print('DatabaseHelper: Marked session $sessionId ($trendType) as synced with $recordCount records');
-  }
-
-  /// Get list of synced session IDs for a trend type
-  Future<List<int>> getSyncedSessionIds(String trendType) async {
-    final db = await database;
-    final result = await db.query(
-      'synced_sessions',
-      columns: ['session_id'],
-      where: 'trend_type = ?',
-      whereArgs: [trendType],
-      orderBy: 'session_id DESC',
-    );
-    return result.map((row) => row['session_id'] as int).toList();
-  }
-
-  /// Get sync statistics
-  Future<Map<String, dynamic>> getSyncStats() async {
-    final db = await database;
-    
-    final result = await db.rawQuery('''
-      SELECT 
-        trend_type,
-        COUNT(*) as session_count,
-        SUM(record_count) as total_records,
-        MAX(synced_at) as last_sync
-      FROM synced_sessions
-      GROUP BY trend_type
-    ''');
-    
-    Map<String, dynamic> stats = {};
-    for (var row in result) {
-      String type = row['trend_type'] as String;
-      stats['${type}_sessions'] = row['session_count'];
-      stats['${type}_records'] = row['total_records'];
-      stats['${type}_last_sync'] = row['last_sync'];
-    }
-    
-    // Get total synced sessions
-    final total = await db.rawQuery('SELECT COUNT(*) as total FROM synced_sessions');
-    if (total.isNotEmpty) {
-      stats['total_sessions'] = total.first['total'];
-    }
-    
-    return stats;
-  }
-
-  /// Clear sync history (useful for forcing re-sync)
-  Future<int> clearSyncHistory({String? trendType}) async {
-    final db = await database;
-    if (trendType != null) {
-      return await db.delete(
-        'synced_sessions',
-        where: 'trend_type = ?',
-        whereArgs: [trendType],
-      );
-    } else {
-      return await db.delete('synced_sessions');
-    }
-  }
 
   // ============================================================================
   // App Metadata Methods (replaces SharedPreferences for health-related data)
   // ============================================================================
+
+  /// How many pre-3.0 trend rows the v8 upgrade removed, or null if there is
+  /// nothing to tell the user (fresh install, no legacy data, or already
+  /// acknowledged).
+  ///
+  /// Exists so the gap gets explained exactly once. A user who watched months of
+  /// charts vanish after an update, with no message, reasonably files a bug —
+  /// and the answer ("that data was recorded in a format with no recoverable
+  /// timezone") is not something they can work out themselves.
+  Future<int?> pendingLegacyDataClearedNotice() async =>
+      getMetadata<int>(legacyDataClearedKey);
+
+  /// Mark the legacy-cleared notice as shown, so it does not reappear.
+  Future<void> acknowledgeLegacyDataCleared() async {
+    final db = await database;
+    await db.delete('app_metadata',
+        where: 'key = ?', whereArgs: [legacyDataClearedKey]);
+  }
 
   /// Set metadata value (generic)
   Future<void> setMetadata(String key, dynamic value, {String? description}) async {
@@ -1292,26 +1142,8 @@ class DatabaseHelper {
       whereArgs: [deviceMac],
     );
     
-    // Delete from synced_sessions (session_id is not device-specific but we should clear to allow re-sync)
-    // Note: This is conservative - we delete all synced session history when switching devices
-    await db.delete('synced_sessions');
-    
     print('DatabaseHelper: Deleted $trendsDeleted records for device $deviceMac');
     return trendsDeleted;
-  }
-
-  /// Helper: Read 64-bit little-endian integer
-  int _readInt64LE(List<int> bytes, int offset) {
-    int result = 0;
-    for (int i = 7; i >= 0; i--) {
-      result = (result << 8) | bytes[offset + i];
-    }
-    return result;
-  }
-
-  /// Helper: Read 16-bit little-endian integer
-  int _readInt16LE(List<int> bytes, int offset) {
-    return bytes[offset] | (bytes[offset + 1] << 8);
   }
 
   // ---------------------------------------------------------------------------
@@ -2010,7 +1842,7 @@ class DatabaseHelper {
   /// Delete every health record the app holds, in one transaction.
   ///
   /// Wipes the raw Healthy Store (`hs_samples` / `hs_types` / `hs_sync_state`),
-  /// the derived `health_trends` cache, the legacy `synced_sessions` dedup, the
+  /// the derived `health_trends` cache, the
   /// research-recording index, and the sync metadata.
   ///
   /// **Clearing `hs_sync_state` resets the sync cursor**, which is the whole
@@ -2053,7 +1885,6 @@ class DatabaseHelper {
       'hs_sync_state',
       'hs_records',
       'health_trends',
-      'synced_sessions',
       'research_files',
       'research_sessions',
       'app_metadata',

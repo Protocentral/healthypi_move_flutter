@@ -146,6 +146,9 @@ class HpiHs {
   static const int cmdBptCalStatus = 10; // READ  {}               -> {st,prog,idx,run}
   static const int cmdBptCalEnd = 11; // WRITE {}                  -> {rc}
 
+  /// `ERASE` (group v3) — WRITE {confirm:"ERASE"} -> {rc, head, oldest}
+  static const int cmdErase = 12;
+
   SmpMessage _check(SmpMessage rsp) {
     final code = rsp.rc;
     if (code != null) {
@@ -502,6 +505,36 @@ class HpiHs {
       payload: {'off': offsetSeconds},
     ));
     _logMsg('SET_TZ off=${offsetSeconds}s');
+  }
+
+  /// `ERASE` (cmd 12, group v3) — delete **all** health data on the watch.
+  ///
+  /// Wipes the durable sample log, every bulk record, and any leftovers from
+  /// pre-3.0 firmware. Settings, the user profile and BPT calibration survive:
+  /// this is "delete my data", not a factory reset.
+  ///
+  /// Irreversible, and there is no copy on the watch afterwards — confirm with
+  /// the user before calling. The `confirm` string is required by the firmware
+  /// and checked exactly; it exists so a destructive command cannot fire from a
+  /// malformed or mis-dispatched request.
+  ///
+  /// Returns the post-erase `{rc, head, oldest}`. `seq` is **not** rewound (it
+  /// rounds up to the next segment), so ids can never collide with rows already
+  /// stored locally — but the caller must still reset its own sync cursor, since
+  /// everything below the new `oldest` is gone. Expect `oldest > head`, the
+  /// documented "store is empty" answer.
+  ///
+  /// Throws if the device is busy (`-EBUSY`: a DFU or a capture is in flight) or
+  /// if the firmware predates group v3, which has no such command.
+  Future<Map<String, dynamic>> eraseAll() async {
+    final rsp = _check(await client.send(
+      op: SmpOp.writeReq,
+      group: group,
+      id: cmdErase,
+      payload: const {'confirm': 'ERASE'},
+    ));
+    _logMsg('ERASE → ${rsp.payload}');
+    return rsp.payload;
   }
 
   // --- BPT calibration ------------------------------------------------------
