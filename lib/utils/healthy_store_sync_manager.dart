@@ -79,7 +79,13 @@ class HealthyStoreSyncManager {
   /// v3: firmware P3 — continuous HRV (hrv_rmssd, gated on hrv_coverage) is
   ///     derived into a trend, and the two `stress` metrics are split apart by
   ///     the MANUAL quality bit instead of being averaged onto one axis.
-  static const int _deriveVersion = 3;
+  /// v4: hour buckets are floored to the LOCAL hour rather than the UTC hour.
+  ///     Every stored bucket edge moves in any zone that isn't UTC, so all
+  ///     derived rows must be rebuilt — a 10:02 IST reading was landing in a
+  ///     bucket that rendered as 09:30. Device timestamps were never wrong; the
+  ///     bucketing was. (Day rollups were fixed in the same change, but those
+  ///     are computed at read time and need no rebuild.)
+  static const int _deriveVersion = 4;
   static const String _deriveVersionKey = 'derive_version';
 
   /// Legacy pref key — kept only so [ensureRealDataOnly] can clear installs that

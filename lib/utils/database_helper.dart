@@ -20,6 +20,86 @@ import 'device_manager.dart';
 /// they feed different columns of the same derived row.
 enum _Role { value, min, max }
 
+/// Floor [tsUtc] (epoch seconds, UTC) to the start of the **local** hour, and
+/// return that instant as epoch seconds — still a true UTC epoch, just aligned
+/// to a wall-clock edge.
+///
+/// Trend rows are keyed by their bucket start and every screen renders that key
+/// with `DateTime.fromMillisecondsSinceEpoch` (local). Flooring on the *UTC*
+/// hour therefore puts every bucket edge at :30 in a half-hour zone — India,
+/// Nepal, parts of Australia — so a reading taken at 10:02 IST files under a
+/// bucket that renders as "09:30". That is the beta report this fixes.
+///
+/// The conversion goes through `DateTime`, so DST is handled by the platform
+/// rather than by an offset we captured at some other instant. On a fall-back
+/// the repeated local hour maps to one bucket (the two hours merge); that is
+/// the intended reading of "the 1 AM bucket".
+int _localHourStart(int tsUtc) {
+  final l = DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000);
+  return DateTime(l.year, l.month, l.day, l.hour).millisecondsSinceEpoch ~/ 1000;
+}
+
+/// As [_localHourStart], but the start of the local calendar **day**.
+///
+/// The day rollups used to compute this as `(timestamp / 86400) * 86400`, which
+/// is a UTC-day floor: in IST that boundary is 05:30 local, so everything a user
+/// recorded between midnight and 05:30 was charted under the *previous* day.
+int _localDayStart(int tsUtc) {
+  final l = DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000);
+  return DateTime(l.year, l.month, l.day).millisecondsSinceEpoch ~/ 1000;
+}
+
+/// Exclusive end of the local day that starts at local midnight [dayStart].
+/// Not `dayStart + 86400`: a DST day is 23 or 25 hours long.
+int _localDayEnd(DateTime dayStart) =>
+    DateTime(dayStart.year, dayStart.month, dayStart.day + 1)
+            .millisecondsSinceEpoch ~/
+        1000;
+
+/// Fold hour-bucket rows into local-day rows, preserving the shape the day
+/// rollups have always returned. Done in Dart rather than SQL because the only
+/// DST-correct way to floor to a local day is to go through `DateTime` — SQLite's
+/// `'localtime'` modifier depends on platform tz data we don't control.
+List<Map<String, dynamic>> _foldToLocalDays(
+  List<Map<String, dynamic>> hourRows, {
+  required String maxKey,
+  required String minKey,
+  required String avgKey,
+  bool withCount = false,
+}) {
+  final byDay = SplayTreeMap<int, List<Map<String, dynamic>>>();
+  for (final r in hourRows) {
+    byDay
+        .putIfAbsent(_localDayStart(r['timestamp'] as int), () => [])
+        .add(r);
+  }
+  final out = <Map<String, dynamic>>[];
+  for (final e in byDay.entries) {
+    final avgs =
+        e.value.map((r) => r['value_avg'] as num?).whereType<num>().toList();
+    // A day with no central value has nothing to plot, and callers cast the
+    // aggregates non-nullably. SQL's MIN/MAX/AVG would have handed back a row
+    // full of nulls here; dropping it is strictly safer.
+    if (avgs.isEmpty) continue;
+    final maxs =
+        e.value.map((r) => r['value_max'] as num?).whereType<num>().toList();
+    final mins =
+        e.value.map((r) => r['value_min'] as num?).whereType<num>().toList();
+    out.add({
+      'day_start': e.key,
+      maxKey: maxs.isEmpty
+          ? avgs.reduce((a, b) => a > b ? a : b)
+          : maxs.reduce((a, b) => a > b ? a : b),
+      minKey: mins.isEmpty
+          ? avgs.reduce((a, b) => a < b ? a : b)
+          : mins.reduce((a, b) => a < b ? a : b),
+      avgKey: avgs.reduce((a, b) => a + b) / avgs.length,
+      if (withCount) 'data_points': e.value.length,
+    });
+  }
+  return out;
+}
+
 /// Accumulator for one (hour, trend_type) while deriving.
 class _TrendBin {
   final List<num> values = []; // the central series (means / raw readings)
@@ -481,11 +561,13 @@ class DatabaseHelper {
     DateTime day,
   ) async {
     final db = await database;
-    // DON'T convert to UTC - device timestamps are in local time
-    int dayStart = DateTime(day.year, day.month, day.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int dayEnd = dayStart + 86400;
-    
+    // `timestamp` is a UTC epoch second (aligned to a local hour edge), and
+    // `DateTime(y, m, d).millisecondsSinceEpoch` is local midnight expressed as
+    // a UTC epoch — so these compare directly. Do not "fix" this to .toUtc().
+    final midnight = DateTime(day.year, day.month, day.day);
+    int dayStart = midnight.millisecondsSinceEpoch ~/ 1000;
+    int dayEnd = _localDayEnd(midnight);
+
     return await db.query(
       'health_trends',
       where: 'trend_type = ? AND timestamp >= ? AND timestamp < ?',
@@ -504,16 +586,16 @@ class DatabaseHelper {
     // If no device specified, get current paired device
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
-    // Create range for the requested local day.
-    // DateTime(day.year, day.month, day.day) creates local midnight
-    int dayStart = DateTime(day.year, day.month, day.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int dayEnd = dayStart + 86400;
-    
+    // `timestamp` is a UTC epoch second already floored to a LOCAL hour edge by
+    // deriveTrends. So local midnight is itself a bucket start and the range is
+    // exactly the day's 24 buckets.
+    final midnight = DateTime(day.year, day.month, day.day); // local midnight
+    int dayStart = midnight.millisecondsSinceEpoch ~/ 1000;
+    int dayEnd = _localDayEnd(midnight);
+
     return await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value,
@@ -540,7 +622,7 @@ class DatabaseHelper {
     final from = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - hours * 3600;
     return await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value,
@@ -566,7 +648,7 @@ class DatabaseHelper {
         (DateTime.now().millisecondsSinceEpoch ~/ 1000) - withinDays * 86400;
     final rows = await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value
@@ -588,23 +670,30 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
-    int weekStart = DateTime(startDate.year, startDate.month, startDate.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int weekEnd = weekStart + (7 * 86400);
-    
-    return await db.rawQuery('''
-      SELECT 
-        (timestamp / 86400) * 86400 as day_start,
-        MAX(value_max) as max_value,
-        MIN(value_min) as min_value,
-        AVG(value_avg) as avg_value,
-        COUNT(*) as data_points
+    // Local calendar week. Day grouping happens in Dart — see [_foldToLocalDays]
+    // — because the old `(timestamp / 86400) * 86400` floored to the *UTC* day,
+    // which in IST cuts the day at 05:30 local and files a user's small hours
+    // under the previous day.
+    final weekStartDt =
+        DateTime(startDate.year, startDate.month, startDate.day);
+    int weekStart = weekStartDt.millisecondsSinceEpoch ~/ 1000;
+    int weekEnd = DateTime(weekStartDt.year, weekStartDt.month,
+                weekStartDt.day + 7)
+            .millisecondsSinceEpoch ~/
+        1000;
+
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, weekStart, weekEnd, effectiveMac]);
+
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max_value',
+        minKey: 'min_value',
+        avgKey: 'avg_value',
+        withCount: true);
   }
 
   /// Get monthly aggregated trends
@@ -617,24 +706,24 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
+    // Local calendar month; days folded in Dart (see [_foldToLocalDays]).
     int monthStart = DateTime(year, month, 1)
         .millisecondsSinceEpoch ~/ 1000;
     int monthEnd = DateTime(year, month + 1, 1)
         .millisecondsSinceEpoch ~/ 1000;
-    
-    return await db.rawQuery('''
-      SELECT 
-        (timestamp / 86400) * 86400 as day_start,
-        MAX(value_max) as max_value,
-        MIN(value_min) as min_value,
-        AVG(value_avg) as avg_value,
-        COUNT(*) as data_points
+
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, monthStart, monthEnd, effectiveMac]);
+
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max_value',
+        minKey: 'min_value',
+        avgKey: 'avg_value',
+        withCount: true);
   }
 
   /// Daily average values for [trendType] over the last [days] days, oldest
@@ -651,23 +740,25 @@ class DatabaseHelper {
             .subtract(Duration(days: days))
             .millisecondsSinceEpoch ~/
         1000;
-    return await db.rawQuery('''
-      SELECT
-        (timestamp / 86400) * 86400 as day_start,
-        AVG(value_avg) as avg,
-        MIN(value_min) as min,
-        MAX(value_max) as max
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, sinceTs, effectiveMac]);
+
+    // Days folded in Dart (see [_foldToLocalDays]) — this feeds the 30-day
+    // baseline and the Month / 6-Month tabs, so a UTC-day floor here shifted
+    // every point on those charts for any user east or west of UTC.
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max', minKey: 'min', avgKey: 'avg');
   }
 
   /// Clean up old data (older than specified retention days)
   Future<int> cleanupOldData({int retentionDays = 30}) async {
     final db = await database;
-    // Timestamps in DB are local time, so use local time for cutoff
+    // `timestamp` is a UTC epoch, and so is `millisecondsSinceEpoch` — a plain
+    // "now minus N days" cutoff is correct in any timezone.
     int cutoffTime = DateTime.now()
         .subtract(Duration(days: retentionDays))
         .millisecondsSinceEpoch ~/ 1000;
@@ -893,13 +984,12 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = await _getCurrentDeviceMac();
 
-    // Calculate today's date range (midnight to midnight in local timezone)
-    // Timestamps in DB are in LOCAL time (device records local time)
+    // Today's local range. `timestamp` is a UTC epoch already aligned to a local
+    // hour edge, so local midnight is itself a bucket start.
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(Duration(days: 1));
     final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
-    final todayEndTimestamp = todayEnd.millisecondsSinceEpoch ~/ 1000;
+    final todayEndTimestamp = _localDayEnd(todayStart);
 
     final results = await Future.wait([
       // HR: Latest/most recent value
@@ -936,7 +1026,7 @@ class DatabaseHelper {
         SELECT SUM(hourly_max) as value, MAX(hour_start) as timestamp
         FROM (
           SELECT
-            (timestamp / 3600) * 3600 as hour_start,
+            timestamp as hour_start,
             MAX(value_max) as hourly_max
           FROM health_trends
           WHERE trend_type = ?
@@ -1720,6 +1810,8 @@ class DatabaseHelper {
           (r['value'] as int) / (scale == 0 ? 1 : scale);
     }
 
+    int? memoHour; // see the local-hour bucketing below
+
     for (final r in rows) {
       // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
       // — but it must not reach a chart, a summary or an export, or synthetic
@@ -1745,9 +1837,19 @@ class DatabaseHelper {
       final stored = _toStoredUnits(
           role.trend, (r['value'] as int) / (scale == 0 ? 1 : scale));
 
-      // Epoch records timestamp the END of their window, so the hour bucket is
-      // the hour the window closed in. Good enough at 1-minute epochs.
-      final hourStart = ((r['ts_utc'] as int) ~/ 3600) * 3600;
+      // Bucket on the LOCAL hour — see [_localHourStart]. Epoch records
+      // timestamp the END of their window, so the bucket is the hour the window
+      // closed in; good enough at 1-minute epochs.
+      //
+      // Rows arrive ts ASC, so a one-entry memo skips the DateTime work for
+      // every sample after the first in each hour. A local hour is always 3600 s
+      // wide (DST steps land on hour boundaries), so the range test is exact;
+      // where it isn't, we simply recompute.
+      final ts = r['ts_utc'] as int;
+      if (memoHour == null || ts < memoHour || ts >= memoHour + 3600) {
+        memoHour = _localHourStart(ts);
+      }
+      final hourStart = memoHour;
 
       if ((t['class'] as String?) == 'cumulative') {
         final byHour = cumulative.putIfAbsent(role.trend, () => SplayTreeMap());
