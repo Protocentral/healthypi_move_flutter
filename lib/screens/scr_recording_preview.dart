@@ -80,6 +80,21 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
 
   bool get _isEcg => widget.recording.kind == HsRecordingKind.ecg;
 
+  /// True for an R-R record: intervals, not a fixed-rate waveform.
+  bool get _isRr => widget.recording.isIntervalSeries;
+
+  /// Elapsed time of an R-R record, in seconds.
+  ///
+  /// The running sum of the intervals — the only honest answer, and why
+  /// [HsRecording.durationSeconds] returns 0 for these. Uses the *raw* decoded
+  /// values rather than the artifact-filtered series, because a rejected beat
+  /// still consumed wall-clock time.
+  int get _rrDurationSeconds {
+    if (_samples.data.isEmpty || _samples.data.first.isEmpty) return 0;
+    final totalMs = _samples.data.first.reduce((a, b) => a + b);
+    return (totalMs / 1000).round();
+  }
+
   List<List<double>> get _channels => _samples.data;
 
   Color get _signalColor {
@@ -140,14 +155,19 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     return Scaffold(
       backgroundColor: HpiColors.background,
       appBar: AppBar(
-        title: Text('${s.kindLabel} · ${_dur(s.durationSeconds)}'),
+        title: Text('${s.kindLabel} · '
+            '${_dur(_isRr ? _rrDurationSeconds : s.durationSeconds)}'),
       ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             Text(
-              '${_when(s.startTime)} · ${s.sampleRate} Hz · '
+              // No "Hz" for an interval series — the header's sampleRate is not
+              // a rate there, and printing it as one invites the reader to
+              // divide by it.
+              '${_when(s.startTime)} · '
+              '${_isRr ? "${s.beats} beats" : "${s.sampleRate} Hz"} · '
               '${_size(widget.payload.length)}'
               '${s.isPartial ? " · partial" : ""}'
               '${_samples.assumed ? " · format inferred" : ""}',
@@ -157,15 +177,19 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
             if (_channels.isEmpty || _channels.first.isEmpty)
               _noSamples()
             else ...[
-              _minimapCard(),
-              const SizedBox(height: 12),
-              _detailCard(multi: multi),
-              const SizedBox(height: 12),
-              _statsRow(),
-              if (_hrv != null) ...[
+              // An R-R record gets the tachogram in the HRV card instead of the
+              // waveform pair. The minimap and detail charts draw a fixed-rate
+              // trace against an `i / sampleRate` axis, which for intervals is a
+              // plausible-looking picture of nothing.
+              if (!_isRr) ...[
+                _minimapCard(),
                 const SizedBox(height: 12),
-                _hrvCard(_hrv!),
+                _detailCard(multi: multi),
+                const SizedBox(height: 12),
+                _statsRow(),
+                const SizedBox(height: 12),
               ],
+              if (_hrv != null) _hrvCard(_hrv!),
               const SizedBox(height: 16),
               HpiFilledButton(
                 label: _exporting

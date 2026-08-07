@@ -9,17 +9,12 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
-analyzer:
-  exclude:
-    # Standalone pure-Dart package with its own analysis_options + test suite
-    # (run it with `cd packages/healthypi_healthy_store && dart test`).
-    # App usage is still type-checked against its public API via the path dep.
-    #
-    # Must track the package directory name: this said `hpi_health_store/**`
-    # for a while after the rename, so root `flutter analyze` walked the
-    # package's tests without its `test` dev-dependency resolved and reported
-    # ~150 phantom "undefined_function: test/group/expect" errors.
-    - packages/healthypi_healthy_store/**
+# No analyzer excludes: the HPI_HS protocol client used to live in-tree at
+# `packages/healthypi_healthy_store/` and had to be excluded (its own
+# analysis_options + a `test` dev-dependency root analyze couldn't resolve). It
+# now lives in its own repo, https://github.com/Protocentral/healthy_store_dart,
+# and arrives as a git dependency, so pub-cache code is out of analyze's way by
+# construction. App usage is still type-checked against its public API.
 
 linter:
   # The lint rules applied to this project can be customized in the

@@ -6,8 +6,9 @@ app over Bluetooth. This document is the wire contract — the commands, their
 request/response shapes, and the packed structures they carry.
 
 The reference client is the pure-Dart package
-[`packages/healthypi_healthy_store`](../packages/healthypi_healthy_store) (class
-`HpiHs`, plus the `Hs*` models). The app talks to it through one SMP session; see
+[`healthypi_healthy_store`](https://github.com/Protocentral/healthy_store_dart)
+(class `HpiHs`, plus the `Hs*` models), which lives in its own repo and arrives
+here as a tag-pinned git dependency. The app talks to it through one SMP session; see
 [HEALTH_STORE_SYNC_DESIGN.md](HEALTH_STORE_SYNC_DESIGN.md) for how the sync loop
 is driven and persisted.
 
@@ -193,7 +194,8 @@ enum starts at 1** — `0` is not a signal.
 A 0-based reading of this table shifts every code by one and is silent about
 it: ECG sessions list as GSR, GSR as PPG, IMU disappears, and the ECG bucket
 can never be filled because nothing emits `0`. Regression-tested in
-`packages/healthypi_healthy_store/test/hs_record_wire_test.dart`.
+`test/hs_record_wire_test.dart` in the
+[healthy_store_dart](https://github.com/Protocentral/healthy_store_dart) repo.
 
 ## 8. SUMMARY
 

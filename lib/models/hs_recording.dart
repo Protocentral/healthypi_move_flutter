@@ -37,8 +37,27 @@ class HsRecording {
 
   DateTime get startTime => header.startTime.toLocal();
 
+  /// True when the payload is a series of **intervals**, not fixed-rate samples.
+  ///
+  /// An HRV record ([HsSignal.hrvRr]) is R-R intervals in milliseconds. Beats are
+  /// irregularly spaced by definition, so `sampleRate` is not a real Hz and any
+  /// `i / sampleRate` timebase is fiction. Elapsed time is the running sum of the
+  /// values themselves, which needs the payload — see [beats] for what the header
+  /// alone can honestly say.
+  bool get isIntervalSeries => kind == HsRecordingKind.hrv;
+
+  /// Beat count for an [isIntervalSeries] record — one interval per sample.
+  int get beats => nSamples;
+
   /// Best-effort duration from sample count and rate; 0 if unknown.
+  ///
+  /// **0 for an [isIntervalSeries] record**, deliberately. The header carries a
+  /// `sampleRate` for HRV too, but it does not mean Hz there, and dividing by it
+  /// produced a confident, wrong duration on every screen that asked. Returning
+  /// 0 makes callers render "—" until they compute the real elapsed time from
+  /// the decoded intervals.
   int get durationSeconds {
+    if (isIntervalSeries) return 0;
     final sr = sampleRate <= 0 ? 0 : sampleRate;
     if (sr == 0 || nSamples <= 0) return 0;
     return (nSamples / sr).round().clamp(0, 24 * 3600);

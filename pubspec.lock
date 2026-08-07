@@ -387,9 +387,11 @@ packages:
   healthypi_healthy_store:
     dependency: "direct main"
     description:
-      path: "packages/healthypi_healthy_store"
-      relative: true
-    source: path
+      path: "."
+      ref: "v0.2.0"
+      resolved-ref: e8e24d86f67cbe5cc856118312ea74a3ec0c856e
+      url: "https://github.com/Protocentral/healthy_store_dart.git"
+    source: git
     version: "0.2.0"
   hex:
     dependency: transitive
