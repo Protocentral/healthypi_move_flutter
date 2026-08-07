@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../feature_flags.dart';
 import '../models/hs_recording.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
@@ -26,9 +27,31 @@ class ScrRecordings extends StatefulWidget {
   State<ScrRecordings> createState() => _ScrRecordingsState();
 }
 
-/// Order must match the segmented control's labels — the control reports an
-/// index straight into [_Filter.values].
-enum _Filter { all, ecg, hrv, ppg, gsr, imu }
+/// A library filter chip.
+///
+/// Each case carries its own [label], and the control is built from
+/// [_visibleFilters] rather than from `_Filter.values` with a parallel list of
+/// strings. That coupling ("order must match the labels") could not survive a
+/// conditionally-hidden chip: hiding one shifts every later index, so the
+/// segmented control would report GSR and select IMU.
+enum _Filter {
+  all('All'),
+  ecg('ECG'),
+  hrv('HRV'),
+  ppg('PPG'),
+  gsr('GSR'),
+  imu('IMU');
+
+  const _Filter(this.label);
+  final String label;
+
+  /// Chips actually shown. HRV is hidden while [kHrvRecordsEnabled] is off —
+  /// the firmware emits no such records, so the chip would always be empty.
+  static List<_Filter> get visible => [
+        for (final f in _Filter.values)
+          if (f != _Filter.hrv || kHrvRecordsEnabled) f,
+      ];
+}
 
 class _ScrRecordingsState extends State<ScrRecordings> {
   List<HsRecording>? _sessions;
@@ -249,7 +272,15 @@ class _ScrRecordingsState extends State<ScrRecordings> {
   @override
   Widget build(BuildContext context) {
     final all = _sessions;
-    final shown = all?.where(_matches).toList() ?? const <HsRecording>[];
+    // Also drop HRV rows outright while the feature is gated. The chip is
+    // hidden, but a bench build could still emit signal 0x05 — and a row that
+    // downloads into a preview whose HRV analysis is switched off is a worse
+    // outcome than not listing it.
+    final shown = all
+            ?.where(_matches)
+            .where((s) => kHrvRecordsEnabled || s.kind != HsRecordingKind.hrv)
+            .toList() ??
+        const <HsRecording>[];
 
     return Scaffold(
       backgroundColor: HpiColors.background,
@@ -267,9 +298,10 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             HpiSegmentedControl(
-              segments: const ['All', 'ECG', 'HRV', 'PPG', 'GSR', 'IMU'],
-              selectedIndex: _filter.index,
-              onChanged: (i) => setState(() => _filter = _Filter.values[i]),
+              segments: [for (final f in _Filter.visible) f.label],
+              selectedIndex: _Filter.visible.indexOf(_filter).clamp(0, 99),
+              onChanged: (i) =>
+                  setState(() => _filter = _Filter.visible[i]),
             ),
             const SizedBox(height: 16),
             if (_busy && all == null)
@@ -382,8 +414,9 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           Text('No recordings', style: HpiText.appBarTitle),
           const SizedBox(height: 6),
           Text(
-              'ECG, HRV, PPG, GSR and IMU sessions are all started on the '
-              'watch, then downloaded here on demand.',
+              '${kHrvRecordsEnabled ? "ECG, HRV, PPG" : "ECG, PPG"}, GSR and '
+              'IMU sessions are all started on the watch, then downloaded here '
+              'on demand.',
               textAlign: TextAlign.center,
               style: HpiText.body.copyWith(fontSize: 12)),
         ],

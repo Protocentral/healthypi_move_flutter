@@ -9,6 +9,7 @@ import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../feature_flags.dart';
 import '../models/hs_recording.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
@@ -67,6 +68,11 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     final channel = _samples.data.first;
 
     if (r.kind == HsRecordingKind.hrv) {
+      // Gated: firmware emits no signal 0x05 yet, so this path is unreachable
+      // in practice and untested against a real record. The ECG branch below is
+      // deliberately *not* gated — it runs on records the watch already
+      // produces and is the reference this path will be validated against.
+      if (!kHrvRecordsEnabled) return;
       // Already intervals in milliseconds — no detection to do.
       final series = RrSeries.filtered(channel);
       _rr = series;
