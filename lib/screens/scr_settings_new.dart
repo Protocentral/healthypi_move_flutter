@@ -385,14 +385,6 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                       )
                     : null,
               ),
-              // Not a disabled feature — a statement of how the app works.
-              // There is no backend, no account, and no upload path anywhere in
-              // the codebase; the only network call the app makes at all is the
-              // GitHub releases API for firmware update checks. Worded as a
-              // policy rather than an "Off" toggle, which read as something the
-              // user could switch on and could not.
-              _row(Symbols.cloud_off, 'Cloud sync',
-                  'None — data stays on this phone'),
               HpiListRow(
                 icon: Symbols.delete,
                 iconColor: HpiColors.error,
@@ -416,6 +408,8 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                 onTap: _erasingWatch ? null : _confirmEraseWatch,
               ),
             ]),
+            const SizedBox(height: 12),
+            _privacyCard(),
             const SizedBox(height: 20),
             const HpiSectionLabel('DEVELOPER'),
             _developerCard(),
@@ -454,6 +448,63 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
               const SizedBox(height: 2),
               Text('Signed in locally', style: HpiText.supporting),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Where the user's health data goes: nowhere.
+  ///
+  /// This replaces a "Cloud sync — Off" row, which read as a feature waiting to
+  /// be switched on. There is no backend, no account and no upload path in the
+  /// codebase, and none is planned, so framing it as a disabled toggle was
+  /// misleading in the one direction that matters for a health app. Stated as
+  /// what it is: a property of the product.
+  ///
+  /// **Every claim here is checked against the code, and must stay that way.**
+  /// The app has no analytics, crash-reporting or telemetry dependency of any
+  /// kind, and makes exactly two kinds of outbound request, neither carrying
+  /// user data: `FirmwareUpdateService` → GitHub, for watch firmware release
+  /// metadata and the binary itself; and `upgrader` → the platform app store,
+  /// for the latest app version behind `Upgrader.blocked`. If a third is ever
+  /// added, this card is part of that change — an inaccurate privacy claim is
+  /// worse than none.
+  Widget _privacyCard() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: HpiMetricColors.tint(HpiColors.steps, 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: HpiMetricColors.tint(HpiColors.steps, 0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Symbols.lock, size: 20, color: HpiColors.steps),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Your health data stays on this phone',
+                    style: HpiText.cardTitle.copyWith(fontSize: 12.5)),
+                const SizedBox(height: 4),
+                Text(
+                  'No account, no cloud, no analytics. Nothing the watch '
+                  'measures is uploaded anywhere — it lives in this app until '
+                  'you export or delete it.',
+                  style: HpiText.body.copyWith(fontSize: 11.5, height: 1.45),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'The app goes online for two things only, and neither sends '
+                  'your data: checking GitHub for watch firmware, and checking '
+                  'the app store for app updates.',
+                  style: HpiText.supporting.copyWith(fontSize: 10.5, height: 1.4),
+                ),
+              ],
+            ),
           ),
         ],
       ),
