@@ -34,6 +34,26 @@ enum _Role { value, min, max }
 /// rather than by an offset we captured at some other instant. On a fall-back
 /// the repeated local hour maps to one bucket (the two hours merge); that is
 /// the intended reading of "the 1 AM bucket".
+@visibleForTesting
+int localHourStart(int tsUtc) => _localHourStart(tsUtc);
+
+@visibleForTesting
+int localDayStart(int tsUtc) => _localDayStart(tsUtc);
+
+@visibleForTesting
+int localDayEnd(DateTime dayStart) => _localDayEnd(dayStart);
+
+@visibleForTesting
+List<Map<String, dynamic>> foldToLocalDays(
+  List<Map<String, dynamic>> hourRows, {
+  required String maxKey,
+  required String minKey,
+  required String avgKey,
+  bool withCount = false,
+}) =>
+    _foldToLocalDays(hourRows,
+        maxKey: maxKey, minKey: minKey, avgKey: avgKey, withCount: withCount);
+
 int _localHourStart(int tsUtc) {
   final l = DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000);
   return DateTime(l.year, l.month, l.day, l.hour).millisecondsSinceEpoch ~/ 1000;
@@ -1674,9 +1694,15 @@ class DatabaseHelper {
       // closed in; good enough at 1-minute epochs.
       //
       // Rows arrive ts ASC, so a one-entry memo skips the DateTime work for
-      // every sample after the first in each hour. A local hour is always 3600 s
-      // wide (DST steps land on hour boundaries), so the range test is exact;
-      // where it isn't, we simply recompute.
+      // every sample after the first in each hour.
+      //
+      // The 3600 s window is exact wherever a DST step lands on an hour
+      // boundary, which is everywhere except the handful of zones that shift by
+      // 30 minutes (Lord Howe). There, the half hour following a transition is
+      // still inside the memo's window and gets filed under the previous
+      // bucket — measured at 30 samples, twice a year. Not worth a DateTime
+      // call per sample to fix, but it is a mis-bucket and not, as this comment
+      // once claimed, a recompute.
       final ts = r['ts_utc'] as int;
       if (memoHour == null || ts < memoHour || ts >= memoHour + 3600) {
         memoHour = _localHourStart(ts);

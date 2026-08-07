@@ -46,6 +46,7 @@ class MetricTrend {
     this.min,
     this.max,
     this.spark = const [],
+    this.sparkAt = const [],
     this.baseline,
   });
 
@@ -58,6 +59,14 @@ class MetricTrend {
 
   /// Today's hourly values (chronological) for the mini sparkline/bars.
   final List<double> spark;
+
+  /// The local hour each [spark] value belongs to, same order and length.
+  ///
+  /// The series omits hours with no reading, so its indices are not a timeline —
+  /// plotting it evenly stretches a handful of morning readings across a card
+  /// labelled `12A … NOW`. Callers that draw it under a time axis position by
+  /// these instead. Empty only for a metric loaded before this existed.
+  final List<DateTime> sparkAt;
 
   /// 30-day rolling baseline (median of daily averages) in display units, or
   /// null when there aren't enough days yet.
@@ -561,12 +570,16 @@ class HealthRepository {
     }
 
     final spark = <double>[];
+    final sparkAt = <DateTime>[];
     double? minV, maxV;
     for (final row in recent) {
       final avg = _display(key, row['avg_value'] as num);
       final rmin = _display(key, row['min_value'] as num);
       final rmax = _display(key, row['max_value'] as num);
       spark.add(avg);
+      sparkAt.add(DateTime.fromMillisecondsSinceEpoch(
+          (row['hour_start'] as int) * 1000,
+          isUtc: false));
       minV = (minV == null || rmin < minV) ? rmin : minV;
       maxV = (maxV == null || rmax > maxV) ? rmax : maxV;
     }
@@ -591,6 +604,7 @@ class HealthRepository {
       min: minV,
       max: maxV,
       spark: spark,
+      sparkAt: sparkAt,
       baseline: await _baseline(key),
     );
   }
@@ -619,6 +633,7 @@ class HealthRepository {
     // Derived rows hold each hour's INCREMENT (deriveTrends differences the
     // device's running counter), so the day's total is their sum.
     final spark = <double>[];
+    final sparkAt = <DateTime>[];
     num total = 0;
     DateTime? latestAt;
     for (final row in hourly) {
@@ -628,6 +643,7 @@ class HealthRepository {
       latestAt = DateTime.fromMillisecondsSinceEpoch(
           (row['hour_start'] as int) * 1000,
           isUtc: false);
+      sparkAt.add(latestAt);
     }
 
     return MetricTrend(
@@ -638,6 +654,7 @@ class HealthRepository {
       min: null,
       max: null,
       spark: spark,
+      sparkAt: sparkAt,
       baseline: null,
     );
   }
@@ -805,7 +822,11 @@ class HealthRepository {
     final bins = <DateTime, List<TrendPoint>>{};
     for (final p in daily) {
       final d = DateTime(p.t.year, p.t.month, p.t.day);
-      final weekStart = d.subtract(Duration(days: d.weekday - 1));
+      // Calendar arithmetic, not `subtract(Duration(days: n))`. A Duration is
+      // absolute, so in a zone that changes offset at local midnight (Chile,
+      // Easter Island) the week key landed at 23:00 or 01:00 for some days and
+      // one calendar week split into two bins on the 6-Month chart.
+      final weekStart = DateTime(d.year, d.month, d.day - (d.weekday - 1));
       bins.putIfAbsent(weekStart, () => []).add(p);
     }
     final keys = bins.keys.toList()..sort();

@@ -19,6 +19,7 @@ class HpiSparkline extends StatelessWidget {
     this.areaOpacity = 0.12,
     this.min,
     this.max,
+    this.positions,
   });
 
   final List<double> values;
@@ -32,6 +33,14 @@ class HpiSparkline extends StatelessWidget {
   final double? min;
   final double? max;
 
+  /// Optional real horizontal positions, normalized to `[0, 1]`, one per value.
+  ///
+  /// Without them the points are spread evenly, which silently closes gaps: the
+  /// Home hero plots a rolling 24 h window with empty hours omitted, so three
+  /// readings taken before breakfast used to stretch across a card labelled
+  /// `12A … NOW`. Supply positions wherever the spark sits under a time axis.
+  final List<double>? positions;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
@@ -43,6 +52,7 @@ class HpiSparkline extends StatelessWidget {
           areaOpacity: areaOpacity,
           fixedMin: min,
           fixedMax: max,
+          positions: positions,
         ),
       ),
     );
@@ -57,6 +67,7 @@ class _SparklinePainter extends CustomPainter {
     required this.areaOpacity,
     this.fixedMin,
     this.fixedMax,
+    this.positions,
   });
 
   final List<double> values;
@@ -65,6 +76,7 @@ class _SparklinePainter extends CustomPainter {
   final double areaOpacity;
   final double? fixedMin;
   final double? fixedMax;
+  final List<double>? positions;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -79,7 +91,10 @@ class _SparklinePainter extends CustomPainter {
     }
     const padY = 3.0;
     final plotH = size.height - padY * 2;
-    double x(int i) => size.width * i / (values.length - 1);
+    final pos = positions;
+    double x(int i) => (pos != null && i < pos.length)
+        ? size.width * pos[i]
+        : size.width * i / (values.length - 1);
     double y(double v) => padY + plotH * (1 - (v - lo) / (hi - lo));
 
     final path = Path()..moveTo(x(0), y(values[0]));
@@ -88,9 +103,11 @@ class _SparklinePainter extends CustomPainter {
     }
 
     if (areaOpacity > 0) {
+      // Close under the drawn span, not under the whole card — with real
+      // positions the line need not reach either edge.
       final fill = Path.from(path)
-        ..lineTo(size.width, size.height)
-        ..lineTo(0, size.height)
+        ..lineTo(x(values.length - 1), size.height)
+        ..lineTo(x(0), size.height)
         ..close();
       canvas.drawPath(
           fill, Paint()..color = color.withValues(alpha: areaOpacity));
@@ -112,5 +129,6 @@ class _SparklinePainter extends CustomPainter {
       old.values != values ||
       old.color != color ||
       old.strokeWidth != strokeWidth ||
-      old.areaOpacity != areaOpacity;
+      old.areaOpacity != areaOpacity ||
+      old.positions != positions;
 }
