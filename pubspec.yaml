@@ -36,9 +36,19 @@ dependencies:
   # (mcumgr_dart) brings cbor + crypto transitively. See docs/HEALTH_STORE_SYNC_DESIGN.md.
   universal_ble: ^2.0.1
   mcumgr_dart: ^0.1.0
-  # HPI_HS Health Store client (group 0x1000); path dep until the repo is public.
+  # HPI_HS Health Store client (group 0x1000). Pulled from its own now-public
+  # repo, which is the single source of truth and what pub.dev is published from.
+  #
+  # **Pinned to a tag, not a branch.** `ref: main` would let an unreleased
+  # protocol change reach a release build without anyone choosing it — the wire
+  # format moves with firmware, so that must be a deliberate bump. To develop
+  # against a local checkout, add a `dependency_overrides:` path entry rather
+  # than loosening this; the override is visible in review and cannot be
+  # released by accident.
   healthypi_healthy_store:
-    path: packages/healthypi_healthy_store
+    git:
+      url: https://github.com/Protocentral/healthy_store_dart.git
+      ref: v0.2.0
 
 dev_dependencies:
   flutter_test:
