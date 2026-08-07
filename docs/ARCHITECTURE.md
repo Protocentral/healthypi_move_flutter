@@ -107,8 +107,10 @@ firmware, which cannot answer HPI_HS at all) is not `updateAvailable`.
 ## The health-store protocol is a pure-Dart package
 
 The HPI_HS protocol (the `HpiHs` client, the `Hs*` wire models, `Crc32`) lives in
-[`packages/healthypi_healthy_store`](../packages/healthypi_healthy_store) — pure
-Dart, no Flutter, its own test suite. It is shared with other ProtoCentral tools
+its own repo,
+[Protocentral/healthy_store_dart](https://github.com/Protocentral/healthy_store_dart),
+and arrives here as a tag-pinned git dependency — pure Dart, no Flutter, its own
+test suite. It is shared with other ProtoCentral tools
 (e.g. OpenView 3) that previously carried byte-identical copies with no shared
 source, so a fix in one never reached the others.
 
