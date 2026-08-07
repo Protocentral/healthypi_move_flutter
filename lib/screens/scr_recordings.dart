@@ -306,7 +306,10 @@ class _ScrRecordingsState extends State<ScrRecordings> {
       icon: kind.icon,
       iconColor: kind.color,
       title:
-          '${session.kindLabel} · ${_duration(session.durationSeconds)}'
+          // An interval series has no fixed-rate duration to quote from the
+          // header; beat count is what it can honestly report before download.
+          '${session.kindLabel} · '
+          '${session.isIntervalSeries ? "${session.beats} beats" : _duration(session.durationSeconds)}'
           '${session.isPartial ? " · partial" : ""}',
       supporting:
           '${_formatWhen(session.startTime)} · ${_size(session.byteLen)}'
