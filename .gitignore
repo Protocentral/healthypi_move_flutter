@@ -59,8 +59,10 @@ x
 # Design handoff zip is redundant with the extracted docs/design_handoff_* dir.
 docs/*.zip
 
-# Library packages resolve fresh; only apps pin a lockfile.
-packages/*/pubspec.lock
+# Library packages resolve fresh; only apps pin a lockfile. `**` so nested
+# packages are covered too — an example/ is its own package with its own
+# throwaway resolution, and the single-level glob missed it.
+packages/**/pubspec.lock
 /flutter_01.png
 /flutter_02.png
 CLAUDE.md

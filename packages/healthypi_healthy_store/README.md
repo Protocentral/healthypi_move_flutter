@@ -8,6 +8,17 @@ It reads health data off a Move **without touching firmware**, and has no Flutte
 dependency — use it from a Flutter app, a CLI tool, a desktop research script, or
 server-side ingest.
 
+## Try it without a watch
+
+```bash
+dart run example/example.dart
+```
+
+[`example/example.dart`](example/example.dart) runs a full `HELLO` → `TYPES` →
+`SYNC` → `ACK` session against an in-memory fake Move that speaks the real wire
+format — no hardware, no BLE stack. Replace the one transport class at the bottom
+with a BLE/serial/TCP [`SmpTransport`](#transport) and nothing above it changes.
+
 ## API surface
 
 | Method | What it's for |
@@ -101,7 +112,7 @@ typed `HsSummary` while still exposing the raw map via `.raw`.
 
 ## Status
 
-`0.1.0`. The sample and records tiers are hardware-verified against a HealthyPi
+`0.2.0`. The sample and records tiers are hardware-verified against a HealthyPi
 Move; record-header keys are pinned. Some `TYPES`/`SUMMARY` fields may still firm
 up before `1.0.0`, which is why the parsers stay defensive.
 

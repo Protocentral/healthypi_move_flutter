@@ -1,0 +1,21 @@
+name: healthypi_healthy_store_example
+description: >-
+  Runnable Healthy Store session — HELLO, TYPES, SYNC and ACK against an
+  in-memory fake HealthyPi Move. No hardware or BLE stack required.
+
+# Its own package so the example can declare what it uses (`cbor`, to build a
+# realistic byte-string SYNC payload) without pushing that onto every consumer
+# of healthypi_healthy_store as a runtime dependency.
+publish_to: none
+
+environment:
+  sdk: ^3.3.0
+
+dependencies:
+  healthypi_healthy_store:
+    path: ../
+  cbor: ^6.5.0
+  mcumgr_dart: ^0.1.0
+
+dev_dependencies:
+  lints: ^6.0.0

@@ -12,12 +12,18 @@
   `test/hs_record_wire_test.dart`.
 - Added `HsSignal`, the pinned code table (`ecg` 0x01 … `acc` 0x06). These are a
   wire contract — do not renumber them.
+- Added `example/` — a runnable end-to-end session (`dart run example/example.dart`)
+  covering `HELLO` → `TYPES` → `SYNC` → `ACK`. It talks to an in-memory fake Move
+  that speaks the real wire format, so it needs no hardware and no BLE stack, and
+  it exercises genuine encode/decode rather than a mock that agrees with itself.
+  Swap the one transport class for BLE/serial/TCP and the rest is unchanged.
 - Added `HpiHs.eraseAll()` (`ERASE`, cmd 12, group v3): delete all health data on
   the watch. Irreversible, requires the firmware's exact `confirm: "ERASE"`
   string, and throws `-EBUSY` if a DFU or capture is in flight. Settings, the
   user profile and BPT calibration survive — it is "delete my data", not a
   factory reset. Callers must reset their own sync cursor: `seq` is not rewound,
   but everything below the new `oldest` is gone.
+- Dev-only: `lints` ^5.0.0 → ^6.0.0. No API or behaviour change.
 
 ## 0.1.0
 
