@@ -1346,6 +1346,68 @@ class DatabaseHelper {
     );
   }
 
+  /// The Healthy Store device key a stored record sits under.
+  ///
+  /// [getHealthyStoreDeviceKey] infers the key from `hs_samples`, which is empty
+  /// for a user who has downloaded recordings but never completed a sample sync
+  /// — so deleting a recording cannot rely on it.
+  Future<String?> getHsRecordDeviceKey(int recordId) async {
+    final db = await database;
+    final rows = await db.query('hs_records',
+        columns: ['device'],
+        where: 'record_id = ?',
+        whereArgs: [recordId],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    return rows.first['device'] as String?;
+  }
+
+  /// Forget one downloaded RECORDS session, returning the payload paths that are
+  /// now unreferenced so the caller can unlink them.
+  ///
+  /// **Returning the paths is the contract, not a convenience.** Payloads live
+  /// on the filesystem, not in SQLite (see [deleteAllHealthData]); dropping the
+  /// rows alone orphans every `.bin` under the documents directory with nothing
+  /// left pointing at it, so it can never be found or freed again.
+  ///
+  /// Clears the legacy `research_*` mirror too. Those rows declare
+  /// `ON DELETE CASCADE`, but `PRAGMA foreign_keys` is **off** on this
+  /// connection, so the cascade never fires — `research_files` is deleted
+  /// explicitly rather than trusting a constraint that is not enforced.
+  Future<Set<String>> deleteHsRecord(String device, int recordId) async {
+    final db = await database;
+    final paths = <String>{};
+
+    void collect(List<Map<String, Object?>> rows) {
+      for (final r in rows) {
+        final p = r['file_path'] as String?;
+        if (p != null && p.isNotEmpty) paths.add(p);
+      }
+    }
+
+    await db.transaction((txn) async {
+      collect(await txn.query('hs_records',
+          columns: ['file_path'],
+          where: 'device = ? AND record_id = ?',
+          whereArgs: [device, recordId]));
+      // The research mirror keys sessions by the record id (see
+      // HealthyStoreRecordsManager._mirrorResearchTables).
+      collect(await txn.query('research_files',
+          columns: ['file_path'],
+          where: 'session_timestamp = ?',
+          whereArgs: [recordId]));
+
+      await txn.delete('hs_records',
+          where: 'device = ? AND record_id = ?', whereArgs: [device, recordId]);
+      await txn.delete('research_files',
+          where: 'session_timestamp = ?', whereArgs: [recordId]);
+      await txn.delete('research_sessions',
+          where: 'session_timestamp = ?', whereArgs: [recordId]);
+    });
+
+    return paths;
+  }
+
   /// Cache the self-describing TYPES registry for [device].
   Future<void> upsertTypes(String device, List<Map<String, Object?>> types) async {
     final db = await database;

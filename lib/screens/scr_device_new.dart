@@ -156,7 +156,12 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
     );
     if (ok != true) return;
     await DeviceManager.unpairDevice();
-    if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/scan', (r) => false);
+    // Push, don't `pushNamedAndRemoveUntil(…, (r) => false)`: wiping the stack
+    // left the scan screen as the *only* route, so its back arrow was dead and
+    // pairing again popped the Navigator empty (blank screen, restart-only).
+    // The shell re-reads pairing state off DeviceManager.pairingRevision, which
+    // `unpairDevice` just bumped, so leaving it underneath is correct.
+    if (mounted) Navigator.of(context).pushNamed('/scan');
   }
 
   @override

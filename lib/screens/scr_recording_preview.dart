@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 ProtoCentral
 // SPDX-License-Identifier: MIT
 
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_records_manager.dart';
+import '../utils/hrv_analysis.dart';
 import '../utils/signal_view.dart';
 
 /// Recording preview + CSV export (handoff 2d) for HPI_HS **RECORDS** payloads.
@@ -39,11 +41,44 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   double _windowWidth = 0.2;
   late HsRecordSamples _samples;
 
+  /// HRV for this record, when it has any: measured off the watch's own R-R
+  /// intervals for an HRV record, or off detected R peaks for an ECG record.
+  /// Null for signals with no beats in them (PPG/GSR/IMU).
+  HrvMetrics? _hrv;
+
+  /// The interval series behind [_hrv] — drives the tachogram.
+  RrSeries? _rr;
+
   @override
   void initState() {
     super.initState();
     _samples = HsRecordSamples.decode(widget.recording.header, widget.payload);
+    _computeHrv();
   }
+
+  /// Derive HRV once, at decode time.
+  ///
+  /// R-peak detection over a multi-minute ECG is O(n) but not free, and this
+  /// screen rebuilds on every zoom and pan — running it in `build` would redo
+  /// the whole pass on each frame of a drag.
+  void _computeHrv() {
+    final r = widget.recording;
+    if (_samples.data.isEmpty || _samples.data.first.isEmpty) return;
+    final channel = _samples.data.first;
+
+    if (r.kind == HsRecordingKind.hrv) {
+      // Already intervals in milliseconds — no detection to do.
+      final series = RrSeries.filtered(channel);
+      _rr = series;
+      _hrv = HrvMetrics.from(series);
+    } else if (r.kind == HsRecordingKind.ecg && r.sampleRate > 0) {
+      final result = hrvFromEcg(channel, sampleRate: r.sampleRate);
+      _rr = result.series;
+      _hrv = result.metrics;
+    }
+  }
+
+  bool get _isEcg => widget.recording.kind == HsRecordingKind.ecg;
 
   List<List<double>> get _channels => _samples.data;
 
@@ -62,15 +97,30 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     }
   }
 
-  Future<void> _exportCsv() async {
+  Future<void> _exportCsv() => _export(
+        (m) => m.exportCsv(widget.recording, widget.payload),
+        'HealthyPi recording',
+      );
+
+  /// Export the R-R intervals this screen derived from the ECG — the reference
+  /// series for validating the watch's own HRV against a known-good source.
+  Future<void> _exportRr() => _export(
+        (m) => m.exportEcgRrCsv(widget.recording, widget.payload),
+        'HealthyPi ECG-derived R-R intervals',
+      );
+
+  Future<void> _export(
+    Future<File> Function(HealthyStoreRecordsManager m) build,
+    String shareText,
+  ) async {
     setState(() => _exporting = true);
     final device = await DeviceManager.getPairedDevice();
     final m = HealthyStoreRecordsManager(device?.macAddress ?? '');
     try {
-      final file = await m.exportCsv(widget.recording, widget.payload);
+      final file = await build(m);
       if (!mounted) return;
-      await SharePlus.instance.share(
-          ShareParams(files: [XFile(file.path)], text: 'HealthyPi recording'));
+      await SharePlus.instance
+          .share(ShareParams(files: [XFile(file.path)], text: shareText));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -112,6 +162,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
               _detailCard(multi: multi),
               const SizedBox(height: 12),
               _statsRow(),
+              if (_hrv != null) ...[
+                const SizedBox(height: 12),
+                _hrvCard(_hrv!),
+              ],
               const SizedBox(height: 16),
               HpiFilledButton(
                 label: _exporting
@@ -120,9 +174,25 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
                 icon: Symbols.download,
                 onPressed: _exporting ? null : _exportCsv,
               ),
+              if (_isEcg && _hrv != null) ...[
+                const SizedBox(height: 10),
+                HpiTonalButton(
+                  label: 'Export R-R intervals (HRV)',
+                  icon: Symbols.download,
+                  onPressed: _exporting ? null : _exportRr,
+                ),
+              ],
               const SizedBox(height: 10),
               Text(
-                'CSV uses a shared t_ms timebase from the session start.',
+                _isEcg
+                    ? 'Waveform CSV uses a shared t_ms timebase from the '
+                        'session start. The R-R export is one row per beat, '
+                        'timed from its own R peak.'
+                    : (widget.recording.kind == HsRecordingKind.hrv
+                        ? 'CSV is one row per beat: interval, instantaneous '
+                            'rate, and whether the artifact filter kept it.'
+                        : 'CSV uses a shared t_ms timebase from the session '
+                            'start.'),
                 style: HpiText.supporting,
               ),
             ],
@@ -276,6 +346,107 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     ]);
   }
 
+  /// HRV spot check.
+  ///
+  /// For an **ECG** record these numbers are derived here, from detected R
+  /// peaks — the reference a researcher validates the watch's own HRV against.
+  /// For an **HRV** record they are measured over the watch's own R-R
+  /// intervals. The card says which, every time: a number is only a validation
+  /// if you know which side produced it.
+  Widget _hrvCard(HrvMetrics m) {
+    final derived = _isEcg;
+    final rr = _rr;
+    return HpiCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: HpiSectionLabel('HRV SPOT CHECK')),
+              HpiPill(
+                label: derived ? 'FROM ECG' : 'FROM WATCH R-R',
+                color: derived ? HpiColors.hr : HpiColors.stress,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (!m.isReliable)
+            // Never render metrics that mean nothing. An RMSSD of 8 ms off six
+            // clean beats reads as "very low variability" when it actually
+            // means "not measurable" — same trap as the `baselining` state on
+            // the stress screen, where a 0 would read as "calm".
+            Text(
+              m.beats < 20
+                  ? 'Only ${m.beats} usable beat${m.beats == 1 ? "" : "s"} — too '
+                      'short for a meaningful HRV reading. A spot check wants '
+                      '30 s or more of clean signal.'
+                  : '${(m.artifactFraction * 100).round()}% of intervals were '
+                      'rejected as artifacts — too noisy to report HRV from. '
+                      'Re-record with firmer skin contact.',
+              style: HpiText.body.copyWith(fontSize: 12, height: 1.4),
+            )
+          else ...[
+            Row(children: [
+              Expanded(
+                  child: HpiStatChip(
+                      value: m.rmssdMs.toStringAsFixed(1),
+                      label: 'RMSSD ms',
+                      valueColor: HpiColors.stress)),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: HpiStatChip(
+                      value: m.sdnnMs.toStringAsFixed(1), label: 'SDNN ms')),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: HpiStatChip(
+                      value: m.meanHrBpm.toStringAsFixed(0),
+                      label: 'Mean HR',
+                      valueColor: HpiColors.hr)),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                  child: HpiStatChip(
+                      value: '${(m.pnn50 * 100).toStringAsFixed(0)}%',
+                      label: 'pNN50')),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: HpiStatChip(value: '${m.beats}', label: 'Beats')),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: HpiStatChip(
+                      value: '${(m.artifactFraction * 100).toStringAsFixed(0)}%',
+                      label: 'Artifacts')),
+            ]),
+            if (rr != null && rr.rrMs.length > 1) ...[
+              const SizedBox(height: 14),
+              const HpiSectionLabel('TACHOGRAM · R-R INTERVAL'),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 88,
+                child: CustomPaint(
+                  painter: _TachogramPainter(
+                      rr.rrMs, derived ? HpiColors.hr : HpiColors.stress),
+                ),
+              ),
+            ],
+          ],
+          const SizedBox(height: 10),
+          Text(
+            derived
+                ? 'Beats detected from this ECG and measured here on the phone. '
+                    'A research reference for checking the watch\'s own HRV — '
+                    'not a diagnosis, and no rhythm interpretation.'
+                : 'Measured from the R-R intervals the watch recorded. '
+                    'Research figures — not a diagnosis.',
+            style: HpiText.supporting.copyWith(fontSize: 10),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _noSamples() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 56),
@@ -317,6 +488,80 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     return '${dt.day} ${months[dt.month - 1]} $hour:'
         '${dt.minute.toString().padLeft(2, '0')} $amPm';
   }
+}
+
+/// Beat-to-beat interval against beat number — the standard HRV view.
+///
+/// Plotted against **beat index, not elapsed time**: that is what a tachogram
+/// is, and it is why the variability is legible. Spacing the points by their own
+/// duration would compress exactly the fast beats whose short intervals carry
+/// the RMSSD signal.
+class _TachogramPainter extends CustomPainter {
+  _TachogramPainter(this.rrMs, this.color);
+
+  final List<double> rrMs;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (rrMs.length < 2) return;
+
+    var lo = rrMs.first, hi = rrMs.first;
+    for (final v in rrMs) {
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    // A flat trace must not divide by zero, and a nearly flat one should read as
+    // flat rather than being amplified into noise by an autoscale.
+    final span = (hi - lo) < 20 ? 20.0 : (hi - lo) * 1.2;
+    final mid = (hi + lo) / 2;
+    double y(double v) =>
+        size.height * (1 - ((v - (mid - span / 2)) / span).clamp(0.0, 1.0));
+    double x(int i) => size.width * i / (rrMs.length - 1);
+
+    final grid = Paint()
+      ..color = HpiColors.divider
+      ..strokeWidth = 1;
+    for (var i = 1; i < 3; i++) {
+      final gy = size.height * i / 3;
+      canvas.drawLine(Offset(0, gy), Offset(size.width, gy), grid);
+    }
+
+    final path = Path()..moveTo(x(0), y(rrMs.first));
+    for (var i = 1; i < rrMs.length; i++) {
+      path.lineTo(x(i), y(rrMs[i]));
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // Dots only when they won't merge into a smear.
+    if (rrMs.length <= 120) {
+      final dot = Paint()..color = color;
+      for (var i = 0; i < rrMs.length; i++) {
+        canvas.drawCircle(Offset(x(i), y(rrMs[i])), 2, dot);
+      }
+    }
+
+    final label = TextPainter(
+      text: TextSpan(
+        text: '${lo.round()}–${hi.round()} ms',
+        style: const TextStyle(
+            fontFamily: 'Rubik', fontSize: 9, color: HpiColors.faint),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    label.paint(canvas, Offset(size.width - label.width, 0));
+  }
+
+  @override
+  bool shouldRepaint(_TachogramPainter old) =>
+      old.rrMs != rrMs || old.color != color;
 }
 
 class _MinimapPainter extends CustomPainter {

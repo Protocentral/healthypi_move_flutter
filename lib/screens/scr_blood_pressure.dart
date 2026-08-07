@@ -1,8 +1,13 @@
 // Copyright (c) 2024-2026 ProtoCentral
 // SPDX-License-Identifier: MIT
 
+import 'dart:io';
+
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../data/health_repository.dart';
 import '../theme/hpi_colors.dart';
@@ -35,6 +40,7 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
   final _repo = HealthRepository();
   BloodPressureView? _view;
   TrendRange _range = TrendRange.week;
+  bool _exporting = false;
 
   static const _disclaimer =
       'Wellness estimate from finger PPG · shown as a range, not a cuff '
@@ -56,6 +62,92 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
     if (mounted) _load();
   }
 
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  /// Export the estimates in the selected range as CSV and hand them to the
+  /// share sheet.
+  ///
+  /// The share icon in the app bar was wired to an empty `onPressed`, so it
+  /// looked live and did nothing.
+  ///
+  /// **Exported as ranges, not cuff-style numbers**, matching the screen. That
+  /// is not a loss of information — the algorithm's point estimate is the
+  /// midpoint of the exported interval — and it keeps the file consistent with
+  /// the framing everything else here is built on. `relative_to_usual` is the
+  /// user's *own* Lower/Typical/Higher comparison, never a clinical category.
+  Future<void> _export() async {
+    final view = _view;
+    if (view == null || _exporting) return;
+
+    // Fall back to the full history when the selected window is empty, the same
+    // rule the stat chips use — an export that silently returns 0 rows because
+    // of the segmented control is the bug this button already had.
+    final windowed = view.inRange(_range);
+    final source = windowed.isEmpty ? view.readings : windowed;
+    if (source.isEmpty) {
+      _toast('No estimates to export yet.');
+      return;
+    }
+
+    setState(() => _exporting = true);
+    try {
+      final rows = <List<dynamic>>[
+        [
+          'timestamp_local',
+          'timestamp_utc',
+          'sys_est_low_mmhg',
+          'sys_est_high_mmhg',
+          'dia_est_low_mmhg',
+          'dia_est_high_mmhg',
+          'est_half_width_mmhg',
+          'quality_flags',
+          'deviation_from_usual_mmhg',
+          'relative_to_usual',
+          'usual_sys_mmhg',
+          'usual_dia_mmhg',
+        ],
+        for (final r in source)
+          [
+            r.at.toIso8601String(),
+            r.at.toUtc().toIso8601String(),
+            r.sysRange[0],
+            r.sysRange[1],
+            r.diaRange[0],
+            r.diaRange[1],
+            r.halfWidth,
+            r.quality ?? '',
+            view.deviation(r).toStringAsFixed(1),
+            _relOf(view.deviation(r)).label,
+            view.usualSys,
+            view.usualDia,
+          ],
+      ];
+
+      final dir = await getApplicationDocumentsDirectory();
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(RegExp(r'[:.]'), '-')
+          .substring(0, 19);
+      final file =
+          File('${dir.path}/healthypi_blood_pressure_${_range.name}_$stamp.csv');
+      await file.writeAsString(const ListToCsvConverter().convert(rows));
+      if (!mounted) return;
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)],
+        text: 'Blood pressure — wellness estimates, not cuff measurements',
+      ));
+    } catch (e) {
+      _toast('Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final view = _view;
@@ -73,9 +165,17 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
         actions: [
           if (view?.showValues ?? false)
             IconButton(
-              icon: const Icon(Symbols.ios_share,
-                  size: 20, color: HpiColors.onSurfaceBright),
-              onPressed: () {},
+              tooltip: 'Export CSV',
+              icon: _exporting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: HpiColors.bpSys),
+                    )
+                  : const Icon(Symbols.ios_share,
+                      size: 20, color: HpiColors.onSurfaceBright),
+              onPressed: _exporting ? null : _export,
             ),
         ],
       ),
