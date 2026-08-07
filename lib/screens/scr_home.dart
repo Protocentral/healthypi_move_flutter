@@ -712,16 +712,31 @@ class _ScrHomeState extends State<ScrHome> {
 
   // --- nav --------------------------------------------------------------
 
+  /// Open the detail screen for a signal-list row.
+  ///
+  /// **Every key a row can pass must land somewhere.** `stress` and `eda` used
+  /// to fall off the end of this method: the rows rendered a chevron (HpiListRow
+  /// shows one whenever `onTap != null`) and tapping them did nothing at all.
+  /// The zero-state variants of those same rows already pushed [ScrStressEda],
+  /// so the destination existed — only the populated row, the one a user with
+  /// data actually sees, was unreachable.
   void _openMetric(String key) {
+    // Stress and EDA share one dedicated screen, and are pushed on **both**
+    // layouts. They have no `health_trends` series and no TrendMetricStyle
+    // entry, so handing them to the tablet's right pane renders an empty,
+    // generic "Trend" view — the same dead end as the phone's silent no-op,
+    // just dressed as a real screen. Check this before the breakpoint.
+    if (key == 'stress' || key == 'eda') {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const ScrStressEda()));
+      return;
+    }
     if (Breakpoints.isExpanded(context)) {
       setState(() => _selectedMetric = key);
       return;
     }
-    // Compact: push the redesigned trend detail (real-data metrics only).
-    if (key == 'hr' || key == 'spo2' || key == 'temp' || key == 'activity') {
-      Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => TrendDetailScreen(metricKey: key)));
-    }
+    Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => TrendDetailScreen(metricKey: key)));
   }
 
   Widget _inlineNoData(_MetricStyle s) {

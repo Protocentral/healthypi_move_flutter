@@ -1346,6 +1346,31 @@ class DatabaseHelper {
     );
   }
 
+  /// Every stored sample for [device], oldest first, joined to its `hs_types`
+  /// registry entry — the whole-store dump behind Settings › Export data.
+  ///
+  /// This is the raw sample tier, not the derived `health_trends` aggregates:
+  /// the export exists so a user can keep their data before a wipe, and only the
+  /// raw rows are lossless. `deleteDataForDevice` is one tap away on the pairing
+  /// screen, which tells the user to export first, so this must return what they
+  /// would otherwise lose.
+  ///
+  /// **Synthetic samples are excluded**, the same rule every chart and summary
+  /// follows — fabricated firmware test data must never leave the app in a file
+  /// that looks like measurements.
+  Future<List<Map<String, Object?>>> getAllSamplesForExport(String device) async {
+    final db = await database;
+    return db.rawQuery(
+      'SELECT s.seq, s.ts_utc, s.type, s.quality, s.value, '
+      '       t.key AS type_key, t.unit AS unit, t.scale AS scale '
+      'FROM hs_samples s '
+      'LEFT JOIN hs_types t ON t.device = s.device AND t.id = s.type '
+      'WHERE s.device = ? AND (s.quality & ?) = 0 '
+      'ORDER BY s.ts_utc ASC, s.seq ASC',
+      [device, HsQuality.synthetic],
+    );
+  }
+
   /// The Healthy Store device key a stored record sits under.
   ///
   /// [getHealthyStoreDeviceKey] infers the key from `hs_samples`, which is empty

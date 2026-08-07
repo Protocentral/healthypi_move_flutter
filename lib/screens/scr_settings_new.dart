@@ -1,10 +1,15 @@
 // Copyright (c) 2024-2026 ProtoCentral
 // SPDX-License-Identifier: MIT
 
+import 'dart:io';
+
+import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart' show SmpException;
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/hpi_colors.dart';
@@ -41,7 +46,97 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
   bool _autoSync = true;
   bool _deleting = false;
   bool _erasingWatch = false;
+  bool _exporting = false;
   String _version = '';
+
+  /// Export every stored sample as CSV and hand it to the share sheet.
+  ///
+  /// This row used to be inert. That is worse here than on a cosmetic row: the
+  /// pairing screen's data-loss dialog tells the user, in as many words, to
+  /// "cancel and export it first from Settings › Export data" before switching
+  /// watches wipes the store — so following the app's own instructions produced
+  /// nothing, and then the data went. `deleteAllHealthData` sits three rows
+  /// below this one with the same advice.
+  ///
+  /// Exports the **raw sample tier**, not the derived trends: only the raw rows
+  /// are lossless, and losslessness is the entire point of an export offered as
+  /// the alternative to deletion. Synthetic samples are excluded by the query.
+  Future<void> _exportData() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final device = await DatabaseHelper.instance.getHealthyStoreDeviceKey();
+      if (device == null) {
+        _toast('No synced data to export yet.');
+        return;
+      }
+      final rows =
+          await DatabaseHelper.instance.getAllSamplesForExport(device);
+      if (rows.isEmpty) {
+        _toast('No synced data to export yet.');
+        return;
+      }
+
+      final csv = <List<dynamic>>[
+        [
+          'timestamp_utc',
+          'timestamp_local',
+          'seq',
+          'metric',
+          'value',
+          'unit',
+          'raw_value',
+          'scale',
+          'quality_flags',
+        ],
+      ];
+      for (final r in rows) {
+        final ts = DateTime.fromMillisecondsSinceEpoch(
+            (r['ts_utc'] as int) * 1000,
+            isUtc: true);
+        final raw = r['value'] as int;
+        final scale = (r['scale'] as int?) ?? 1;
+        csv.add([
+          ts.toIso8601String(),
+          ts.toLocal().toIso8601String(),
+          r['seq'],
+          // An unknown type id means a metric this build's registry has no name
+          // for; emit the id rather than dropping the row, so a newer firmware's
+          // data still survives the export.
+          r['type_key'] ?? 'type_${r['type']}',
+          raw / (scale == 0 ? 1 : scale),
+          r['unit'] ?? '',
+          raw,
+          scale,
+          r['quality'],
+        ]);
+      }
+
+      final dir = await getApplicationDocumentsDirectory();
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(RegExp(r'[:.]'), '-')
+          .substring(0, 19);
+      final file = File('${dir.path}/healthypi_all_data_$stamp.csv');
+      await file.writeAsString(const ListToCsvConverter().convert(csv));
+      if (!mounted) return;
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)],
+        text: 'HealthyPi Move — ${rows.length} samples',
+      ));
+    } catch (e) {
+      _toast('Export failed: $e');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..removeCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   /// Erase everything on the **watch** (HPI_HS `ERASE`, cmd 12).
   ///
@@ -243,9 +338,15 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
             const SizedBox(height: 20),
             const HpiSectionLabel('PREFERENCES'),
             HpiGroupedCard(rows: [
-              _row(Symbols.straighten, 'Units', '°F · mi'),
+              // These three state facts, they do not offer choices — see [_row].
+              // Their values used to describe a product that does not exist:
+              // "°F · mi" when there is no unit system anywhere in the app and
+              // temperature renders in Celsius, and "High HR · Low SpO₂" when
+              // nothing schedules, evaluates or delivers an alert. A user could
+              // reasonably have believed the watch was watching for those.
+              _row(Symbols.straighten, 'Units', 'Metric · °C'),
               _row(Symbols.dark_mode, 'Theme', 'Dark'),
-              _row(Symbols.notifications, 'Health alerts', 'High HR · Low SpO₂'),
+              _row(Symbols.notifications, 'Health alerts', 'Not available'),
             ]),
             const SizedBox(height: 20),
             const HpiSectionLabel('DATA'),
@@ -267,8 +368,31 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                 ),
                 onTap: () => _setAutoSync(!_autoSync),
               ),
-              _row(Symbols.description, 'Export data', 'CSV · EDF'),
-              _row(Symbols.cloud_off, 'Cloud sync', 'Off — local only'),
+              HpiListRow(
+                icon: Symbols.description,
+                iconColor: HpiColors.onSurfaceVariant,
+                title: 'Export data',
+                supporting: _exporting
+                    ? 'Preparing CSV…'
+                    : 'Every stored sample, as CSV',
+                onTap: _exporting ? null : _exportData,
+                trailing: _exporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: HpiColors.hr),
+                      )
+                    : null,
+              ),
+              // Not a disabled feature — a statement of how the app works.
+              // There is no backend, no account, and no upload path anywhere in
+              // the codebase; the only network call the app makes at all is the
+              // GitHub releases API for firmware update checks. Worded as a
+              // policy rather than an "Off" toggle, which read as something the
+              // user could switch on and could not.
+              _row(Symbols.cloud_off, 'Cloud sync',
+                  'None — data stays on this phone'),
               HpiListRow(
                 icon: Symbols.delete,
                 iconColor: HpiColors.error,
@@ -336,13 +460,21 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     );
   }
 
+  /// A read-only status row: a fact, with no destination behind it.
+  ///
+  /// **No `onTap`, and therefore no chevron.** These used to pass `onTap: () {}`,
+  /// which is not "no handler" as far as [HpiListRow] is concerned — it renders
+  /// the chevron whenever `onTap != null`, so every one of these advertised a
+  /// screen that did not exist and swallowed the tap. That contradicted this
+  /// screen's own stated rule (see the class doc): unwired preferences show their
+  /// value honestly rather than faking a control.
   Widget _row(IconData icon, String title, String value) {
     return HpiListRow(
       icon: icon,
       iconColor: HpiColors.onSurfaceVariant,
       title: title,
       trailing: Text(value, style: HpiText.body.copyWith(fontSize: 12)),
-      onTap: () {},
+      showChevron: false,
     );
   }
 
