@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:mcumgr_dart/mcumgr_dart.dart' show SmpException;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -10,7 +11,10 @@ import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
 import '../utils/auto_sync_controller.dart';
+import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
+import '../utils/device_manager.dart';
+import '../utils/healthy_store_client.dart';
 import '../utils/healthy_store_sync_manager.dart';
 import 'scr_developer.dart';
 
@@ -32,10 +36,107 @@ class ScrSettingsNew extends StatefulWidget {
 }
 
 class _ScrSettingsNewState extends State<ScrSettingsNew> {
+  final _cm = ConnectionManager.instance;
   bool _devMode = false;
   bool _autoSync = true;
   bool _deleting = false;
+  bool _erasingWatch = false;
   String _version = '';
+
+  /// Erase everything on the **watch** (HPI_HS `ERASE`, cmd 12).
+  ///
+  /// Deliberately separate from "Delete all data on this phone": one clears the
+  /// local copy and re-pulls on the next sync, the other destroys the original.
+  /// Doing both from one button would make the recoverable case and the
+  /// unrecoverable one look identical.
+  Future<void> _confirmEraseWatch() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: HpiColors.surfaceContainer,
+        title: const Text('Erase all data on the watch?'),
+        content: const Text(
+          'Permanently deletes every sample and recording stored on the watch, '
+          'including anything not yet synced to this phone.\n\n'
+          'This cannot be undone, and the watch keeps no copy. Data already '
+          'synced to this phone stays — use "Delete all data on this phone" as '
+          'well if you want both gone.\n\n'
+          'Your settings, profile and blood-pressure calibration are kept.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Erase the watch',
+                style: TextStyle(color: HpiColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final device = await DeviceManager.getPairedDevice();
+    if (device == null) {
+      _snack('No paired watch.', HpiColors.error);
+      return;
+    }
+
+    setState(() => _erasingWatch = true);
+    HealthyStoreClient? client;
+    try {
+      if (!_cm.isConnected || _cm.deviceId != device.macAddress) {
+        await _cm.connect(device.macAddress);
+      }
+      client = HealthyStoreClient(device.macAddress,
+          requestTimeout: const Duration(seconds: 30));
+      await client.connect();
+      if (!client.hasHealthyStore) {
+        throw StateError('watch did not answer HELLO — no Healthy Store');
+      }
+
+      final rsp = await client.hs!.eraseAll();
+      // The next sync re-reads HELLO and resumeCursor() jumps the local cursor
+      // forward past the gap on its own, so nothing to reset here.
+      _snack('Watch erased. head=${rsp['head']} oldest=${rsp['oldest']}',
+          HpiColors.steps);
+    } on SmpBusyException {
+      // Our own lock. Never tear the link down here — that would kill whatever
+      // legitimately holds it.
+      _snack('The watch link is busy (sync or update). Try again after it '
+          'finishes.', HpiColors.temp);
+    } on SmpException catch (e) {
+      final String msg;
+      switch (e.rc) {
+        case 3: // MGMT_ERR_EINVAL — also what an older group returns for cmd 12
+          msg = 'This watch firmware has no erase command. Update it to 3.1 or '
+              'newer, or erase from the watch: Settings › Erase data.';
+        case 8: // MGMT_ERR_ENOTSUP
+          msg = 'This watch firmware does not support erase. Nothing was '
+              'changed.';
+        case 10: // MGMT_ERR_EBUSY — DFU or a capture in flight
+          msg = 'The watch is busy (an update or a recording is running). '
+              'Nothing was erased.';
+        default:
+          msg = 'Erase failed: $e';
+      }
+      _snack(msg, HpiColors.error);
+    } catch (e) {
+      _snack('Erase failed: $e', HpiColors.error);
+    } finally {
+      // Releases the SMP lock. Must run even on the early throws above, or the
+      // wire stays held and every later sync/update is refused.
+      await client?.disconnect();
+      if (mounted) setState(() => _erasingWatch = false);
+    }
+  }
+
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
+  }
 
 
   /// Destructive, and irreversible on the phone — so it's a two-step confirm
@@ -177,6 +278,18 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                     : 'Resets the sync cursor and re-pulls from the watch',
                 showChevron: false,
                 onTap: _deleting ? null : _confirmDeleteAll,
+              ),
+              // Listed after the phone-side delete on purpose: this one is the
+              // irreversible half of the pair.
+              HpiListRow(
+                icon: Symbols.delete_forever,
+                iconColor: HpiColors.error,
+                title: 'Erase all data on the watch',
+                supporting: _erasingWatch
+                    ? 'Erasing…'
+                    : 'Permanent — the watch keeps no copy',
+                showChevron: false,
+                onTap: _erasingWatch ? null : _confirmEraseWatch,
               ),
             ]),
             const SizedBox(height: 20),

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -331,6 +333,9 @@ class _ScrHomeState extends State<ScrHome> {
   Widget _heroHrCard() {
     final hr = _dash!.hr;
     final style = _styleFor('hr');
+    // Mirrors the repository's rolling window (getRecentHourlyTrends, 24 h back
+    // from now); both the spark positions and the axis ticks hang off it.
+    final windowStart = DateTime.now().subtract(const Duration(hours: 24));
     return HpiCard(
       onTap: () => _openMetric('hr'),
       child: Column(
@@ -374,10 +379,13 @@ class _ScrHomeState extends State<ScrHome> {
             SizedBox(
               height: 56,
               child: HpiSparkline(
-                  values: hr.spark, color: HpiColors.hr, strokeWidth: 2),
+                  values: hr.spark,
+                  positions: _heroPositions(hr, windowStart),
+                  color: HpiColors.hr,
+                  strokeWidth: 2),
             ),
             const SizedBox(height: 6),
-            _heroAxis(),
+            _heroAxis(windowStart),
           ] else
             _inlineNoData(style),
         ],
@@ -385,18 +393,57 @@ class _ScrHomeState extends State<ScrHome> {
     );
   }
 
-  Widget _heroAxis() {
-    const labels = ['12A', '6A', '12P', '6P', 'NOW'];
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        for (final l in labels)
-          Text(l,
-              style: HpiText.mono.copyWith(
-                  fontSize: 9,
-                  color: l == 'NOW' ? HpiColors.hr : HpiColors.faint)),
-      ],
-    );
+  /// Where each hero spark point sits in the rolling 24 h window, normalized.
+  ///
+  /// `hr.spark` skips hours with no reading, so its indices are not a timeline.
+  /// Spreading them evenly — which is what happened before — stretched a few
+  /// morning readings across a card labelled `12A … NOW`, making them look like
+  /// a full day's trace recorded at the wrong times.
+  List<double>? _heroPositions(MetricTrend hr, DateTime windowStart) {
+    if (hr.sparkAt.length != hr.spark.length || hr.spark.isEmpty) return null;
+    const span = Duration(hours: 24);
+    return [
+      for (final t in hr.sparkAt)
+        (t.difference(windowStart).inSeconds / span.inSeconds)
+            .clamp(0.0, 1.0)
+            .toDouble()
+    ];
+  }
+
+  /// Ticks for the hero spark, pinned to the same fractions the line uses.
+  ///
+  /// The labels were the fixed `12A · 6A · 12P · 6P · NOW`, but the series is a
+  /// **rolling** 24 h window, not a calendar day — so at 4 PM the left edge is
+  /// 4 PM *yesterday*, and calling it "12A" was wrong regardless of spacing.
+  Widget _heroAxis(DateTime windowStart) {
+    const w = 30.0;
+    String hourLabel(int h) =>
+        '${h % 12 == 0 ? 12 : h % 12}${h < 12 ? 'A' : 'P'}';
+    final ticks = <(double, String)>[
+      for (var h = 0; h < 24; h += 6)
+        (h / 24, hourLabel(windowStart.add(Duration(hours: h)).hour)),
+      (1.0, 'NOW'),
+    ];
+    return LayoutBuilder(builder: (context, c) {
+      return SizedBox(
+        height: 12,
+        child: Stack(
+          children: [
+            for (final (f, l) in ticks)
+              Positioned(
+                left: (c.maxWidth * f - w / 2)
+                    .clamp(0.0, math.max(0.0, c.maxWidth - w)),
+                width: w,
+                child: Text(l,
+                    textAlign: TextAlign.center,
+                    style: HpiText.mono.copyWith(
+                        fontSize: 9,
+                        color: l == 'NOW' ? HpiColors.hr : HpiColors.faint)),
+              ),
+          ],
+        ),
+      );
+    });
   }
 
   // --- Signal list (2a) -------------------------------------------------

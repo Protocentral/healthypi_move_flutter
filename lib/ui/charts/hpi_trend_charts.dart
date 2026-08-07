@@ -28,7 +28,53 @@ class TrendBand {
   final Color color;
 }
 
-const double _rightGutter = 30; // space for y labels
+/// Where a series sits horizontally, when even index spacing would lie.
+///
+/// By default every painter here spreads its marks evenly across the plot:
+/// mark `i` of `n` sits at `(i + 0.5) / n`. That is right for the Week / Month /
+/// 6M ranges, whose axis ticks are read back off the data itself, so the marks
+/// and the labels cannot disagree.
+///
+/// It is **wrong** wherever the axis is a fixed domain the data only partly
+/// fills — the Day tab prints a hardcoded `12A · 6A · 12P · 6P · 11P` scale, so
+/// index spacing put a single 10 AM reading dead centre (reading as noon) and
+/// smeared three consecutive small-hours readings across the whole day. Pass a
+/// [TrendXAxis] there and each mark lands where it actually happened, leaving
+/// empty stretches genuinely empty.
+///
+/// [positions] are normalized to `[0, 1]` over the plot area, one per data
+/// point, in the same order as the values. [slots] is how many cells the domain
+/// has (24 for a day of hours) and sets the mark width, which must come from the
+/// domain rather than from the sample count — otherwise two readings would draw
+/// as two half-plot-wide slabs.
+class TrendXAxis {
+  const TrendXAxis({required this.positions, required this.slots});
+
+  /// A day of local-hour buckets across 24 slots.
+  ///
+  /// Each mark takes its hour's centre, because a bucket stamped `t` stands for
+  /// `[t, t+1h)`. Hours are read in local time, matching how the buckets were
+  /// floored when they were derived.
+  factory TrendXAxis.localHours(Iterable<DateTime> at) => TrendXAxis(
+        positions: [for (final t in at) (t.hour + 0.5) / 24],
+        slots: 24,
+      );
+
+  final List<double> positions;
+  final int slots;
+
+  /// Normalized position of mark [i], falling back to even index spacing when
+  /// the caller supplied fewer positions than values.
+  double at(int i, int n) =>
+      i < positions.length ? positions[i] : (i + 0.5) / n;
+}
+
+/// Width reserved at the right of every painter here for its y-axis labels.
+/// Public so an x-axis drawn *beneath* a chart can inset by the same amount and
+/// line its ticks up with the marks instead of with the card edge.
+const double kTrendRightGutter = 30;
+
+const double _rightGutter = kTrendRightGutter;
 const double _padY = 8;
 
 ({double lo, double hi}) _fit(double lo, double hi) {
@@ -72,6 +118,7 @@ class HpiCandleChart extends StatelessWidget {
     required this.color,
     this.band,
     this.yLabel,
+    this.xAxis,
   });
 
   final List<TrendBin> bins;
@@ -79,21 +126,25 @@ class HpiCandleChart extends StatelessWidget {
   final TrendBand? band;
   final String Function(double)? yLabel;
 
+  /// Real horizontal positions; null spreads the bins evenly. See [TrendXAxis].
+  final TrendXAxis? xAxis;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
       child: CustomPaint(
-          painter: _CandlePainter(bins, color, band, yLabel)),
+          painter: _CandlePainter(bins, color, band, yLabel, xAxis)),
     );
   }
 }
 
 class _CandlePainter extends CustomPainter {
-  _CandlePainter(this.bins, this.color, this.band, this.yLabel);
+  _CandlePainter(this.bins, this.color, this.band, this.yLabel, this.xAxis);
   final List<TrendBin> bins;
   final Color color;
   final TrendBand? band;
   final String Function(double)? yLabel;
+  final TrendXAxis? xAxis;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -120,19 +171,22 @@ class _CandlePainter extends CustomPainter {
     _drawGrid(canvas, size, plotW, lo, hi, label: yLabel);
 
     final n = bins.length;
-    final stroke = (plotW / n * 0.5).clamp(3.0, 9.0);
+    // Width comes from the axis domain, not the sample count: on a 24-hour day
+    // two readings are two thin marks, not two half-plot slabs.
+    final stroke = (plotW / (xAxis?.slots ?? n) * 0.5).clamp(3.0, 9.0);
     final paint = Paint()
       ..color = color.withValues(alpha: 0.92)
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
     for (var i = 0; i < n; i++) {
-      final x = plotW * (i + 0.5) / n;
+      final x = plotW * (xAxis?.at(i, n) ?? (i + 0.5) / n);
       canvas.drawLine(Offset(x, y(bins[i].max)), Offset(x, y(bins[i].min)), paint);
     }
   }
 
   @override
-  bool shouldRepaint(_CandlePainter old) => old.bins != bins || old.color != color;
+  bool shouldRepaint(_CandlePainter old) =>
+      old.bins != bins || old.color != color || old.xAxis != xAxis;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,6 +200,7 @@ class HpiBarChart extends StatelessWidget {
     required this.color,
     this.goal,
     this.goalLabel,
+    this.xAxis,
   });
 
   final List<double> values;
@@ -153,21 +208,25 @@ class HpiBarChart extends StatelessWidget {
   final double? goal;
   final String? goalLabel;
 
+  /// Real horizontal positions; null spreads the bars evenly. See [TrendXAxis].
+  final TrendXAxis? xAxis;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
       child: CustomPaint(
-          painter: _BarPainter(values, color, goal, goalLabel)),
+          painter: _BarPainter(values, color, goal, goalLabel, xAxis)),
     );
   }
 }
 
 class _BarPainter extends CustomPainter {
-  _BarPainter(this.values, this.color, this.goal, this.goalLabel);
+  _BarPainter(this.values, this.color, this.goal, this.goalLabel, this.xAxis);
   final List<double> values;
   final Color color;
   final double? goal;
   final String? goalLabel;
+  final TrendXAxis? xAxis;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -180,7 +239,9 @@ class _BarPainter extends CustomPainter {
     double y(double v) => _padY + (size.height - 2 * _padY) * (1 - v / hi);
 
     final n = values.length;
-    final stroke = (plotW / n * 0.55).clamp(3.0, 22.0);
+    // See _CandlePainter: the bar width belongs to the domain, not the sample
+    // count, or two active hours would draw as two enormous slabs.
+    final stroke = (plotW / (xAxis?.slots ?? n) * 0.55).clamp(3.0, 22.0);
     final paint = Paint()
       ..color = color.withValues(alpha: 0.9)
       ..strokeWidth = stroke
@@ -188,7 +249,7 @@ class _BarPainter extends CustomPainter {
     final base = size.height - _padY;
     for (var i = 0; i < n; i++) {
       if (values[i] <= 0) continue;
-      final x = plotW * (i + 0.5) / n;
+      final x = plotW * (xAxis?.at(i, n) ?? (i + 0.5) / n);
       canvas.drawLine(Offset(x, base), Offset(x, y(values[i])), paint);
     }
 
@@ -216,7 +277,8 @@ class _BarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BarPainter old) => old.values != values || old.color != color;
+  bool shouldRepaint(_BarPainter old) =>
+      old.values != values || old.color != color || old.xAxis != xAxis;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +296,7 @@ class HpiLineChart extends StatelessWidget {
     this.eventColor,
     this.yLabel,
     this.yRange,
+    this.xAxis,
   });
 
   final List<double> values;
@@ -244,12 +307,15 @@ class HpiLineChart extends StatelessWidget {
   final String Function(double)? yLabel;
   final (double, double)? yRange;
 
+  /// Real horizontal positions; null spreads the points evenly. See [TrendXAxis].
+  final TrendXAxis? xAxis;
+
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
       child: CustomPaint(
-        painter: _LinePainter(
-            values, color, baseline, eventIndices, eventColor, yLabel, yRange),
+        painter: _LinePainter(values, color, baseline, eventIndices, eventColor,
+            yLabel, yRange, xAxis),
       ),
     );
   }
@@ -257,7 +323,7 @@ class HpiLineChart extends StatelessWidget {
 
 class _LinePainter extends CustomPainter {
   _LinePainter(this.values, this.color, this.baseline, this.events,
-      this.eventColor, this.yLabel, this.yRange);
+      this.eventColor, this.yLabel, this.yRange, this.xAxis);
   final List<double> values;
   final Color color;
   final double? baseline;
@@ -265,6 +331,7 @@ class _LinePainter extends CustomPainter {
   final Color? eventColor;
   final String Function(double)? yLabel;
   final (double, double)? yRange;
+  final TrendXAxis? xAxis;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -289,15 +356,24 @@ class _LinePainter extends CustomPainter {
       if (only >= lo && only <= hi) {
         final cy = _padY +
             (size.height - 2 * _padY) * (1 - (only - lo) / (hi - lo));
-        canvas.drawCircle(
-          Offset(plotW / 2, cy),
-          3.5,
-          Paint()..color = color,
-        );
+        // A lone reading goes where it happened, not in the middle of the card.
+        // Centring it is what made a single 10 AM SpO₂ spot check read as noon.
+        final ax = xAxis;
+        final cx = (ax != null && ax.positions.isNotEmpty)
+            ? plotW * ax.positions.first
+            : plotW / 2;
+        canvas.drawCircle(Offset(cx, cy), 3.5, Paint()..color = color);
       }
       return;
     }
-    double x(int i) => plotW * i / (values.length - 1);
+    // Without a real axis the series spans the plot edge to edge, which is right
+    // when the ticks are read back off the data itself.
+    double x(int i) {
+      final ax = xAxis;
+      if (ax != null && i < ax.positions.length) return plotW * ax.positions[i];
+      return plotW * i / (values.length - 1);
+    }
+
     double y(double v) =>
         _padY + (size.height - 2 * _padY) * (1 - (v - lo) / (hi - lo));
 
@@ -317,9 +393,12 @@ class _LinePainter extends CustomPainter {
     for (var i = 1; i < values.length; i++) {
       path.lineTo(x(i), y(values[i]));
     }
+    // Close the area under the *drawn* span. Dropping to x=0 was harmless while
+    // the series always started at the left edge; on a real time axis it would
+    // shade a stretch of the day that has no data in it.
     final fill = Path.from(path)
       ..lineTo(x(values.length - 1), size.height)
-      ..lineTo(0, size.height)
+      ..lineTo(x(0), size.height)
       ..close();
     canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.12));
     canvas.drawPath(
@@ -338,7 +417,8 @@ class _LinePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_LinePainter old) => old.values != values || old.color != color;
+  bool shouldRepaint(_LinePainter old) =>
+      old.values != values || old.color != color || old.xAxis != xAxis;
 }
 
 // ---------------------------------------------------------------------------

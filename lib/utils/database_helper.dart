@@ -20,6 +20,106 @@ import 'device_manager.dart';
 /// they feed different columns of the same derived row.
 enum _Role { value, min, max }
 
+/// Floor [tsUtc] (epoch seconds, UTC) to the start of the **local** hour, and
+/// return that instant as epoch seconds — still a true UTC epoch, just aligned
+/// to a wall-clock edge.
+///
+/// Trend rows are keyed by their bucket start and every screen renders that key
+/// with `DateTime.fromMillisecondsSinceEpoch` (local). Flooring on the *UTC*
+/// hour therefore puts every bucket edge at :30 in a half-hour zone — India,
+/// Nepal, parts of Australia — so a reading taken at 10:02 IST files under a
+/// bucket that renders as "09:30". That is the beta report this fixes.
+///
+/// The conversion goes through `DateTime`, so DST is handled by the platform
+/// rather than by an offset we captured at some other instant. On a fall-back
+/// the repeated local hour maps to one bucket (the two hours merge); that is
+/// the intended reading of "the 1 AM bucket".
+@visibleForTesting
+int localHourStart(int tsUtc) => _localHourStart(tsUtc);
+
+@visibleForTesting
+int localDayStart(int tsUtc) => _localDayStart(tsUtc);
+
+@visibleForTesting
+int localDayEnd(DateTime dayStart) => _localDayEnd(dayStart);
+
+@visibleForTesting
+List<Map<String, dynamic>> foldToLocalDays(
+  List<Map<String, dynamic>> hourRows, {
+  required String maxKey,
+  required String minKey,
+  required String avgKey,
+  bool withCount = false,
+}) =>
+    _foldToLocalDays(hourRows,
+        maxKey: maxKey, minKey: minKey, avgKey: avgKey, withCount: withCount);
+
+int _localHourStart(int tsUtc) {
+  final l = DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000);
+  return DateTime(l.year, l.month, l.day, l.hour).millisecondsSinceEpoch ~/ 1000;
+}
+
+/// As [_localHourStart], but the start of the local calendar **day**.
+///
+/// The day rollups used to compute this as `(timestamp / 86400) * 86400`, which
+/// is a UTC-day floor: in IST that boundary is 05:30 local, so everything a user
+/// recorded between midnight and 05:30 was charted under the *previous* day.
+int _localDayStart(int tsUtc) {
+  final l = DateTime.fromMillisecondsSinceEpoch(tsUtc * 1000);
+  return DateTime(l.year, l.month, l.day).millisecondsSinceEpoch ~/ 1000;
+}
+
+/// Exclusive end of the local day that starts at local midnight [dayStart].
+/// Not `dayStart + 86400`: a DST day is 23 or 25 hours long.
+int _localDayEnd(DateTime dayStart) =>
+    DateTime(dayStart.year, dayStart.month, dayStart.day + 1)
+            .millisecondsSinceEpoch ~/
+        1000;
+
+/// Fold hour-bucket rows into local-day rows, preserving the shape the day
+/// rollups have always returned. Done in Dart rather than SQL because the only
+/// DST-correct way to floor to a local day is to go through `DateTime` — SQLite's
+/// `'localtime'` modifier depends on platform tz data we don't control.
+List<Map<String, dynamic>> _foldToLocalDays(
+  List<Map<String, dynamic>> hourRows, {
+  required String maxKey,
+  required String minKey,
+  required String avgKey,
+  bool withCount = false,
+}) {
+  final byDay = SplayTreeMap<int, List<Map<String, dynamic>>>();
+  for (final r in hourRows) {
+    byDay
+        .putIfAbsent(_localDayStart(r['timestamp'] as int), () => [])
+        .add(r);
+  }
+  final out = <Map<String, dynamic>>[];
+  for (final e in byDay.entries) {
+    final avgs =
+        e.value.map((r) => r['value_avg'] as num?).whereType<num>().toList();
+    // A day with no central value has nothing to plot, and callers cast the
+    // aggregates non-nullably. SQL's MIN/MAX/AVG would have handed back a row
+    // full of nulls here; dropping it is strictly safer.
+    if (avgs.isEmpty) continue;
+    final maxs =
+        e.value.map((r) => r['value_max'] as num?).whereType<num>().toList();
+    final mins =
+        e.value.map((r) => r['value_min'] as num?).whereType<num>().toList();
+    out.add({
+      'day_start': e.key,
+      maxKey: maxs.isEmpty
+          ? avgs.reduce((a, b) => a > b ? a : b)
+          : maxs.reduce((a, b) => a > b ? a : b),
+      minKey: mins.isEmpty
+          ? avgs.reduce((a, b) => a < b ? a : b)
+          : mins.reduce((a, b) => a < b ? a : b),
+      avgKey: avgs.reduce((a, b) => a + b) / avgs.length,
+      if (withCount) 'data_points': e.value.length,
+    });
+  }
+  return out;
+}
+
 /// Accumulator for one (hour, trend_type) while deriving.
 class _TrendBin {
   final List<num> values = []; // the central series (means / raw readings)
@@ -31,6 +131,11 @@ class _TrendBin {
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
+
+  /// `app_metadata` key set by the v8 upgrade when it removed pre-3.0 trend rows.
+  /// Its value is how many rows went. Present == "the user has history missing
+  /// and has not been told yet"; [acknowledgeLegacyDataCleared] clears it.
+  static const String legacyDataClearedKey = 'legacy_data_cleared';
 
   DatabaseHelper._init();
 
@@ -46,7 +151,7 @@ class DatabaseHelper {
     
     return await openDatabase(
       path,
-      version: 7, // v7: hs_records index for HPI_HS RECORDS tier
+      version: 8, // v8: purge of pre-3.0 (session_id != 0) trend rows
       onCreate: _createDB,
       onUpgrade: _onUpgrade,
       // Enable single instance and proper configuration for concurrent access
@@ -82,19 +187,11 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_device_mac ON health_trends(device_mac)');
     await db.execute('CREATE INDEX idx_composite ON health_trends(trend_type, timestamp, device_mac)');
     
-    // Table to track synced sessions (prevents re-downloading)
-    await db.execute('''
-      CREATE TABLE synced_sessions (
-        session_id INTEGER NOT NULL,
-        trend_type TEXT NOT NULL,
-        record_count INTEGER NOT NULL,
-        synced_at INTEGER DEFAULT (strftime('%s', 'now')),
-        PRIMARY KEY (session_id, trend_type)
-      )
-    ''');
-    
-    await db.execute('CREATE INDEX idx_synced_trend ON synced_sessions(trend_type)');
-    
+    /* `synced_sessions` is deliberately NOT created. It deduped the pre-3.0 BLE
+     * trend-file pull, a path removed from both firmware and app; the v8 upgrade
+     * drops it on existing installs. Historical CREATEs are left in _onUpgrade
+     * because an upgrading DB really does pass through those versions. */
+
     // Table to store app metadata (replaces SharedPreferences for health-related metadata)
     await db.execute('''
       CREATE TABLE app_metadata (
@@ -334,6 +431,45 @@ class DatabaseHelper {
       print('DatabaseHelper: Upgraded to version 7 - hs_records index');
     }
 
+    if (oldVersion < 8) {
+      // v8: drop everything the pre-3.0 sync path left behind.
+      //
+      // `session_id != 0` marks a row pulled by the legacy BLE trend-file path
+      // (0x50/0x54 + /lfs/tr*). That path was removed from both firmware and app
+      // — insertBulkTrendData, the only writer, now has no callers — so these
+      // rows are frozen forever, and rebuildAllTrends deliberately spares them
+      // (it deletes only session_id = 0). They would sit next to Healthy Store
+      // data indefinitely.
+      //
+      // They also cannot be trusted next to it. Pre-3.0 firmware had no SET_TZ
+      // and stored wall-clock time, so these timestamps carry an unknown, no
+      // longer discoverable UTC offset — the user may have travelled. Charting
+      // them beside correctly bucketed HS rows means two differently-offset
+      // series on one axis. Deleting is the honest option; there is nothing to
+      // migrate them *to*.
+      final legacyRows = await db.delete('health_trends',
+          where: 'session_id != 0');
+      await db.execute('DROP TABLE IF EXISTS synced_sessions');
+
+      // Remembered so the UI can explain the gap ONCE, rather than letting a
+      // user watch months of history disappear with no account of why.
+      if (legacyRows > 0) {
+        await db.insert(
+          'app_metadata',
+          {
+            'key': legacyDataClearedKey,
+            'value': '$legacyRows',
+            'value_type': 'int',
+            'updated_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            'description': 'Pre-3.0 trend rows removed by the v8 migration',
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      print('DatabaseHelper: Upgraded to version 8 - '
+          'removed $legacyRows pre-3.0 trend row(s)');
+    }
+
     // Migrate lastSynced from SharedPreferences to database (moved outside version check)
     if (oldVersion < 3) {
       try {
@@ -355,137 +491,19 @@ class DatabaseHelper {
     }
   }
 
-  /// Insert trends from binary data
-  Future<int> insertTrendsFromBinary(
-    List<int> binaryData,
-    String trendType,
-    int sessionId, {
-    String? deviceMac,
-  }) async {
-    final db = await database;
-    int offset = (binaryData.isNotEmpty && binaryData[0] == 0x0A) ? 1 : 0;
-    int recordCount = ((binaryData.length - offset) ~/ 16);
-    int inserted = 0;
-    
-    print('DatabaseHelper.insertTrendsFromBinary: trendType=$trendType, sessionId=$sessionId');
-    print('  Binary data length: ${binaryData.length}, offset: $offset, expected records: $recordCount');
-    
-    await db.transaction((txn) async {
-      for (int i = 0; i < recordCount; i++) {
-        int pos = i * 16 + offset;
-        
-        // Read little-endian values
-        int timestamp = _readInt64LE(binaryData, pos);
-        
-        // SPO2 binary format has min/max fields swapped compared to HR/Temp
-        int valueMax, valueMin;
-        if (trendType == hPi4Global.PREFIX_SPO2) {
-          valueMin = _readInt16LE(binaryData, pos + 8);  // SPO2: min at offset 8
-          valueMax = _readInt16LE(binaryData, pos + 10); // SPO2: max at offset 10
-        } else {
-          valueMax = _readInt16LE(binaryData, pos + 8);  // HR/Temp: max at offset 8
-          valueMin = _readInt16LE(binaryData, pos + 10); // HR/Temp: min at offset 10
-        }
-        
-        int valueAvg = _readInt16LE(binaryData, pos + 12);
-        int valueLatest = _readInt16LE(binaryData, pos + 14);
-
-        // Special-case sanitization for SpO2 prefix values
-        // Some device binary formats pack flags or unused bytes into fields
-        // which can yield values like 8194 (0x2002). Prefer plausible human
-        // SpO2 range (30-100) and collapse values to a single sane number when
-        // only one field contains a valid reading.
-        if (trendType == hPi4Global.PREFIX_SPO2) {
-          bool maxValid = valueMax >= 30 && valueMax <= 100;
-          bool minValid = valueMin >= 30 && valueMin <= 100;
-          bool avgValid = valueAvg >= 30 && valueAvg <= 100;
-          bool latestValid = valueLatest >= 30 && valueLatest <= 100;
-
-          if (maxValid || minValid || avgValid || latestValid) {
-            final int chosen = maxValid
-                ? valueMax
-                : (minValid ? valueMin : (avgValid ? valueAvg : valueLatest));
-            valueMax = chosen;
-            valueMin = chosen;
-            valueAvg = chosen;
-            valueLatest = chosen;
-          } else {
-            // Try low-byte heuristic: some firmware packs value in low byte
-            final int lowByte = valueMax & 0xFF;
-            if (lowByte >= 30 && lowByte <= 100) {
-              valueMax = lowByte;
-              valueMin = lowByte;
-              valueAvg = lowByte;
-              valueLatest = lowByte;
-            } else {
-              // Unusual values; log for later inspection but still insert raw values
-              print('DatabaseHelper: Unusual SPO2 parsed values max=$valueMax min=$valueMin avg=$valueAvg latest=$valueLatest at ts $timestamp');
-            }
-          }
-        }
-        
-        if (i < 3 || i == recordCount - 1) {
-          print('  Record $i: timestamp=$timestamp (${DateTime.fromMillisecondsSinceEpoch(timestamp * 1000, isUtc: false)}), '
-                'max=$valueMax, min=$valueMin, avg=$valueAvg, latest=$valueLatest');
-        }
-        
-        // Validate timestamp (reject if invalid - must be between 2020 and 2030)
-        if (timestamp < 1577836800 || timestamp > 1893456000) {
-          print('DatabaseHelper: Skipping invalid timestamp: $timestamp');
-          continue;
-        }
-        
-        try {
-          await txn.insert(
-            'health_trends',
-            {
-              'timestamp': timestamp,
-              'trend_type': trendType,
-              'session_id': sessionId,
-              'device_mac': deviceMac ?? 'unknown',
-              'value_max': valueMax,
-              'value_min': valueMin,
-              'value_avg': valueAvg,
-              'value_latest': valueLatest,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
-          inserted++;
-        } catch (e) {
-          print('DatabaseHelper: Error inserting record $i: $e');
-        }
-      }
-      
-      // Mark session as synced after successful insertion
-      if (inserted > 0) {
-        await txn.insert(
-          'synced_sessions',
-          {
-            'session_id': sessionId,
-            'trend_type': trendType,
-            'record_count': inserted,
-            'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          },
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-    });
-    
-    print('DatabaseHelper: Inserted $inserted/$recordCount records for $trendType (session $sessionId)');
-    return inserted;
-  }
-
   /// Get trends for a specific day
   Future<List<Map<String, dynamic>>> getTrendsForDay(
     String trendType,
     DateTime day,
   ) async {
     final db = await database;
-    // DON'T convert to UTC - device timestamps are in local time
-    int dayStart = DateTime(day.year, day.month, day.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int dayEnd = dayStart + 86400;
-    
+    // `timestamp` is a UTC epoch second (aligned to a local hour edge), and
+    // `DateTime(y, m, d).millisecondsSinceEpoch` is local midnight expressed as
+    // a UTC epoch — so these compare directly. Do not "fix" this to .toUtc().
+    final midnight = DateTime(day.year, day.month, day.day);
+    int dayStart = midnight.millisecondsSinceEpoch ~/ 1000;
+    int dayEnd = _localDayEnd(midnight);
+
     return await db.query(
       'health_trends',
       where: 'trend_type = ? AND timestamp >= ? AND timestamp < ?',
@@ -504,16 +522,16 @@ class DatabaseHelper {
     // If no device specified, get current paired device
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
-    // Create range for the requested local day.
-    // DateTime(day.year, day.month, day.day) creates local midnight
-    int dayStart = DateTime(day.year, day.month, day.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int dayEnd = dayStart + 86400;
-    
+    // `timestamp` is a UTC epoch second already floored to a LOCAL hour edge by
+    // deriveTrends. So local midnight is itself a bucket start and the range is
+    // exactly the day's 24 buckets.
+    final midnight = DateTime(day.year, day.month, day.day); // local midnight
+    int dayStart = midnight.millisecondsSinceEpoch ~/ 1000;
+    int dayEnd = _localDayEnd(midnight);
+
     return await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value,
@@ -540,7 +558,7 @@ class DatabaseHelper {
     final from = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - hours * 3600;
     return await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value,
@@ -566,7 +584,7 @@ class DatabaseHelper {
         (DateTime.now().millisecondsSinceEpoch ~/ 1000) - withinDays * 86400;
     final rows = await db.rawQuery('''
       SELECT
-        (timestamp / 3600) * 3600 as hour_start,
+        timestamp as hour_start,
         MAX(value_max) as max_value,
         MIN(value_min) as min_value,
         AVG(value_avg) as avg_value
@@ -588,23 +606,30 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
-    int weekStart = DateTime(startDate.year, startDate.month, startDate.day)
-        .millisecondsSinceEpoch ~/ 1000;
-    int weekEnd = weekStart + (7 * 86400);
-    
-    return await db.rawQuery('''
-      SELECT 
-        (timestamp / 86400) * 86400 as day_start,
-        MAX(value_max) as max_value,
-        MIN(value_min) as min_value,
-        AVG(value_avg) as avg_value,
-        COUNT(*) as data_points
+    // Local calendar week. Day grouping happens in Dart — see [_foldToLocalDays]
+    // — because the old `(timestamp / 86400) * 86400` floored to the *UTC* day,
+    // which in IST cuts the day at 05:30 local and files a user's small hours
+    // under the previous day.
+    final weekStartDt =
+        DateTime(startDate.year, startDate.month, startDate.day);
+    int weekStart = weekStartDt.millisecondsSinceEpoch ~/ 1000;
+    int weekEnd = DateTime(weekStartDt.year, weekStartDt.month,
+                weekStartDt.day + 7)
+            .millisecondsSinceEpoch ~/
+        1000;
+
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, weekStart, weekEnd, effectiveMac]);
+
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max_value',
+        minKey: 'min_value',
+        avgKey: 'avg_value',
+        withCount: true);
   }
 
   /// Get monthly aggregated trends
@@ -617,24 +642,24 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = deviceMac ?? await _getCurrentDeviceMac();
     
-    // Timestamps in DB are in LOCAL time (device records local time).
+    // Local calendar month; days folded in Dart (see [_foldToLocalDays]).
     int monthStart = DateTime(year, month, 1)
         .millisecondsSinceEpoch ~/ 1000;
     int monthEnd = DateTime(year, month + 1, 1)
         .millisecondsSinceEpoch ~/ 1000;
-    
-    return await db.rawQuery('''
-      SELECT 
-        (timestamp / 86400) * 86400 as day_start,
-        MAX(value_max) as max_value,
-        MIN(value_min) as min_value,
-        AVG(value_avg) as avg_value,
-        COUNT(*) as data_points
+
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND timestamp < ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, monthStart, monthEnd, effectiveMac]);
+
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max_value',
+        minKey: 'min_value',
+        avgKey: 'avg_value',
+        withCount: true);
   }
 
   /// Daily average values for [trendType] over the last [days] days, oldest
@@ -651,23 +676,25 @@ class DatabaseHelper {
             .subtract(Duration(days: days))
             .millisecondsSinceEpoch ~/
         1000;
-    return await db.rawQuery('''
-      SELECT
-        (timestamp / 86400) * 86400 as day_start,
-        AVG(value_avg) as avg,
-        MIN(value_min) as min,
-        MAX(value_max) as max
+    final hourRows = await db.rawQuery('''
+      SELECT timestamp, value_max, value_min, value_avg
       FROM health_trends
       WHERE trend_type = ? AND timestamp >= ? AND device_mac = ?
-      GROUP BY day_start
-      ORDER BY day_start ASC
+      ORDER BY timestamp ASC
     ''', [trendType, sinceTs, effectiveMac]);
+
+    // Days folded in Dart (see [_foldToLocalDays]) — this feeds the 30-day
+    // baseline and the Month / 6-Month tabs, so a UTC-day floor here shifted
+    // every point on those charts for any user east or west of UTC.
+    return _foldToLocalDays(hourRows,
+        maxKey: 'max', minKey: 'min', avgKey: 'avg');
   }
 
   /// Clean up old data (older than specified retention days)
   Future<int> cleanupOldData({int retentionDays = 30}) async {
     final db = await database;
-    // Timestamps in DB are local time, so use local time for cutoff
+    // `timestamp` is a UTC epoch, and so is `millisecondsSinceEpoch` — a plain
+    // "now minus N days" cutoff is correct in any timezone.
     int cutoffTime = DateTime.now()
         .subtract(Duration(days: retentionDays))
         .millisecondsSinceEpoch ~/ 1000;
@@ -717,94 +744,28 @@ class DatabaseHelper {
     return stats;
   }
 
-  /// Check if a session has already been synced
-  Future<bool> isSessionSynced(int sessionId, String trendType) async {
-    final db = await database;
-    final result = await db.query(
-      'synced_sessions',
-      where: 'session_id = ? AND trend_type = ?',
-      whereArgs: [sessionId, trendType],
-    );
-    return result.isNotEmpty;
-  }
-
-  /// Mark a session as synced
-  Future<void> markSessionSynced(int sessionId, String trendType, int recordCount) async {
-    final db = await database;
-    await db.insert(
-      'synced_sessions',
-      {
-        'session_id': sessionId,
-        'trend_type': trendType,
-        'record_count': recordCount,
-        'synced_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-    print('DatabaseHelper: Marked session $sessionId ($trendType) as synced with $recordCount records');
-  }
-
-  /// Get list of synced session IDs for a trend type
-  Future<List<int>> getSyncedSessionIds(String trendType) async {
-    final db = await database;
-    final result = await db.query(
-      'synced_sessions',
-      columns: ['session_id'],
-      where: 'trend_type = ?',
-      whereArgs: [trendType],
-      orderBy: 'session_id DESC',
-    );
-    return result.map((row) => row['session_id'] as int).toList();
-  }
-
-  /// Get sync statistics
-  Future<Map<String, dynamic>> getSyncStats() async {
-    final db = await database;
-    
-    final result = await db.rawQuery('''
-      SELECT 
-        trend_type,
-        COUNT(*) as session_count,
-        SUM(record_count) as total_records,
-        MAX(synced_at) as last_sync
-      FROM synced_sessions
-      GROUP BY trend_type
-    ''');
-    
-    Map<String, dynamic> stats = {};
-    for (var row in result) {
-      String type = row['trend_type'] as String;
-      stats['${type}_sessions'] = row['session_count'];
-      stats['${type}_records'] = row['total_records'];
-      stats['${type}_last_sync'] = row['last_sync'];
-    }
-    
-    // Get total synced sessions
-    final total = await db.rawQuery('SELECT COUNT(*) as total FROM synced_sessions');
-    if (total.isNotEmpty) {
-      stats['total_sessions'] = total.first['total'];
-    }
-    
-    return stats;
-  }
-
-  /// Clear sync history (useful for forcing re-sync)
-  Future<int> clearSyncHistory({String? trendType}) async {
-    final db = await database;
-    if (trendType != null) {
-      return await db.delete(
-        'synced_sessions',
-        where: 'trend_type = ?',
-        whereArgs: [trendType],
-      );
-    } else {
-      return await db.delete('synced_sessions');
-    }
-  }
 
   // ============================================================================
   // App Metadata Methods (replaces SharedPreferences for health-related data)
   // ============================================================================
+
+  /// How many pre-3.0 trend rows the v8 upgrade removed, or null if there is
+  /// nothing to tell the user (fresh install, no legacy data, or already
+  /// acknowledged).
+  ///
+  /// Exists so the gap gets explained exactly once. A user who watched months of
+  /// charts vanish after an update, with no message, reasonably files a bug —
+  /// and the answer ("that data was recorded in a format with no recoverable
+  /// timezone") is not something they can work out themselves.
+  Future<int?> pendingLegacyDataClearedNotice() async =>
+      getMetadata<int>(legacyDataClearedKey);
+
+  /// Mark the legacy-cleared notice as shown, so it does not reappear.
+  Future<void> acknowledgeLegacyDataCleared() async {
+    final db = await database;
+    await db.delete('app_metadata',
+        where: 'key = ?', whereArgs: [legacyDataClearedKey]);
+  }
 
   /// Set metadata value (generic)
   Future<void> setMetadata(String key, dynamic value, {String? description}) async {
@@ -893,13 +854,12 @@ class DatabaseHelper {
     final db = await database;
     final effectiveMac = await _getCurrentDeviceMac();
 
-    // Calculate today's date range (midnight to midnight in local timezone)
-    // Timestamps in DB are in LOCAL time (device records local time)
+    // Today's local range. `timestamp` is a UTC epoch already aligned to a local
+    // hour edge, so local midnight is itself a bucket start.
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(Duration(days: 1));
     final todayStartTimestamp = todayStart.millisecondsSinceEpoch ~/ 1000;
-    final todayEndTimestamp = todayEnd.millisecondsSinceEpoch ~/ 1000;
+    final todayEndTimestamp = _localDayEnd(todayStart);
 
     final results = await Future.wait([
       // HR: Latest/most recent value
@@ -936,7 +896,7 @@ class DatabaseHelper {
         SELECT SUM(hourly_max) as value, MAX(hour_start) as timestamp
         FROM (
           SELECT
-            (timestamp / 3600) * 3600 as hour_start,
+            timestamp as hour_start,
             MAX(value_max) as hourly_max
           FROM health_trends
           WHERE trend_type = ?
@@ -1202,26 +1162,8 @@ class DatabaseHelper {
       whereArgs: [deviceMac],
     );
     
-    // Delete from synced_sessions (session_id is not device-specific but we should clear to allow re-sync)
-    // Note: This is conservative - we delete all synced session history when switching devices
-    await db.delete('synced_sessions');
-    
     print('DatabaseHelper: Deleted $trendsDeleted records for device $deviceMac');
     return trendsDeleted;
-  }
-
-  /// Helper: Read 64-bit little-endian integer
-  int _readInt64LE(List<int> bytes, int offset) {
-    int result = 0;
-    for (int i = 7; i >= 0; i--) {
-      result = (result << 8) | bytes[offset + i];
-    }
-    return result;
-  }
-
-  /// Helper: Read 16-bit little-endian integer
-  int _readInt16LE(List<int> bytes, int offset) {
-    return bytes[offset] | (bytes[offset + 1] << 8);
   }
 
   // ---------------------------------------------------------------------------
@@ -1720,6 +1662,8 @@ class DatabaseHelper {
           (r['value'] as int) / (scale == 0 ? 1 : scale);
     }
 
+    int? memoHour; // see the local-hour bucketing below
+
     for (final r in rows) {
       // Never derive from fabricated data (HS-2 §2c). It is stored — deliberately
       // — but it must not reach a chart, a summary or an export, or synthetic
@@ -1745,9 +1689,25 @@ class DatabaseHelper {
       final stored = _toStoredUnits(
           role.trend, (r['value'] as int) / (scale == 0 ? 1 : scale));
 
-      // Epoch records timestamp the END of their window, so the hour bucket is
-      // the hour the window closed in. Good enough at 1-minute epochs.
-      final hourStart = ((r['ts_utc'] as int) ~/ 3600) * 3600;
+      // Bucket on the LOCAL hour — see [_localHourStart]. Epoch records
+      // timestamp the END of their window, so the bucket is the hour the window
+      // closed in; good enough at 1-minute epochs.
+      //
+      // Rows arrive ts ASC, so a one-entry memo skips the DateTime work for
+      // every sample after the first in each hour.
+      //
+      // The 3600 s window is exact wherever a DST step lands on an hour
+      // boundary, which is everywhere except the handful of zones that shift by
+      // 30 minutes (Lord Howe). There, the half hour following a transition is
+      // still inside the memo's window and gets filed under the previous
+      // bucket — measured at 30 samples, twice a year. Not worth a DateTime
+      // call per sample to fix, but it is a mis-bucket and not, as this comment
+      // once claimed, a recompute.
+      final ts = r['ts_utc'] as int;
+      if (memoHour == null || ts < memoHour || ts >= memoHour + 3600) {
+        memoHour = _localHourStart(ts);
+      }
+      final hourStart = memoHour;
 
       if ((t['class'] as String?) == 'cumulative') {
         final byHour = cumulative.putIfAbsent(role.trend, () => SplayTreeMap());
@@ -1908,7 +1868,7 @@ class DatabaseHelper {
   /// Delete every health record the app holds, in one transaction.
   ///
   /// Wipes the raw Healthy Store (`hs_samples` / `hs_types` / `hs_sync_state`),
-  /// the derived `health_trends` cache, the legacy `synced_sessions` dedup, the
+  /// the derived `health_trends` cache, the
   /// research-recording index, and the sync metadata.
   ///
   /// **Clearing `hs_sync_state` resets the sync cursor**, which is the whole
@@ -1951,7 +1911,6 @@ class DatabaseHelper {
       'hs_sync_state',
       'hs_records',
       'health_trends',
-      'synced_sessions',
       'research_files',
       'research_sessions',
       'app_metadata',

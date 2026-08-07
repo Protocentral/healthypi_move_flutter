@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
@@ -328,7 +329,22 @@ class TrendDetailViewState extends State<TrendDetailView> {
     }
   }
 
+  /// Real x positions for the Day range, or null for every other range.
+  ///
+  /// The Day tab prints a fixed `12A · 6A · 12P · 6P · 11P` scale, so its marks
+  /// have to be pinned to the hour they were recorded in. Without this the
+  /// painters spread whatever they were given evenly, which put a single 10 AM
+  /// reading in the middle of the card (reading as noon) and spread three
+  /// small-hours readings across the entire day — the "timezone is still wrong"
+  /// report that followed the local-hour bucketing fix, and not a clock bug at
+  /// all. Week / Month / 6M label their ticks from the data, so they stay on
+  /// even spacing.
+  TrendXAxis? _dayAxis(List<TrendPoint> s) => _range != TrendRange.day
+      ? null
+      : TrendXAxis.localHours(s.map((p) => p.t));
+
   Widget _chartFor(MetricDetail d, TrendMetricStyle style, List<TrendPoint> s) {
+    final xAxis = _dayAxis(s);
     switch (widget.metricKey) {
       case 'activity':
         return HpiBarChart(
@@ -336,6 +352,7 @@ class TrendDetailViewState extends State<TrendDetailView> {
           color: style.color,
           goal: _range == TrendRange.day ? null : 10000,
           goalLabel: _range == TrendRange.day ? null : '10k',
+          xAxis: xAxis,
         );
       case 'spo2':
         final vals = s.map((p) => p.avg).toList();
@@ -350,6 +367,7 @@ class TrendDetailViewState extends State<TrendDetailView> {
           eventIndices: dips,
           yRange: const (90, 100),
           yLabel: (v) => v.round().toString(),
+          xAxis: xAxis,
         );
       case 'temp':
         return HpiLineChart(
@@ -357,6 +375,7 @@ class TrendDetailViewState extends State<TrendDetailView> {
           color: style.color,
           baseline: d.baseline,
           yLabel: (v) => v.toStringAsFixed(1),
+          xAxis: xAxis,
         );
       default: // hr — candlestick
         return HpiCandleChart(
@@ -371,6 +390,7 @@ class TrendDetailViewState extends State<TrendDetailView> {
                   color: HpiMetricColors.tint(HpiColors.spo2, 0.14))
               : null,
           yLabel: (v) => v.round().toString(),
+          xAxis: xAxis,
         );
     }
   }
@@ -588,10 +608,10 @@ class TrendDetailViewState extends State<TrendDetailView> {
           TrendRange.sixMonths => _monthShort(t.month),
         };
 
+    if (_range == TrendRange.day) return _dayHourAxis();
+
     final List<String> labels;
-    if (_range == TrendRange.day) {
-      labels = ['12A', '6A', '12P', '6P', '11P'];
-    } else if (s.isEmpty) {
+    if (s.isEmpty) {
       labels = const [];
     } else if (s.length == 1) {
       labels = [tick(s.first.t)];
@@ -611,6 +631,39 @@ class TrendDetailViewState extends State<TrendDetailView> {
           Text(l, style: HpiText.mono.copyWith(fontSize: 9, color: HpiColors.faint)),
       ],
     );
+  }
+
+  /// Hour ticks for the Day range, pinned to the same fractions the painters
+  /// use, so a mark recorded at 4 AM stands above "4A".
+  ///
+  /// A `spaceBetween` Row cannot do this. It spread five labels across the whole
+  /// card — including the [kTrendRightGutter] the plot stops short of — and put
+  /// "12A" and "11P" hard against the edges rather than at their hour centres.
+  /// Since the marks were index-spaced too, the two errors were invisible next
+  /// to each other; they are not once the marks are honest.
+  Widget _dayHourAxis() {
+    const ticks = [(0, '12A'), (6, '6A'), (12, '12P'), (18, '6P'), (23, '11P')];
+    const w = 30.0; // label box, centred on the tick
+    final style =
+        HpiText.mono.copyWith(fontSize: 9, color: HpiColors.faint);
+    return LayoutBuilder(builder: (context, c) {
+      final plotW = c.maxWidth - kTrendRightGutter;
+      return SizedBox(
+        height: 12,
+        child: Stack(
+          children: [
+            for (final (h, label) in ticks)
+              Positioned(
+                left: (plotW * (h + 0.5) / 24 - w / 2)
+                    .clamp(0.0, math.max(0.0, c.maxWidth - w)),
+                width: w,
+                child:
+                    Text(label, textAlign: TextAlign.center, style: style),
+              ),
+          ],
+        ),
+      );
+    });
   }
 
   Widget _weekAxis(List<TrendPoint> s) {
