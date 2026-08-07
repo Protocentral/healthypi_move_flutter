@@ -28,7 +28,7 @@ class ScrRecordings extends StatefulWidget {
 
 /// Order must match the segmented control's labels — the control reports an
 /// index straight into [_Filter.values].
-enum _Filter { all, ecg, ppg, gsr, imu }
+enum _Filter { all, ecg, hrv, ppg, gsr, imu }
 
 class _ScrRecordingsState extends State<ScrRecordings> {
   List<HsRecording>? _sessions;
@@ -137,6 +137,81 @@ class _ScrRecordingsState extends State<ScrRecordings> {
     });
   }
 
+  /// Delete the phone's copy of a recording, after confirming.
+  ///
+  /// The dialog distinguishes the two outcomes rather than promising one:
+  /// RECORDS has no erase op, so a session the watch still holds comes back on
+  /// the next refresh as `ON WATCH`. Saying "deleted" flatly would look like a
+  /// bug the first time a row reappeared.
+  Future<void> _delete(HsRecording session) async {
+    final stillOnWatch = !session.acked;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: HpiColors.surfaceContainer,
+        title: const Text('Delete this recording?'),
+        content: Text(
+          'The ${session.kindLabel} recording from '
+          '${_formatWhen(session.startTime)} will be removed from this phone, '
+          'along with any CSV exported from it.\n\n'
+          '${stillOnWatch ? "The watch still has this session, so it will "
+              "reappear here as ON WATCH until the watch reclaims the space." : "The watch has already released this session, so this deletes it "
+              "for good."}',
+          style: HpiText.body.copyWith(fontSize: 12.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete',
+                style: TextStyle(color: HpiColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    // Deliberately not routed through _withManager: deleting is a local-store
+    // operation and must work with the watch out of range, but _withManager's
+    // `finally` closes a manager whose `list()`/`download()` would have opened
+    // an SMP session. Constructing one directly touches no BLE.
+    final device = await DeviceManager.getPairedDevice();
+    try {
+      await HealthyStoreRecordsManager(device?.macAddress ?? '')
+          .deleteLocal(session);
+      _payloads.remove(session.id);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not delete: $e');
+    }
+    if (!mounted) return;
+
+    // Reconcile in memory rather than re-listing. A full refresh would spend an
+    // SMP session to learn something the watch's inventory did not change, and
+    // would fail outright with the watch out of range — leaving the screen still
+    // showing the row that was just deleted.
+    setState(() {
+      _busy = false;
+      final all = _sessions;
+      if (all == null) return;
+      _sessions = [
+        for (final s in all)
+          if (s.id != session.id)
+            s
+          // Still on the watch: the row survives, demoted to ON WATCH and
+          // re-downloadable. Rebuilt rather than copyWith'd so a stale CRC-fail
+          // verdict from the deleted payload doesn't outlive it.
+          else if (stillOnWatch)
+            HsRecording(header: s.header),
+      ];
+    });
+  }
+
   Future<void> _open(HsRecording session) async {
     var data = _payloads[session.id];
     if (data == null && session.onPhone) {
@@ -160,6 +235,8 @@ class _ScrRecordingsState extends State<ScrRecordings> {
         return true;
       case _Filter.ecg:
         return s.kind == HsRecordingKind.ecg;
+      case _Filter.hrv:
+        return s.kind == HsRecordingKind.hrv;
       case _Filter.ppg:
         return s.kind == HsRecordingKind.ppg;
       case _Filter.gsr:
@@ -190,7 +267,7 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
             HpiSegmentedControl(
-              segments: const ['All', 'ECG', 'PPG', 'GSR', 'IMU'],
+              segments: const ['All', 'ECG', 'HRV', 'PPG', 'GSR', 'IMU'],
               selectedIndex: _filter.index,
               onChanged: (i) => setState(() => _filter = _Filter.values[i]),
             ),
@@ -235,7 +312,9 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           '${_formatWhen(session.startTime)} · ${_size(session.byteLen)}'
           '${session.crcOk == false ? " · CRC fail" : ""}',
       onTap: onPhone ? () => _open(session) : null,
-      showChevron: onPhone,
+      // The delete button occupies the trailing slot, so the chevron would
+      // crowd it; the row is still tappable to open.
+      showChevron: false,
       trailing: downloading
           ? SizedBox(
               width: 22,
@@ -247,7 +326,16 @@ class _ScrRecordingsState extends State<ScrRecordings> {
               ),
             )
           : onPhone
-              ? const HpiPill(label: 'ON PHONE', color: HpiColors.steps)
+              ? Row(mainAxisSize: MainAxisSize.min, children: [
+                  const HpiPill(label: 'ON PHONE', color: HpiColors.steps),
+                  IconButton(
+                    tooltip: 'Delete from phone',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Symbols.delete,
+                        size: 19, color: HpiColors.error),
+                    onPressed: _busy ? null : () => _delete(session),
+                  ),
+                ])
               : GestureDetector(
                   onTap: () => _download(session),
                   child: Row(mainAxisSize: MainAxisSize.min, children: const [
@@ -291,8 +379,8 @@ class _ScrRecordingsState extends State<ScrRecordings> {
           Text('No recordings', style: HpiText.appBarTitle),
           const SizedBox(height: 6),
           Text(
-              'ECG, PPG, GSR and IMU sessions are all started on the watch, '
-              'then downloaded here on demand.',
+              'ECG, HRV, PPG, GSR and IMU sessions are all started on the '
+              'watch, then downloaded here on demand.',
               textAlign: TextAlign.center,
               style: HpiText.body.copyWith(fontSize: 12)),
         ],

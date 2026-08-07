@@ -13,6 +13,7 @@ import '../models/hs_recording.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
 import 'healthy_store_client.dart';
+import 'hrv_analysis.dart';
 import 'signal_view.dart';
 
 /// On-demand list / download / CRC / ack for HPI_HS **RECORDS** (episodic
@@ -211,6 +212,51 @@ class HealthyStoreRecordsManager {
     );
   }
 
+  /// Delete the phone's copy of a downloaded recording: index rows, payload
+  /// file, and any CSV exported from it.
+  ///
+  /// **Phone-side only.** RECORDS has no delete/erase op — its verbs are list /
+  /// get / ack (docs/HPI_HS_API.md), and `ACK` is a no-op on current firmware
+  /// because flash is reclaimed by size-based retention. So a session still held
+  /// by the watch reappears on the next [list] as `ON WATCH`, which is honest:
+  /// the data was freed here, not there. Only a session the watch has already
+  /// dropped disappears for good.
+  ///
+  /// Never throws on a file it cannot unlink — the rows are gone by then, and a
+  /// half-finished delete that reports failure is worse than an orphaned byte
+  /// range the wipe sweep will collect later.
+  Future<void> deleteLocal(HsRecording recording) async {
+    final device = _client?.hello?.storeKey ??
+        await _db.getHsRecordDeviceKey(recording.id) ??
+        await _db.getHealthyStoreDeviceKey();
+    if (device == null) {
+      throw StateError('No Healthy Store device key — nothing to delete under.');
+    }
+
+    final paths = await _db.deleteHsRecord(device, recording.id);
+    final local = recording.localPath;
+    if (local != null && local.isNotEmpty) paths.add(local);
+
+    // Exported CSVs sit loose in the documents root and no table indexes them.
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      paths.add(
+          '${dir.path}/hs_record_${recording.id}_${recording.kindLabel.toLowerCase()}.csv');
+    } catch (e) {
+      debugPrint('[HS-Records] could not resolve export path: $e');
+    }
+
+    for (final p in paths) {
+      try {
+        final f = File(p);
+        if (await f.exists()) await f.delete();
+      } catch (e) {
+        debugPrint('[HS-Records] could not delete $p: $e');
+      }
+    }
+    debugPrint('[HS-Records] deleted local copy of #${recording.id}');
+  }
+
   /// Load a previously downloaded payload from disk.
   Future<Uint8List?> loadLocal(HsRecording recording) async {
     final path = recording.localPath;
@@ -230,6 +276,14 @@ class HealthyStoreRecordsManager {
   /// the session's settling transient. The detrended column is what a user
   /// actually wants to chart.
   Future<File> exportCsv(HsRecording recording, Uint8List payload) async {
+    // R-R records are irregularly spaced by construction, so the fixed-rate
+    // timebase and the moving-average detrend below are both meaningless for
+    // them — `sampleRate` is not a real Hz on an HRV record. They get their own
+    // writer.
+    if (recording.kind == HsRecordingKind.hrv) {
+      return exportHrvCsv(recording, payload);
+    }
+
     final samples = HsRecordSamples.decode(recording.header, payload);
     final sr = recording.sampleRate <= 0 ? 1 : recording.sampleRate;
     final start = recording.startTime.toUtc();
@@ -264,6 +318,109 @@ class HealthyStoreRecordsManager {
     final name =
         'hs_record_${recording.id}_${recording.kindLabel.toLowerCase()}.csv';
     final file = File('${dir.path}/$name');
+    await file.writeAsString(csv);
+    return file;
+  }
+
+  /// CSV export for an **R-R interval** record (`HsSignal.hrvRr`, uint16 ms).
+  ///
+  /// A tachogram, not a waveform: each row is one beat-to-beat interval, so the
+  /// time axis is the *cumulative sum* of the intervals rather than `i / sr`.
+  /// `rr_accepted` carries the artifact verdict instead of silently dropping
+  /// rows — a researcher validating the watch needs to see the beats the filter
+  /// rejected, not a quietly shortened file.
+  Future<File> exportHrvCsv(HsRecording recording, Uint8List payload) async {
+    final samples = HsRecordSamples.decode(recording.header, payload);
+    final raw = samples.data.isEmpty ? const <double>[] : samples.data.first;
+    final start = recording.startTime.toUtc();
+    final accepted = RrSeries.filtered(raw).rrMs.toList();
+
+    // Walk the accepted list in step with the raw one to label each row.
+    var next = 0;
+    var elapsedMs = 0.0;
+
+    final rows = <List<dynamic>>[
+      [
+        'beat_index',
+        'timestamp_utc',
+        't_ms',
+        'rr_ms',
+        'instant_hr_bpm',
+        'rr_accepted',
+      ],
+    ];
+    for (var i = 0; i < raw.length; i++) {
+      final rr = raw[i];
+      final isAccepted = next < accepted.length && accepted[next] == rr;
+      if (isAccepted) next++;
+      elapsedMs += rr;
+      rows.add([
+        i,
+        start.add(Duration(microseconds: (elapsedMs * 1000).round()))
+            .toIso8601String(),
+        elapsedMs.toStringAsFixed(1),
+        rr.toStringAsFixed(1),
+        rr > 0 ? (60000 / rr).toStringAsFixed(2) : '',
+        isAccepted ? 1 : 0,
+      ]);
+    }
+
+    final csv = const ListToCsvConverter().convert(rows);
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/hs_record_${recording.id}_hrv.csv');
+    await file.writeAsString(csv);
+    return file;
+  }
+
+  /// CSV export of the R-R intervals **derived from an ECG record** — the
+  /// reference series for an HRV spot check.
+  ///
+  /// Sits alongside [exportHrvCsv] with the same columns on purpose: validating
+  /// the watch's own HRV means diffing two files, and that is only meaningful if
+  /// they are the same shape.
+  Future<File> exportEcgRrCsv(HsRecording recording, Uint8List payload) async {
+    final samples = HsRecordSamples.decode(recording.header, payload);
+    final channel = samples.data.isEmpty ? const <double>[] : samples.data.first;
+    final sr = recording.sampleRate;
+    final peaks = detectRPeaks(channel, sampleRate: sr);
+    final raw = rrIntervalsMs(peaks, sr);
+    final accepted = RrSeries.filtered(raw).rrMs.toList();
+    final start = recording.startTime.toUtc();
+
+    var next = 0;
+    final rows = <List<dynamic>>[
+      [
+        'beat_index',
+        'r_peak_sample',
+        'timestamp_utc',
+        't_ms',
+        'rr_ms',
+        'instant_hr_bpm',
+        'rr_accepted',
+      ],
+    ];
+    for (var i = 0; i < raw.length; i++) {
+      final rr = raw[i];
+      final isAccepted = next < accepted.length && accepted[next] == rr;
+      if (isAccepted) next++;
+      // Time of the R peak that *closes* this interval, off the ECG's own clock
+      // — exact, unlike a cumulative sum, because the sample index is known.
+      final sample = peaks[i + 1];
+      final tMs = sr > 0 ? sample * 1000 / sr : 0.0;
+      rows.add([
+        i,
+        sample,
+        start.add(Duration(microseconds: (tMs * 1000).round())).toIso8601String(),
+        tMs.toStringAsFixed(1),
+        rr.toStringAsFixed(1),
+        rr > 0 ? (60000 / rr).toStringAsFixed(2) : '',
+        isAccepted ? 1 : 0,
+      ]);
+    }
+
+    final csv = const ListToCsvConverter().convert(rows);
+    final dir = await getApplicationDocumentsDirectory();
+    final file = File('${dir.path}/hs_record_${recording.id}_ecg_rr.csv');
     await file.writeAsString(csv);
     return file;
   }

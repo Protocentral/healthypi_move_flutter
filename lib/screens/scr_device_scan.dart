@@ -11,8 +11,10 @@ import '../models/device_info.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/ble_manager.dart';
 import '../utils/device_manager.dart';
 import '../utils/database_helper.dart';
+import 'scr_main_shell.dart';
 
 /// Clean, focused screen for BLE device scanning and pairing.
 /// Purpose: scan for HealthyPi Move devices and pair them. Can optionally connect
@@ -52,7 +54,28 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
   /// and offer "Connect" instead of "Pair" (the reconnect/switch surface, 5c).
   String? _pairedDeviceId;
 
+  /// True while the modal "Connecting…" route is on the stack.
+  ///
+  /// Every dismissal goes through [_closeConnectingDialog], which checks this
+  /// flag. The pops used to be bare `Navigator.pop()` calls that assumed the
+  /// dialog was still up — see the note on [_connectToDevice] for what that
+  /// cost when the assumption failed.
+  bool _connectingDialogOpen = false;
+
+  /// Guards against a second tap while a connect is in flight (the OS bonding
+  /// prompt makes this a long, tappable window).
+  bool _connecting = false;
+
   static const String _nameMatch = 'healthypi move';
+
+  /// How long to wait on a connect that may be blocked behind the OS pairing
+  /// prompt.
+  ///
+  /// A first-time pair on Android puts up a system bond dialog and the GATT
+  /// connect does not complete until the user taps through it. The old 15 s
+  /// budget was shorter than a human, so the very connect that was about to
+  /// succeed was abandoned as a timeout.
+  static const Duration _connectTimeout = Duration(seconds: 45);
 
   List<BleDevice> get _scanResults {
     final list = _devices.values.toList();
@@ -209,15 +232,21 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
     return result ?? false;
   }
 
-  /// Connect to device and either pair it or trigger callback
-  Future<void> _connectToDevice(String deviceId, String deviceName) async {
-    try {
-      // Show loading
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => Center(
+  /// Put up the blocking "Connecting…" modal and remember that it is up.
+  ///
+  /// `PopScope(canPop: false)` matters as much as the flag: `barrierDismissible:
+  /// false` only blocks *barrier taps*, so the Android system back button could
+  /// still dismiss this route. A user waiting out the OS bonding prompt reaches
+  /// for back often, and that silently desynchronised the dialog from the pops
+  /// that were supposed to close it.
+  void _showConnectingDialog() {
+    _connectingDialogOpen = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Center(
           child: HpiCard(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -233,24 +262,103 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
                 ),
                 const SizedBox(height: 16),
                 Text('Connecting…', style: HpiText.cardTitle),
+                const SizedBox(height: 8),
+                Text(
+                  'If your phone asks to pair, accept the prompt.',
+                  textAlign: TextAlign.center,
+                  style: HpiText.supporting,
+                ),
               ],
             ),
           ),
         ),
-      );
+      ),
+    ).then((_) => _connectingDialogOpen = false);
+  }
 
+  /// Dismiss the connecting modal — **and only the connecting modal**.
+  ///
+  /// Idempotent, so the success path and the `finally` can both call it.
+  void _closeConnectingDialog() {
+    if (!_connectingDialogOpen || !mounted) return;
+    _connectingDialogOpen = false;
+    Navigator.of(context, rootNavigator: true).pop();
+  }
+
+  /// Leave the scan screen after a successful pair.
+  ///
+  /// **This is the blank-screen fix.** The old code called a bare
+  /// `Navigator.pop()` with the comment "pop back to previous screen", which
+  /// assumed a route underneath. Two situations break that assumption and both
+  /// are ordinary: unpairing routes here with `pushNamedAndRemoveUntil('/scan',
+  /// (r) => false)`, making this the *only* route; and a stray back press during
+  /// the long bonding wait already consumed one pop. Popping the last route
+  /// leaves a Navigator with nothing in it — a black screen with no back
+  /// handler, recoverable only by killing the app from the recents list, which
+  /// is exactly what was reported.
+  void _leaveScanScreen() {
+    if (!mounted) return;
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+    } else {
+      ScrMainShell.returnToRoot(context);
+    }
+  }
+
+  /// Connect, tolerating the OS bond prompt.
+  ///
+  /// A first-time pair blocks the GATT connect behind a system dialog, so a
+  /// failure here is not evidence the device is unreachable — bonding may have
+  /// completed moments after the plugin gave up. Re-check the live connection
+  /// state before believing the error, and retry once, which resolves instantly
+  /// if the link came up in the meantime.
+  Future<void> _connectWithBonding(String deviceId) async {
+    try {
+      await UniversalBle.connect(deviceId, timeout: _connectTimeout);
+    } catch (e) {
+      if (await BleManager.instance.isConnected(deviceId)) return;
+      debugPrint('[Scan] connect failed ($e) — retrying once after bonding');
+      await UniversalBle.connect(deviceId, timeout: _connectTimeout);
+    }
+  }
+
+  /// Connect to device and either pair it or trigger callback.
+  ///
+  /// Navigation discipline here is load-bearing; see [_closeConnectingDialog]
+  /// and [_leaveScanScreen]. Every exit path dismisses the modal through the
+  /// tracked helper in a `finally`, so no route is ever popped by accident and
+  /// an early return can't strand an undismissable spinner.
+  Future<void> _connectToDevice(String deviceId, String deviceName) async {
+    if (_connecting || !mounted) return;
+    _connecting = true;
+    _showConnectingDialog();
+    try {
       // Stop scanning first
       await _stopScan();
 
       // Connect to device (OS handles bonding/passkey on native).
-      await UniversalBle.connect(deviceId,
-          timeout: const Duration(seconds: 15));
+      await _connectWithBonding(deviceId);
+
+      // Always discover services after connect: CoreBluetooth and Android GATT
+      // only expose characteristics afterwards, and on Android this is what
+      // actually triggers bonding. Doing it now surfaces the pairing prompt
+      // while the user is looking at a "Connecting…" dialog, instead of midway
+      // through the first background sync. Best-effort and bounded — pairing
+      // only needs to persist the id, so a slow discovery must not fail it.
+      try {
+        await BleManager.instance
+            .discoverServices(deviceId)
+            .timeout(const Duration(seconds: 12));
+      } catch (e) {
+        debugPrint('[Scan] discoverServices after pair failed: $e');
+      }
 
       // If we have a callback (for live view, fetch recordings, etc.)
       if (widget.onDeviceConnected != null) {
         // Close loading dialog
+        _closeConnectingDialog();
         if (!mounted) return;
-        Navigator.of(context).pop();
 
         // Trigger callback with connected device id
         widget.onDeviceConnected!(deviceId);
@@ -267,7 +375,8 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
         final hasData = await DatabaseHelper.instance.hasDataForDevice(existingDevice.macAddress);
 
         if (hasData) {
-          // Show confirmation dialog
+          // Ask on top of the spinner — the warning owns its own route, so the
+          // tracked connecting modal underneath is unaffected.
           if (!mounted) return;
           shouldProceed = await _showDataLossWarningDialog(existingDevice.displayName);
 
@@ -279,10 +388,8 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       }
 
       if (!shouldProceed) {
-        // User cancelled, disconnect and exit
+        // User cancelled: drop the link and stay on the scan screen.
         await UniversalBle.disconnect(deviceId);
-        if (!mounted) return;
-        Navigator.of(context).pop();
         return;
       }
 
@@ -299,9 +406,7 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       // Disconnect (we're just pairing, not syncing)
       await UniversalBle.disconnect(deviceId);
 
-      // Close loading dialog
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      _closeConnectingDialog();
 
       // Show success message
       Snackbar.show(
@@ -310,20 +415,16 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
         success: true,
       );
 
-      // Navigate back to home (pop back to previous screen)
-      if (!mounted) return;
-      Navigator.of(context).pop();
+      _leaveScanScreen();
     } catch (e) {
-      // Close loading dialog
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-
       Snackbar.show(
         ABC.c,
         prettyException("Connection Error:", e),
         success: false,
       );
+    } finally {
+      _connecting = false;
+      _closeConnectingDialog();
     }
   }
 
@@ -339,6 +440,19 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
     final devices = _scanResults;
     final btOff = _adapterState != AvailabilityState.poweredOn;
 
+    // Every message this screen raises goes through `Snackbar.show(ABC.c, …)`,
+    // which resolves `snackBarKeyC` and no-ops when no ScaffoldMessenger carries
+    // it. Without this wrapper the only messenger with that key lived in the DFU
+    // screen, so "Bluetooth is not enabled", scan errors and every connection
+    // failure were dropped on the floor — a failed pair looked like the tap had
+    // simply done nothing.
+    return ScaffoldMessenger(
+      key: Snackbar.snackBarKeyC,
+      child: _buildScaffold(devices, btOff),
+    );
+  }
+
+  Widget _buildScaffold(List<BleDevice> devices, bool btOff) {
     return Scaffold(
       backgroundColor: HpiColors.background,
       body: SafeArea(
@@ -349,7 +463,9 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
               child: IconButton(
                 icon: const Icon(Symbols.arrow_back,
                     color: HpiColors.onSurfaceBright),
-                onPressed: () => Navigator.of(context).maybePop(),
+                // maybePop() is a silent no-op when this is the root route, so
+                // the arrow used to do nothing at all in that case.
+                onPressed: _leaveScanScreen,
               ),
             ),
             Padding(
