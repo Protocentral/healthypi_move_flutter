@@ -96,13 +96,63 @@ class HealthyStoreSyncManager {
 
   static const String _syntheticModeKey = 'derive_included_synthetic';
 
-  /// Always false. Kept so [HpiSyntheticBanner] and tests still compile; the
-  /// banner never shows because production never charts fabricated samples.
+  /// Whether fabricated samples are currently being charted — the
+  /// **developer synthetic preview**, and the flag [HpiSyntheticBanner] reads.
+  ///
+  /// This exists for exactly one situation, and it is a real one: on a bench
+  /// Ultralight *every* sample is synthetic (both producers are down behind a
+  /// dead I²C4), so the app correctly derives zero trend rows and every screen
+  /// is empty. Nobody can validate the sync path, the derivation, or any chart
+  /// against the only data the hardware can currently produce.
+  ///
+  /// The guarantees that make it safe to have at all:
+  ///
+  /// * **In-memory only.** Never written to `SharedPreferences`. It is `false`
+  ///   at every launch, so a device left in preview mode overnight comes back
+  ///   honest — and [ensureRealDataOnly] then re-derives real-only trends at
+  ///   startup, so the *stored* trends do not survive either.
+  /// * **Reachable only from the developer screen**, which is itself behind a
+  ///   7-tap easter egg. It is not a Setting and must never become one.
+  /// * **Never silent.** [HpiSyntheticBanner] is mounted from
+  ///   `MaterialApp.builder`, covers pushed routes and dialogs, and has no
+  ///   dismiss affordance. Charting fabricated data behind an unlabelled toggle
+  ///   is the precise failure the firmware's quality bit 6 exists to prevent.
   final ValueNotifier<bool> syntheticIncluded = ValueNotifier<bool>(false);
+
+  /// Turn the developer synthetic preview on or off and re-derive accordingly.
+  ///
+  /// Rebuilds trends from the raw samples already stored — no download, and the
+  /// raw rows are never touched, so this is reversible in both directions.
+  /// Returns the number of derived rows, or `null` when nothing is synced yet.
+  ///
+  /// The metadata stamp is written so that [ensureRealDataOnly] can undo this at
+  /// the next launch even if the app is killed while preview is on. That stamp
+  /// is the only thing about this feature that persists, and it persists
+  /// precisely so the feature *cannot*.
+  Future<int?> setSyntheticPreview(bool on) async {
+    syntheticIncluded.value = on;
+
+    final db = DatabaseHelper.instance;
+    final device = await db.getHealthyStoreDeviceKey();
+    if (device == null) return null;
+
+    final rows = await db.rebuildAllTrends(device, includeSynthetic: on);
+    await db.setMetadata(_syntheticModeKey, on ? 1 : 0);
+    debugPrint('[HS-Sync] synthetic preview ${on ? "ON" : "off"} '
+        '— rebuilt $rows trend rows');
+
+    // Screens read HealthRepository, not this manager, so they need telling.
+    dataRevision.value++;
+    return rows;
+  }
 
   /// Call once at startup. Synthetic QA is over: clear any leftover opt-in and
   /// re-derive trends **without** firmware-fabricated samples so charts never
   /// keep showing test data from a previous session.
+  ///
+  /// This is also what makes [setSyntheticPreview] safe to leave on: the flag is
+  /// in-memory so it is already false here, and the persisted stamp brings the
+  /// stored trends back in line.
   Future<void> ensureRealDataOnly() async {
     final prefs = await SharedPreferences.getInstance();
     // ignore: deprecated_member_use_from_same_package
@@ -130,10 +180,15 @@ class HealthyStoreSyncManager {
     await DatabaseHelper.instance.setMetadata(_syntheticModeKey, 0);
   }
 
-  /// Synthetic samples are never admitted into derived trends. Stored raw rows
-  /// may still hold the bit (useful for LOCAL STORE diagnostics); they are not
-  /// charted, summarised, or exported as measurements.
-  Future<bool> _includeSynthetic() async => false;
+  /// Whether a sync's derivation admits firmware-fabricated samples.
+  ///
+  /// False in every normal run, and false at every launch — the only thing that
+  /// can make it true is the in-memory developer preview
+  /// ([setSyntheticPreview]), which cannot be reached without the hidden
+  /// developer screen and cannot survive a restart. Stored raw rows always keep
+  /// the bit (useful for LOCAL STORE diagnostics); what this gates is whether
+  /// they are charted, summarised, or exported as measurements.
+  Future<bool> _includeSynthetic() async => syntheticIncluded.value;
 
   /// How many of the newest samples to fetch up-front, ahead of the backlog, so
   /// the UI has current data immediately. Sized to sit inside the device's RAM

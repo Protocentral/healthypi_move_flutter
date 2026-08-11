@@ -14,6 +14,7 @@ import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_client.dart';
 import '../utils/healthy_store_probe.dart';
+import '../utils/healthy_store_sync_manager.dart';
 
 /// The single developer surface. Everything behind the developer-mode toggle
 /// lives here — nothing developer-facing is left scattered through Settings.
@@ -78,6 +79,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
 
   bool _rebuilding = false;
   bool _synthing = false;
+  bool _previewBusy = false;
   _StoreStats? _store;
   bool _loadingStore = true;
 
@@ -448,6 +450,73 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
     ]);
   }
 
+  /// The developer-only synthetic preview toggle.
+  ///
+  /// Deliberately lives **here** and nowhere else. On a bench Ultralight every
+  /// sample is fabricated (both producers are down behind a dead I²C4), so the
+  /// app derives zero trend rows and every screen is empty — which is correct
+  /// and also makes the whole data path unverifiable. This charts them anyway,
+  /// under a banner that says so on every route.
+  ///
+  /// It is in-memory: `false` at every launch, and `ensureRealDataOnly()` at
+  /// startup re-derives real-only trends. Do not persist it, and do not surface
+  /// it in Settings.
+  Widget _syntheticPreviewRow() {
+    return ValueListenableBuilder<bool>(
+      valueListenable: HealthyStoreSyncManager.instance.syntheticIncluded,
+      builder: (context, on, _) => HpiListRow(
+        icon: Symbols.science,
+        iconColor: on ? HpiColors.error : HpiColors.muted,
+        title: 'Chart synthetic data',
+        supporting: on
+            ? 'ON · every number on screen is fabricated · resets on restart'
+            : 'Bench only · charts firmware SYNTH samples with a banner',
+        showChevron: false,
+        onTap: _previewBusy ? null : () => _setSyntheticPreview(!on),
+        trailing: _previewBusy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: HpiColors.error))
+            : Switch(
+                value: on,
+                activeThumbColor: HpiColors.error,
+                onChanged:
+                    _previewBusy ? null : (v) => _setSyntheticPreview(v),
+              ),
+      ),
+    );
+  }
+
+  Future<void> _setSyntheticPreview(bool on) async {
+    setState(() => _previewBusy = true);
+    try {
+      final rows =
+          await HealthyStoreSyncManager.instance.setSyntheticPreview(on);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(rows == null
+            ? 'No synced samples on this phone yet.'
+            : on
+                ? 'Synthetic preview ON — $rows trend rows include fabricated '
+                    'samples. Resets on restart.'
+                : 'Synthetic preview off — $rows trend rows from real samples.'),
+        backgroundColor: on ? HpiColors.error : HpiColors.steps,
+        duration: const Duration(seconds: 5),
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Preview toggle failed: $e'),
+            backgroundColor: HpiColors.error));
+      }
+    } finally {
+      if (mounted) setState(() => _previewBusy = false);
+      await _loadStore(); // the derived counts just changed
+    }
+  }
+
   Widget _derivationCard() {
     return HpiCard(
       padding: EdgeInsets.zero,
@@ -473,8 +542,7 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
                       const SizedBox(height: 2),
                       Text(
                         'Firmware SYNTH samples stay in the local store for '
-                        'diagnostics but never enter charts or summaries. '
-                        'QA opt-in has been removed.',
+                        'diagnostics but never enter charts or summaries.',
                         style: HpiText.supporting,
                       ),
                     ],
@@ -483,6 +551,8 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
               ],
             ),
           ),
+          const Divider(height: 1, color: HpiColors.divider, indent: 14),
+          _syntheticPreviewRow(),
           const Divider(height: 1, color: HpiColors.divider, indent: 14),
           HpiListRow(
             icon: Symbols.refresh,

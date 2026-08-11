@@ -13,6 +13,13 @@
 	     because it gives a real BLE host plus a real sqflite. -->
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
+	<!-- Outbound network. Without it the sandbox blocks the GitHub releases API
+	     with "Operation not permitted", and the firmware-update check reports
+	     FirmwareUpdateState.unknown on every launch — which looks like a broken
+	     update checker rather than a missing entitlement. `network.server` below
+	     is for the Flutter debug VM service and does NOT cover outbound. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>

@@ -8,5 +8,9 @@
 	     ships a version that cannot see any device. -->
 	<key>com.apple.security.device.bluetooth</key>
 	<true/>
+	<!-- Outbound network, for the GitHub releases API behind the firmware-update
+	     check. Must match DebugProfile.entitlements. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>
