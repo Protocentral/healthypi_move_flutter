@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:universal_ble/universal_ble.dart';
 import 'package:move/utils/snackbar.dart';
 
+import '../device/device_profile.dart';
 import '../models/device_info.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
@@ -66,7 +67,21 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
   /// prompt makes this a long, tappable window).
   bool _connecting = false;
 
-  static const String _nameMatch = 'healthypi move';
+  /// Advertised-name fragments that identify a ProtoCentral device.
+  ///
+  /// The Move advertises `HealthyPi Move`; the Ultralight builds `MoveUL XXYYZZ`
+  /// from its hardware id, so a single substring cannot cover both.
+  ///
+  /// This is a *display* filter and nothing more — it decides which rows appear
+  /// in the scan list, never what a device can do. Capabilities come from
+  /// `HELLO.dev` once an SMP session exists; an advertised name is user-settable
+  /// and carries no authority. Filtering by the SMP service UUID would be more
+  /// robust and is the plan once the Ultralight firmware advertises it
+  /// (docs/internal gap G6); until then a name match is what we have.
+  static const List<String> _nameMatches = ['healthypi move', 'moveul'];
+
+  static bool _isProtocentralName(String lowerName) =>
+      _nameMatches.any(lowerName.contains);
 
   /// How long to wait on a connect that may be blocked behind the OS pairing
   /// prompt.
@@ -128,9 +143,9 @@ class _ScrDeviceScanState extends State<ScrDeviceScan> {
       _scanSubscription ??= UniversalBle.scanStream.listen(
         (device) {
           final name = (device.name ?? '').toLowerCase();
-          // Keep only HealthyPi Move devices (FBP used an exact name filter;
+          // Keep only ProtoCentral devices (FBP used an exact name filter;
           // match by substring so an id-suffixed advertised name still shows).
-          if (!name.contains(_nameMatch)) return;
+          if (!_isProtocentralName(name)) return;
           if (mounted) setState(() => _devices[device.deviceId] = device);
         },
         onError: (e) =>
@@ -657,13 +672,20 @@ class _FoundDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Product guess from the advertised name — a label, nothing more. The real
+    // answer arrives with HELLO after pairing; see DeviceProfile.forAdvertisedName.
+    final guess = DeviceProfile.forAdvertisedName(device.name);
     final name = (device.name?.isNotEmpty ?? false)
         ? device.name!
-        : 'HealthyPi Move';
+        : guess.productName;
     final rssi = device.rssi;
+    final signal = rssi != null ? ' · $rssi dBm' : '';
+    // Name the product when we can tell the two apart, so a user holding both
+    // does not have to decode a hardware-id suffix.
+    final product = guess.model == DeviceModel.unknown ? '' : '${guess.productName} · ';
     final meta = dfu
-        ? 'bootloader mode${rssi != null ? " · $rssi dBm" : ""}'
-        : '${device.deviceId}${rssi != null ? " · $rssi dBm" : ""}';
+        ? 'bootloader mode$signal'
+        : '$product${device.deviceId}$signal';
     final accent = paired ? HpiColors.steps : HpiColors.hr;
 
     return Opacity(

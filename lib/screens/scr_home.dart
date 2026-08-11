@@ -9,6 +9,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/health_repository.dart';
+import '../device/device_profile.dart';
+import '../device/device_profile_ui.dart';
 import '../globals.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
@@ -42,6 +44,17 @@ class _ScrHomeState extends State<ScrHome> {
   _Layout _layout = _Layout.list;
   String _selectedMetric = hPi4Global.PREFIX_HR; // tablet right-pane selection
 
+  /// Which product is paired, and therefore which rows this screen has.
+  ///
+  /// Read once here and refreshed from the notifier, matching how the screen
+  /// already handles pairing: the shell keeps this tab alive in an
+  /// `IndexedStack`, so `initState` runs before the first pair.
+  DeviceProfile _profile = DeviceManager.activeProfile.value;
+
+  /// User-assigned nickname, for the footer's device label. Null when unpaired
+  /// or unnamed, in which case the footer shows the product name alone.
+  String? _deviceNickname;
+
   bool _syncing = false;
   double _syncProgress = 0;
   String _syncMessage = '';
@@ -58,6 +71,7 @@ class _ScrHomeState extends State<ScrHome> {
     // otherwise the screen stays empty until a hot restart.
     HealthyStoreSyncManager.dataRevision.addListener(_load);
     DeviceManager.pairingRevision.addListener(_load);
+    DeviceManager.activeProfile.addListener(_onProfileChanged);
     _load();
   }
 
@@ -65,8 +79,25 @@ class _ScrHomeState extends State<ScrHome> {
   void dispose() {
     HealthyStoreSyncManager.dataRevision.removeListener(_load);
     DeviceManager.pairingRevision.removeListener(_load);
+    DeviceManager.activeProfile.removeListener(_onProfileChanged);
     _syncSub?.cancel();
     super.dispose();
+  }
+
+  /// The paired product changed, so the row set changed. Only fires when the
+  /// value actually differs — the notifier holds const profile singletons.
+  void _onProfileChanged() {
+    if (!mounted) return;
+    final next = DeviceManager.activeProfile.value;
+    setState(() {
+      _profile = next;
+      // The tablet right pane may be showing a metric this product does not
+      // have. Fall back to HR, which every product measures.
+      if (!next.homeSignals.contains(_selectedMetric) &&
+          _selectedMetric != hPi4Global.PREFIX_HR) {
+        _selectedMetric = hPi4Global.PREFIX_HR;
+      }
+    });
   }
 
   Future<void> _restoreLayout() async {
@@ -84,6 +115,22 @@ class _ScrHomeState extends State<ScrHome> {
   Future<void> _load() async {
     final dash = await _repo.loadHome();
     if (mounted) setState(() => _dash = dash);
+    // Reads the stored pairing, which also refreshes DeviceManager.activeProfile
+    // — so a profile resolved by the sync that just fired lands here too.
+    final device = await DeviceManager.getPairedDevice();
+    if (mounted) {
+      setState(() {
+        _deviceNickname = device?.nickname;
+        _profile = DeviceManager.activeProfile.value;
+      });
+    }
+    // Blood pressure is a product feature, not a metric — skip the query
+    // entirely on hardware that has no BP sensor rather than rendering an empty
+    // result as "not set up".
+    if (!_profile.hasBloodPressure) {
+      if (mounted) setState(() => _bp = null);
+      return;
+    }
     final bp = await _repo.loadBloodPressure();
     if (mounted) setState(() => _bp = bp);
   }
@@ -448,14 +495,20 @@ class _ScrHomeState extends State<ScrHome> {
 
   // --- Signal list (2a) -------------------------------------------------
 
+  /// The signal rows this product has, composed from the profile rather than
+  /// hard-coded.
+  ///
+  /// A metric the paired product cannot measure is **not a dim row — it is not a
+  /// row**. `MetricAvailability` still handles the four honest states for the
+  /// rows that do exist ("sync your watch", "building your baseline", …), but it
+  /// cannot express "this hardware has no electrodes", and rendering that as a
+  /// permanently dim affordance would teach the user the app is broken. Blood
+  /// pressure especially: it is the app's one regulated surface, and a dim BP
+  /// row on a band with no BP sensor implies a measurement that cannot be made.
   Widget _signalListCard() {
     return HpiGroupedCard(rows: [
-      _signalRow('activity'),
-      _signalRow('spo2'),
-      _signalRow('temp'),
-      _signalRow('stress'),
-      _signalRow('eda'),
-      _bpRow(),
+      for (final key in _profile.homeSignals)
+        if (key == kSignalBloodPressure) _bpRow() else _signalRow(key),
     ]);
   }
 
@@ -514,7 +567,9 @@ class _ScrHomeState extends State<ScrHome> {
         onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const ScrStressEda())),
         trailing: measure
-            ? const HpiPill(label: 'MEASURE ON WATCH', color: HpiColors.eda)
+            ? HpiPill(
+                label: 'MEASURE ON ${_profile.deviceNoun.toUpperCase()}',
+                color: HpiColors.eda)
             : Text('—', style: HpiText.cardValue.copyWith(color: HpiColors.muted)),
       );
     }
@@ -604,7 +659,7 @@ class _ScrHomeState extends State<ScrHome> {
   // --- Metric grid (1a) -------------------------------------------------
 
   Widget _metricGrid() {
-    final keys = ['activity', 'spo2', 'temp', 'stress'];
+    final keys = _profile.gridSignals;
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -653,10 +708,13 @@ class _ScrHomeState extends State<ScrHome> {
       return Text('building baseline', style: HpiText.supporting);
     }
     if (t.availability == MetricAvailability.unsupported) {
-      return Text(key == 'stress' ? 'from HRV' : 'measure on watch',
+      return Text(
+          key == 'stress' ? 'from HRV' : 'measure on ${_profile.deviceNoun}',
           style: HpiText.supporting);
     }
-    if (!t.hasData) return Text('sync your watch', style: HpiText.supporting);
+    if (!t.hasData) {
+      return Text('sync your ${_profile.deviceNoun}', style: HpiText.supporting);
+    }
     switch (key) {
       case 'activity':
         final goal = (t.latest ?? 0) / 10000.0;
@@ -678,7 +736,15 @@ class _ScrHomeState extends State<ScrHome> {
 
   Widget _footer() {
     final sync = _dash!.lastSync;
-    final label = sync == null ? 'Never synced' : 'Synced ${_relativeTime(sync)}';
+    // The app's primary device-identity surface. Outside the Device tab this
+    // row is the only place the paired product is named, and with two products
+    // sharing one app "which device did this data come from" and "how recently"
+    // are one fact, so they share one line. Costs no vertical space: the row and
+    // its glyph already existed.
+    final device = _profile.footerLabel(_deviceNickname);
+    final label = sync == null
+        ? '$device · never synced'
+        : '$device · synced ${_relativeTime(sync)}';
     // While syncing, show what it's actually doing (and where it's up to) rather
     // than a bare percentage — a long history drain otherwise looks frozen.
     final status = _syncMessage.isNotEmpty
@@ -688,7 +754,7 @@ class _ScrHomeState extends State<ScrHome> {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         children: [
-          const Icon(Symbols.watch, size: 15, color: HpiColors.muted),
+          Icon(_profile.icon, size: 15, color: HpiColors.muted),
           const SizedBox(width: 6),
           Expanded(
               child: Text(_syncing ? status : label,

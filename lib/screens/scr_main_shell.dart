@@ -4,10 +4,13 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../device/device_profile.dart';
+import '../device/device_profile_ui.dart';
 import '../theme/hpi_colors.dart';
 import '../ui/adaptive/adaptive_scaffold.dart';
 import '../utils/auto_sync_controller.dart';
 import '../utils/database_helper.dart';
+import '../utils/device_manager.dart';
 import 'scr_device_new.dart';
 import 'scr_home.dart';
 import 'scr_live.dart';
@@ -113,23 +116,29 @@ class _ScrMainShellState extends State<ScrMainShell> {
   }
 }
 
+/// The tablet rail's Settings affordance — and, incidentally, the only
+/// device-identity surface on the expanded layout outside the Device tab, so it
+/// carries the paired product's glyph rather than a fixed watch.
 class _RailAvatar extends StatelessWidget {
   const _RailAvatar({required this.onTap});
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: HpiMetricColors.tint(HpiColors.hr, 0.16),
-          shape: BoxShape.circle,
+    return ValueListenableBuilder<DeviceProfile>(
+      valueListenable: DeviceManager.activeProfile,
+      builder: (context, profile, _) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: HpiMetricColors.tint(HpiColors.hr, 0.16),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(profile.icon, size: 20, color: HpiColors.hr),
         ),
-        child: const Icon(Symbols.watch, size: 20, color: HpiColors.hr),
       ),
     );
   }

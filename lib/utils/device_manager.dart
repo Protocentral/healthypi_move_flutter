@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import '../device/device_profile.dart';
 import '../models/device_info.dart';
 
 /// Unified device management utility for HealthyPi Move pairing
@@ -24,13 +25,62 @@ class DeviceManager {
   /// listen and re-read; the value itself is just a revision counter.
   static final ValueNotifier<int> pairingRevision = ValueNotifier<int>(0);
 
+  /// Which product is paired, and therefore which features exist.
+  ///
+  /// Deliberately **not** derived from the live connection. The app is
+  /// foreground-sync only, so the BLE link is down most of the time the user is
+  /// looking at the UI; keying layout off connection state would make Home's row
+  /// list reflow every time a sync finished. Pairing is persistent and available
+  /// at first frame, which is what the UI needs.
+  ///
+  /// Same read-once-then-listen contract as [pairingRevision]: the shell keeps
+  /// its tabs alive in an `IndexedStack`, so screens read this in `initState`
+  /// and listen for changes.
+  ///
+  /// Defaults to the Move profile rather than `unknown` — see
+  /// [DeviceProfile.forStoredModel] for why null must not mean "unknown device".
+  static final ValueNotifier<DeviceProfile> activeProfile =
+      ValueNotifier<DeviceProfile>(DeviceProfile.moveNext);
+
   static void _notifyPairingChanged() => pairingRevision.value++;
+
+  /// Keep [activeProfile] in step with what is stored. Cheap and idempotent —
+  /// `ValueNotifier` only notifies when the value actually changes, and the
+  /// profiles are const singletons, so an unchanged device is a no-op.
+  static void _applyProfile(DeviceInfo? deviceInfo) {
+    activeProfile.value = deviceInfo == null
+        ? DeviceProfile.moveNext
+        : DeviceProfile.forStoredModel(deviceInfo.model);
+  }
+
+  /// Record the product this device reported in its HPI_HS `HELLO`.
+  ///
+  /// Called on every sync, so it must be a no-op when nothing changed: writing
+  /// unconditionally would bump [pairingRevision] each time and trigger a
+  /// needless reload on every screen listening to it.
+  ///
+  /// [dev] is the raw `HELLO.dev` wire string. An unrecognised value is still
+  /// stored — a support log wants the actual string, and
+  /// [DeviceProfile.forStoredModel] maps anything it cannot place to
+  /// [DeviceProfile.unknown], which is the conservative profile.
+  static Future<void> updateModel(String? dev) async {
+    final trimmed = dev?.trim();
+    if (trimmed == null || trimmed.isEmpty) return;
+
+    final deviceInfo = await getPairedDevice();
+    if (deviceInfo == null) return;
+    if (deviceInfo.model == trimmed) return; // unchanged — do not churn
+
+    await savePairedDevice(deviceInfo.copyWith(model: trimmed));
+    print('DeviceManager: device model resolved to "$trimmed"');
+  }
 
   /// Save paired device information
   static Future<void> savePairedDevice(DeviceInfo deviceInfo) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = jsonEncode(deviceInfo.toJson());
     await prefs.setString(_deviceInfoKey, jsonString);
+    _applyProfile(deviceInfo);
 
     // Also maintain legacy format for backward compatibility during transition
     await prefs.setString(_legacyPairedStatusKey, 'paired');
@@ -49,7 +99,12 @@ class DeviceManager {
     if (jsonString != null && jsonString.isNotEmpty) {
       try {
         final json = jsonDecode(jsonString) as Map<String, dynamic>;
-        return DeviceInfo.fromJson(json);
+        final info = DeviceInfo.fromJson(json);
+        // Keep the profile fresh without needing every caller to remember to.
+        // This is the app's most-called device read, and it is a pure setter on
+        // a ValueNotifier that no-ops when unchanged.
+        _applyProfile(info);
+        return info;
       } catch (e) {
         print('DeviceManager: Error parsing device info: $e');
         // Fall through to migration logic
@@ -168,6 +223,7 @@ class DeviceManager {
     }
     
     print('DeviceManager: Device unpaired successfully');
+    _applyProfile(null);
     _notifyPairingChanged();
   }
   

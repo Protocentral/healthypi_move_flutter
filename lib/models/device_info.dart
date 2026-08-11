@@ -12,7 +12,21 @@ class DeviceInfo {
   final DateTime? lastConnected;
   final String? firmwareVersion;  // Optional, fetched on connection
   final int? batteryLevel;        // Optional, fetched on connection
-  
+
+  /// Which product this is, as the device's own `HELLO.dev` model string
+  /// (`healthypi-move` / `healthypi-move-ultralight`).
+  ///
+  /// Resolved to a `DeviceProfile` by `DeviceProfile.forStoredModel`, which
+  /// treats **null as a Move** rather than as unknown: every pairing made before
+  /// this field existed is a Move, and an app update must not change what a
+  /// current user sees before their next sync. The value is written (and
+  /// corrected) from `HELLO` on every sync, so a wrong guess self-heals.
+  ///
+  /// Deliberately the raw wire string rather than an enum name — the enum is a
+  /// presentation detail that may be renamed, while the wire string is pinned to
+  /// firmware and is what a support log should show.
+  final String? model;
+
   DeviceInfo({
     required this.macAddress,
     required this.deviceName,
@@ -21,8 +35,9 @@ class DeviceInfo {
     this.lastConnected,
     this.firmwareVersion,
     this.batteryLevel,
+    this.model,
   });
-  
+
   /// Convert DeviceInfo to JSON for storage
   Map<String, dynamic> toJson() => {
     'macAddress': macAddress,
@@ -32,21 +47,27 @@ class DeviceInfo {
     'lastConnected': lastConnected?.toIso8601String(),
     'firmwareVersion': firmwareVersion,
     'batteryLevel': batteryLevel,
+    'model': model,
   };
-  
+
   /// Create DeviceInfo from JSON
+  ///
+  /// `model` is absent from every record written before it existed; a missing
+  /// key reads as null, which [DeviceProfile.forStoredModel] maps to the Move
+  /// profile. No migration is needed.
   factory DeviceInfo.fromJson(Map<String, dynamic> json) => DeviceInfo(
     macAddress: json['macAddress'] as String,
     deviceName: json['deviceName'] as String,
     nickname: (json['nickname'] as String?) ?? '',
     firstPaired: DateTime.parse(json['firstPaired'] as String),
-    lastConnected: json['lastConnected'] != null 
+    lastConnected: json['lastConnected'] != null
         ? DateTime.parse(json['lastConnected'] as String)
         : null,
     firmwareVersion: json['firmwareVersion'] as String?,
     batteryLevel: json['batteryLevel'] as int?,
+    model: json['model'] as String?,
   );
-  
+
   /// Create a copy with updated fields
   DeviceInfo copyWith({
     String? macAddress,
@@ -56,6 +77,7 @@ class DeviceInfo {
     DateTime? lastConnected,
     String? firmwareVersion,
     int? batteryLevel,
+    String? model,
   }) {
     return DeviceInfo(
       macAddress: macAddress ?? this.macAddress,
@@ -65,6 +87,7 @@ class DeviceInfo {
       lastConnected: lastConnected ?? this.lastConnected,
       firmwareVersion: firmwareVersion ?? this.firmwareVersion,
       batteryLevel: batteryLevel ?? this.batteryLevel,
+      model: model ?? this.model,
     );
   }
   

@@ -11,6 +11,7 @@ import '../ble/device_info.dart';
 import 'ble_dis_transport.dart';
 import 'connection_manager.dart';
 import 'database_helper.dart';
+import 'device_manager.dart';
 import 'device_time_service.dart';
 import 'firmware_update_checker.dart';
 import 'healthy_store_client.dart';
@@ -457,6 +458,13 @@ class HealthyStoreSyncManager {
     if (hello.uid.isNotEmpty && hello.dev.isNotEmpty && hello.dev != device) {
       await db.rekeyHealthyStoreDevice(hello.dev, device);
     }
+
+    // Which product this is. `HELLO.dev` is the authoritative source — it comes
+    // from the device's own firmware over SMP, unlike the advertised name, which
+    // is user-settable. Persisting it here means the profile is available
+    // offline at first frame, which is what the UI needs; a no-op when unchanged
+    // (see DeviceManager.updateModel), so this costs nothing on repeat syncs.
+    unawaited(DeviceManager.updateModel(hello.dev));
 
     onStatus('Reading registry…');
     _emit(0.06, SyncState.downloading, 'Reading registry…');
