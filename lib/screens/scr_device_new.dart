@@ -265,7 +265,7 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
           ),
           const SizedBox(height: 12),
           Text(
-            'FW ${device.firmwareVersion ?? "—"} · ${device.macAddress}',
+            _versionLine(device),
             style: HpiText.mono.copyWith(fontSize: 10.5),
           ),
           if (battery != null) ...[
@@ -389,6 +389,22 @@ class _ScrDeviceNewState extends State<ScrDeviceNew> {
   }
 
   /// The firmware row's second line. Falls back to the stored version when we
+  /// The identity line under the hero: firmware version(s) and the device id.
+  ///
+  /// A two-SoC device gets **two** versions, labelled. Move Ultralight's radio
+  /// (nRF54L15) owns DIS while the samples come from an STM32U595 behind an SMP
+  /// relay, and the two carry independently-updatable images — so a single "FW
+  /// x.y.z" would be a claim the app cannot support, and would hide which half
+  /// an update actually covers.
+  String _versionLine(DeviceInfo device) {
+    final radio = device.firmwareVersion ?? '—';
+    final sensor = device.sensorFirmwareVersion;
+    if (sensor == null || sensor.isEmpty) {
+      return 'FW $radio · ${device.macAddress}';
+    }
+    return 'RADIO $radio · SENSOR $sensor · ${device.macAddress}';
+  }
+
   /// have no verdict — an unknown state must read exactly as it did before the
   /// check existed, never as "up to date".
   String _firmwareSupporting(FirmwareUpdateStatus status, DeviceInfo device) {

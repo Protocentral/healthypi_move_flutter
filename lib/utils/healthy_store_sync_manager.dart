@@ -521,6 +521,21 @@ class HealthyStoreSyncManager {
     // (see DeviceManager.updateModel), so this costs nothing on repeat syncs.
     unawaited(DeviceManager.updateModel(hello.dev));
 
+    // The store-owning SoC's own firmware version, on products where DIS cannot
+    // answer that. On Move Ultralight the nRF54 radio owns DIS, so `0x2A26` is
+    // the radio's version while these samples came from the STM32. Empty on
+    // single-SoC products, where the call is a no-op.
+    unawaited(DeviceManager.updateSensorFirmwareVersion(hello.fw));
+
+    // Whether the device's clock is actually set. Without this a client cannot
+    // tell "nothing recorded yet" from "everything is being discarded because
+    // there is no RTC" — and only the first is fixed by waiting.
+    if (hello.clockValid == false) {
+      debugPrint('[HS-Sync] ⚠ device reports its RTC is NOT set — samples it '
+          'records now cannot be placed on a clock');
+      onStatus('Device clock not set');
+    }
+
     onStatus('Reading registry…');
     _emit(0.06, SyncState.downloading, 'Reading registry…');
 

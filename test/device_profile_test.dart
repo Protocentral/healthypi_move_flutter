@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:move/ble/device_generation.dart';
 import 'package:move/device/device_capabilities.dart';
 import 'package:move/device/device_profile.dart';
 import 'package:move/globals.dart';
@@ -198,6 +199,62 @@ void main() {
     test('copyWith carries the model forward', () {
       final info = sample(model: DeviceProfile.devUltralight);
       expect(info.copyWith(nickname: 'Band').model, DeviceProfile.devUltralight);
+    });
+  });
+
+  group('two-SoC firmware versions', () {
+    DeviceInfo twoSoc() => DeviceInfo(
+          macAddress: 'AA:BB',
+          deviceName: 'MoveUL B2E66E',
+          firstPaired: DateTime.utc(2026, 1, 1),
+          model: DeviceProfile.devUltralight,
+          firmwareVersion: '1.2.0', // DIS 0x2A26 — the nRF54 radio
+          sensorFirmwareVersion: '0.9.1', // HELLO.fw — the STM32 store owner
+        );
+
+    test('the two versions are stored separately', () {
+      // Collapsing them would report one number for two independently-updatable
+      // images, and hide which half an update covers.
+      final info = twoSoc();
+      expect(info.firmwareVersion, '1.2.0');
+      expect(info.sensorFirmwareVersion, '0.9.1');
+    });
+
+    test('both round-trip through JSON', () {
+      final back = DeviceInfo.fromJson(twoSoc().toJson());
+      expect(back.firmwareVersion, '1.2.0');
+      expect(back.sensorFirmwareVersion, '0.9.1');
+    });
+
+    test('a record predating the field reads as null, not empty', () {
+      final legacy = twoSoc().toJson()..remove('sensorFirmwareVersion');
+      expect(DeviceInfo.fromJson(legacy).sensorFirmwareVersion, isNull);
+      // ...and the DIS version is untouched, so a Move is unaffected.
+      expect(DeviceInfo.fromJson(legacy).firmwareVersion, '1.2.0');
+    });
+
+    test('copyWith carries the sensor version forward', () {
+      expect(twoSoc().copyWith(batteryLevel: 80).sensorFirmwareVersion, '0.9.1');
+    });
+
+    test('both parse as comparable versions', () {
+      // HELLO.fw must be plain semver: the app compares ordinally, and anything
+      // unparseable becomes DeviceGeneration.unknown, which refuses to offer an
+      // update rather than guessing at a bootloader.
+      final radio = FirmwareVersion.tryParse(twoSoc().firmwareVersion);
+      final sensor = FirmwareVersion.tryParse(twoSoc().sensorFirmwareVersion);
+      expect(radio, isNotNull);
+      expect(sensor, isNotNull);
+      expect(sensor! < radio!, isTrue);
+    });
+
+    test('a decorated version string is rejected, not half-parsed', () {
+      for (final bad in ['nRF54 1.0.0', '1.0.0 (stm32)', '1.0.0/0.9.2']) {
+        expect(FirmwareVersion.tryParse(bad), isNull, reason: bad);
+      }
+      // Build metadata and a leading v are fine.
+      expect(FirmwareVersion.tryParse('1.0.0+7'), const FirmwareVersion(1, 0, 0));
+      expect(FirmwareVersion.tryParse('v1.0.0'), const FirmwareVersion(1, 0, 0));
     });
   });
 

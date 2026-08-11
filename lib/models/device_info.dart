@@ -27,6 +27,23 @@ class DeviceInfo {
   /// firmware and is what a support log should show.
   final String? model;
 
+  /// Firmware version of the SoC that owns the health store, from `HELLO.fw`.
+  ///
+  /// Null on single-SoC products and on firmware that predates the field, where
+  /// [firmwareVersion] (DIS `0x2A26`) already answers the question.
+  ///
+  /// Move Ultralight needs both: the nRF54L15 radio terminates the connection
+  /// and owns DIS, so `0x2A26` is the **radio's** version, while the samples are
+  /// produced by an STM32U595 behind an SMP relay. Showing one number for a
+  /// device with two independently-updatable images would be a claim the app
+  /// cannot support.
+  ///
+  /// Cached here — rather than read live — because the firmware-update check is
+  /// deliberately radio-free: it runs at app start on whatever the last sync
+  /// stored. A version that only ever exists inside an SMP session would be
+  /// invisible to it.
+  final String? sensorFirmwareVersion;
+
   DeviceInfo({
     required this.macAddress,
     required this.deviceName,
@@ -36,6 +53,7 @@ class DeviceInfo {
     this.firmwareVersion,
     this.batteryLevel,
     this.model,
+    this.sensorFirmwareVersion,
   });
 
   /// Convert DeviceInfo to JSON for storage
@@ -48,6 +66,7 @@ class DeviceInfo {
     'firmwareVersion': firmwareVersion,
     'batteryLevel': batteryLevel,
     'model': model,
+    'sensorFirmwareVersion': sensorFirmwareVersion,
   };
 
   /// Create DeviceInfo from JSON
@@ -66,6 +85,7 @@ class DeviceInfo {
     firmwareVersion: json['firmwareVersion'] as String?,
     batteryLevel: json['batteryLevel'] as int?,
     model: json['model'] as String?,
+    sensorFirmwareVersion: json['sensorFirmwareVersion'] as String?,
   );
 
   /// Create a copy with updated fields
@@ -78,6 +98,7 @@ class DeviceInfo {
     String? firmwareVersion,
     int? batteryLevel,
     String? model,
+    String? sensorFirmwareVersion,
   }) {
     return DeviceInfo(
       macAddress: macAddress ?? this.macAddress,
@@ -88,6 +109,8 @@ class DeviceInfo {
       firmwareVersion: firmwareVersion ?? this.firmwareVersion,
       batteryLevel: batteryLevel ?? this.batteryLevel,
       model: model ?? this.model,
+      sensorFirmwareVersion:
+          sensorFirmwareVersion ?? this.sensorFirmwareVersion,
     );
   }
   

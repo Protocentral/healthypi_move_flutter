@@ -18,6 +18,8 @@ class HsProbeResult {
     this.schema,
     this.group,
     this.dev,
+    this.fw,
+    this.clockValid,
     this.uid,
     this.head,
     this.typeCount,
@@ -45,8 +47,18 @@ class HsProbeResult {
   final int? schema;
   final int? group;
 
-  /// Model string — always "healthypi-move", identical on every unit.
+  /// Product model string, e.g. `healthypi-move` / `healthypi-move-ultralight`.
+  /// Identical on every unit of a product — it identifies the model, not the
+  /// device.
   final String? dev;
+
+  /// Firmware version of the SoC that owns the store (`HELLO.fw`), on products
+  /// where DIS describes a different processor. Empty/null otherwise.
+  final String? fw;
+
+  /// Whether the device says its RTC is set. Null when the firmware does not
+  /// report it — which is not the same as "not set".
+  final bool? clockValid;
 
   /// Per-unit device id; the key the local sample store is written under.
   final String? uid;
@@ -132,6 +144,8 @@ class HealthyStoreProbe {
         schema: hello.schema,
         group: hello.group,
         dev: hello.dev,
+        fw: hello.fw,
+        clockValid: hello.clockValid,
         uid: hello.uid,
         head: hello.head,
         typeCount: hello.types,

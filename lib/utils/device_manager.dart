@@ -75,6 +75,28 @@ class DeviceManager {
     print('DeviceManager: device model resolved to "$trimmed"');
   }
 
+  /// Record the store-owning SoC's firmware version, from `HELLO.fw`.
+  ///
+  /// Separate from [updateFirmwareVersion], which caches the DIS revision
+  /// (`0x2A26`). On a two-SoC product those are **different processors**: DIS
+  /// belongs to the radio that terminates the connection, while `fw` belongs to
+  /// the one that produced the samples. Collapsing them would report one version
+  /// for two independently-updatable images.
+  ///
+  /// Same no-op-when-unchanged discipline as [updateModel]: this runs on every
+  /// sync, and writing unconditionally would bump [pairingRevision] each time.
+  static Future<void> updateSensorFirmwareVersion(String? fw) async {
+    final trimmed = fw?.trim();
+    if (trimmed == null || trimmed.isEmpty) return;
+
+    final deviceInfo = await getPairedDevice();
+    if (deviceInfo == null) return;
+    if (deviceInfo.sensorFirmwareVersion == trimmed) return;
+
+    await savePairedDevice(deviceInfo.copyWith(sensorFirmwareVersion: trimmed));
+    print('DeviceManager: sensor-core firmware "$trimmed"');
+  }
+
   /// Save paired device information
   static Future<void> savePairedDevice(DeviceInfo deviceInfo) async {
     final prefs = await SharedPreferences.getInstance();

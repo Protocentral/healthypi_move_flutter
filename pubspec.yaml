@@ -50,6 +50,20 @@ dependencies:
       url: https://github.com/Protocentral/healthy_store_dart.git
       ref: v0.2.0
 
+# ⚠️ TEMPORARY — REMOVE BEFORE MERGE OR RELEASE.
+#
+# `HsHello.fw` (the store-owning SoC's firmware version, for Move Ultralight's
+# two-SoC layout) and `HsHello.clockValid` land in healthy_store_dart 0.3.0,
+# which is committed locally but not yet tagged or pushed. This points the build
+# at that checkout so the app side can be written and tested against it.
+#
+# To resolve: push and tag healthy_store_dart v0.3.0, bump `ref:` above to it,
+# and delete this block. Per the note above, the override exists so the pinned
+# ref never has to be loosened to a branch.
+dependency_overrides:
+  healthypi_healthy_store:
+    path: ../healthy_store_dart
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

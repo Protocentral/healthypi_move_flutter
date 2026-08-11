@@ -728,6 +728,21 @@ class _ScrDeveloperState extends State<ScrDeveloper> {
             _kv('schema', '${p.schema}'),
             _kv('group', '${p.group}'),
             _kv('dev (model)', p.dev ?? '—'),
+            // The store-owning SoC's firmware. On a two-SoC product DIS 0x2A26
+            // is the *radio's* version, so without this there is no way to see
+            // which build actually produced the samples.
+            _kv('fw (sensor core)',
+                (p.fw?.isNotEmpty ?? false) ? p.fw! : '— (DIS only)'),
+            // "Not set" and "not reported" are different answers, and a device
+            // with no clock silently discards everything it records.
+            _kv(
+                'clock (RTC set)',
+                switch (p.clockValid) {
+                  true => 'yes',
+                  false => 'NO — samples are being dropped',
+                  null => 'not reported',
+                },
+                warn: p.clockValid == false),
             _kv('uid (store key)', (p.uid?.isNotEmpty ?? false) ? p.uid! : '—',
                 warn: !(p.uid?.isNotEmpty ?? false)),
             _kv('head (newest seq)', '${p.head}'),
