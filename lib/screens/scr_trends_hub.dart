@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../data/health_repository.dart';
+import '../device/device_profile.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/adaptive/breakpoints.dart';
@@ -31,6 +32,9 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   BloodPressureView? _bp;
   String _selected = 'hr';
 
+  /// Which product is paired, and therefore which sections this hub has.
+  DeviceProfile _profile = DeviceManager.activeProfile.value;
+
   static const _real = ['hr', 'spo2', 'temp', 'activity'];
 
   @override
@@ -40,6 +44,7 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
     // the paired device changes, not just once on first build.
     HealthyStoreSyncManager.dataRevision.addListener(_load);
     DeviceManager.pairingRevision.addListener(_load);
+    DeviceManager.activeProfile.addListener(_onProfileChanged);
     _load();
   }
 
@@ -47,13 +52,27 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
   void dispose() {
     HealthyStoreSyncManager.dataRevision.removeListener(_load);
     DeviceManager.pairingRevision.removeListener(_load);
+    DeviceManager.activeProfile.removeListener(_onProfileChanged);
     super.dispose();
+  }
+
+  void _onProfileChanged() {
+    if (!mounted) return;
+    setState(() => _profile = DeviceManager.activeProfile.value);
   }
 
   void _load() {
     _repo.loadHome().then((d) {
       if (mounted) setState(() => _dash = d);
     });
+    if (mounted) setState(() => _profile = DeviceManager.activeProfile.value);
+    // Skip the query outright on hardware with no BP sensor — an empty result
+    // rendered as "not set up" reads as "you haven't calibrated yet", which is
+    // not true and is not something the user can act on.
+    if (!_profile.hasBloodPressure) {
+      if (mounted) setState(() => _bp = null);
+      return;
+    }
     _repo.loadBloodPressure().then((v) {
       if (mounted) setState(() => _bp = v);
     });
@@ -130,10 +149,19 @@ class _ScrTrendsHubState extends State<ScrTrendsHub> {
         HpiSectionLabel(_trend('stress').hasData
             ? 'DERIVED'
             : 'DERIVED · NOT YET AVAILABLE'),
-        HpiGroupedCard(rows: [_row('stress', expanded), _row('eda', expanded)]),
-        const SizedBox(height: 12),
-        const HpiSectionLabel('SPOT'),
-        HpiGroupedCard(rows: [_bpRow()]),
+        HpiGroupedCard(rows: [
+          _row('stress', expanded),
+          if (_profile.hasGsrEda) _row('eda', expanded),
+        ]),
+        // The SPOT section exists only for products with a finger sensor. On a
+        // band it is not an empty section or a dim row — it is absent. Blood
+        // pressure is the app's one regulated surface, and an affordance for a
+        // measurement the hardware cannot make is worse than a missing feature.
+        if (_profile.hasBloodPressure) ...[
+          const SizedBox(height: 12),
+          const HpiSectionLabel('SPOT'),
+          HpiGroupedCard(rows: [_bpRow()]),
+        ],
       ],
     );
   }
