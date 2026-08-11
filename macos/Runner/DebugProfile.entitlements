@@ -6,6 +6,13 @@
 	<true/>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- Without this the sandbox blocks CoreBluetooth outright: the app launches,
+	     reports no adapter, and every scan returns nothing. That reads as broken
+	     app code rather than a missing entitlement, which is why it is called out
+	     here. macOS is the primary manual-test target for this app precisely
+	     because it gives a real BLE host plus a real sqflite. -->
+	<key>com.apple.security.device.bluetooth</key>
+	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
 </dict>
