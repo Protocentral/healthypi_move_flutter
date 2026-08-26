@@ -28,4 +28,4 @@ library;
 /// real recording that the header's `sampleFormat` is `2` (uint16) and that
 /// `nSamples` counts intervals rather than bytes — the decode and every duration
 /// shown in the UI depend on both. See `HsRecording.isIntervalSeries`.
-const bool kHrvRecordsEnabled = false;
+const bool kHrvRecordsEnabled = true;

@@ -53,7 +53,19 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   @override
   void initState() {
     super.initState();
-    _samples = HsRecordSamples.decode(widget.recording.header, widget.payload);
+    final data =
+        widget.recording.kind == HsRecordingKind.hrv
+            ? [decodeHrvIntervals(widget.payload)]
+            : HsRecordSamples.decode(
+              widget.recording.header,
+              widget.payload,
+            ).data;
+    _samples = HsRecordSamples(
+      channels: 1,
+      data: data,
+      bytesPerSample: 2,
+      assumed: false,
+    );
     _computeHrv();
   }
 
@@ -119,16 +131,16 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   }
 
   Future<void> _exportCsv() => _export(
-        (m) => m.exportCsv(widget.recording, widget.payload),
-        'HealthyPi recording',
-      );
+    (m) => m.exportCsv(widget.recording, widget.payload),
+    'HealthyPi recording',
+  );
 
   /// Export the R-R intervals this screen derived from the ECG — the reference
   /// series for validating the watch's own HRV against a known-good source.
   Future<void> _exportRr() => _export(
-        (m) => m.exportEcgRrCsv(widget.recording, widget.payload),
-        'HealthyPi ECG-derived R-R intervals',
-      );
+    (m) => m.exportEcgRrCsv(widget.recording, widget.payload),
+    'HealthyPi ECG-derived R-R intervals',
+  );
 
   Future<void> _export(
     Future<File> Function(HealthyStoreRecordsManager m) build,
@@ -140,13 +152,17 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     try {
       final file = await build(m);
       if (!mounted) return;
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)], text: shareText));
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: shareText),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text('Export failed: $e'),
-            backgroundColor: HpiColors.error));
+            backgroundColor: HpiColors.error,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -161,8 +177,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     return Scaffold(
       backgroundColor: HpiColors.background,
       appBar: AppBar(
-        title: Text('${s.kindLabel} · '
-            '${_dur(_isRr ? _rrDurationSeconds : s.durationSeconds)}'),
+        title: Text(
+          '${s.kindLabel} · '
+          '${_dur(_isRr ? _rrDurationSeconds : s.durationSeconds)}',
+        ),
       ),
       body: SafeArea(
         child: ListView(
@@ -198,9 +216,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
               if (_hrv != null) _hrvCard(_hrv!),
               const SizedBox(height: 16),
               HpiFilledButton(
-                label: _exporting
-                    ? 'Exporting…'
-                    : 'Export CSV · ${_size(widget.payload.length)}',
+                label:
+                    _exporting
+                        ? 'Exporting…'
+                        : 'Export CSV · ${_size(widget.payload.length)}',
                 icon: Symbols.download,
                 onPressed: _exporting ? null : _exportCsv,
               ),
@@ -244,8 +263,8 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
               return GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTapDown: (d) => _moveWindow(d.localPosition.dx / w),
-                onHorizontalDragUpdate: (d) =>
-                    _moveWindow(d.localPosition.dx / w),
+                onHorizontalDragUpdate:
+                    (d) => _moveWindow(d.localPosition.dx / w),
                 child: SizedBox(
                   height: 52,
                   child: CustomPaint(
@@ -265,8 +284,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('0:00', style: HpiText.mono.copyWith(fontSize: 9)),
-              Text(_dur(widget.recording.durationSeconds),
-                  style: HpiText.mono.copyWith(fontSize: 9)),
+              Text(
+                _dur(widget.recording.durationSeconds),
+                style: HpiText.mono.copyWith(fontSize: 9),
+              ),
             ],
           ),
         ],
@@ -276,8 +297,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
 
   void _moveWindow(double centerFraction) {
     final half = _windowWidth / 2;
-    setState(() => _windowStart =
-        (centerFraction - half).clamp(0.0, 1.0 - _windowWidth));
+    setState(
+      () =>
+          _windowStart = (centerFraction - half).clamp(0.0, 1.0 - _windowWidth),
+    );
   }
 
   Widget _detailCard({required bool multi}) {
@@ -288,12 +311,16 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
         children: [
           Row(
             children: [
-              Text(widget.recording.kindLabel.toUpperCase(),
-                  style: HpiText.sectionLabel.copyWith(color: _signalColor)),
+              Text(
+                widget.recording.kindLabel.toUpperCase(),
+                style: HpiText.sectionLabel.copyWith(color: _signalColor),
+              ),
               const Spacer(),
               if (multi)
                 Text(
-                  [for (var i = 0; i < _channels.length; i++) 'CH$i'].join('  '),
+                  [
+                    for (var i = 0; i < _channels.length; i++) 'CH$i',
+                  ].join('  '),
                   style: HpiText.mono.copyWith(fontSize: 9.5),
                 ),
             ],
@@ -304,9 +331,10 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
             child: CustomPaint(
               painter: _DetailPainter(
                 channels: _channels,
-                colors: multi
-                    ? const [HpiColors.hr, HpiColors.spo2, HpiColors.eda]
-                    : [_signalColor],
+                colors:
+                    multi
+                        ? const [HpiColors.hr, HpiColors.spo2, HpiColors.eda]
+                        : [_signalColor],
                 windowStart: _windowStart,
                 windowWidth: _windowWidth,
               ),
@@ -336,7 +364,9 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
         height: 30,
         alignment: Alignment.center,
         decoration: const BoxDecoration(
-            color: HpiColors.chipBg, shape: BoxShape.circle),
+          color: HpiColors.chipBg,
+          shape: BoxShape.circle,
+        ),
         child: Icon(icon, size: 16, color: HpiColors.onSurfaceBright),
       ),
     );
@@ -361,19 +391,23 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     final ch = _channels.first;
     final peak = ch.fold<double>(0, (a, b) => b.abs() > a ? b.abs() : a);
     final mean = ch.reduce((a, b) => a + b) / ch.length;
-    return Row(children: [
-      Expanded(
+    return Row(
+      children: [
+        Expanded(
           child: HpiStatChip(
-              value: peak.toStringAsFixed(0),
-              label: 'Peak',
-              valueColor: _signalColor)),
-      const SizedBox(width: 10),
-      Expanded(
-          child: HpiStatChip(value: mean.toStringAsFixed(0), label: 'Mean')),
-      const SizedBox(width: 10),
-      Expanded(
-          child: HpiStatChip(value: '${ch.length}', label: 'Samples')),
-    ]);
+            value: peak.toStringAsFixed(0),
+            label: 'Peak',
+            valueColor: _signalColor,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: HpiStatChip(value: mean.toStringAsFixed(0), label: 'Mean'),
+        ),
+        const SizedBox(width: 10),
+        Expanded(child: HpiStatChip(value: '${ch.length}', label: 'Samples')),
+      ],
+    );
   }
 
   /// HRV spot check.
@@ -417,38 +451,54 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
               style: HpiText.body.copyWith(fontSize: 12, height: 1.4),
             )
           else ...[
-            Row(children: [
-              Expanded(
+            Row(
+              children: [
+                Expanded(
                   child: HpiStatChip(
-                      value: m.rmssdMs.toStringAsFixed(1),
-                      label: 'RMSSD ms',
-                      valueColor: HpiColors.stress)),
-              const SizedBox(width: 10),
-              Expanded(
+                    value: m.rmssdMs.toStringAsFixed(1),
+                    label: 'RMSSD ms',
+                    valueColor: HpiColors.stress,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
                   child: HpiStatChip(
-                      value: m.sdnnMs.toStringAsFixed(1), label: 'SDNN ms')),
-              const SizedBox(width: 10),
-              Expanded(
+                    value: m.sdnnMs.toStringAsFixed(1),
+                    label: 'SDNN ms',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
                   child: HpiStatChip(
-                      value: m.meanHrBpm.toStringAsFixed(0),
-                      label: 'Mean HR',
-                      valueColor: HpiColors.hr)),
-            ]),
+                    value: m.meanHrBpm.toStringAsFixed(0),
+                    label: 'Mean HR',
+                    valueColor: HpiColors.hr,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
+            Row(
+              children: [
+                Expanded(
                   child: HpiStatChip(
-                      value: '${(m.pnn50 * 100).toStringAsFixed(0)}%',
-                      label: 'pNN50')),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: HpiStatChip(value: '${m.beats}', label: 'Beats')),
-              const SizedBox(width: 10),
-              Expanded(
+                    value: '${(m.pnn50 * 100).toStringAsFixed(0)}%',
+                    label: 'pNN50',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: HpiStatChip(value: '${m.beats}', label: 'Beats'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
                   child: HpiStatChip(
-                      value: '${(m.artifactFraction * 100).toStringAsFixed(0)}%',
-                      label: 'Artifacts')),
-            ]),
+                    value: '${(m.artifactFraction * 100).toStringAsFixed(0)}%',
+                    label: 'Artifacts',
+                  ),
+                ),
+              ],
+            ),
             if (rr != null && rr.rrMs.length > 1) ...[
               const SizedBox(height: 14),
               const HpiSectionLabel('TACHOGRAM · R-R INTERVAL'),
@@ -457,7 +507,9 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
                 height: 88,
                 child: CustomPaint(
                   painter: _TachogramPainter(
-                      rr.rrMs, derived ? HpiColors.hr : HpiColors.stress),
+                    rr.rrMs,
+                    derived ? HpiColors.hr : HpiColors.stress,
+                  ),
                 ),
               ),
             ],
@@ -486,9 +538,11 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
           const SizedBox(height: 12),
           Text('No samples decoded', style: HpiText.appBarTitle),
           const SizedBox(height: 6),
-          Text('This payload had no readable samples for the header shape.',
-              textAlign: TextAlign.center,
-              style: HpiText.body.copyWith(fontSize: 12)),
+          Text(
+            'This payload had no readable samples for the header shape.',
+            textAlign: TextAlign.center,
+            style: HpiText.body.copyWith(fontSize: 12),
+          ),
         ],
       ),
     );
@@ -504,14 +558,25 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
   String _clock(int seconds) =>
       '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 
-  String _size(int bytes) => bytes >= 1 << 20
-      ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
-      : '${(bytes / 1024).toStringAsFixed(0)} kB';
+  String _size(int bytes) =>
+      bytes >= 1 << 20
+          ? '${(bytes / (1 << 20)).toStringAsFixed(1)} MB'
+          : '${(bytes / 1024).toStringAsFixed(0)} kB';
 
   String _when(DateTime dt) {
     final months = const [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
     final amPm = dt.hour >= 12 ? 'PM' : 'AM';
@@ -549,9 +614,10 @@ class _TachogramPainter extends CustomPainter {
         size.height * (1 - ((v - (mid - span / 2)) / span).clamp(0.0, 1.0));
     double x(int i) => size.width * i / (rrMs.length - 1);
 
-    final grid = Paint()
-      ..color = HpiColors.divider
-      ..strokeWidth = 1;
+    final grid =
+        Paint()
+          ..color = HpiColors.divider
+          ..strokeWidth = 1;
     for (var i = 1; i < 3; i++) {
       final gy = size.height * i / 3;
       canvas.drawLine(Offset(0, gy), Offset(size.width, gy), grid);
@@ -582,7 +648,10 @@ class _TachogramPainter extends CustomPainter {
       text: TextSpan(
         text: '${lo.round()}–${hi.round()} ms',
         style: const TextStyle(
-            fontFamily: 'Rubik', fontSize: 9, color: HpiColors.faint),
+          fontFamily: 'Rubik',
+          fontSize: 9,
+          color: HpiColors.faint,
+        ),
       ),
       textDirection: TextDirection.ltr,
     )..layout();
@@ -681,9 +750,10 @@ class _DetailPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (channels.isEmpty || channels.first.isEmpty) return;
 
-    final grid = Paint()
-      ..color = HpiColors.divider
-      ..strokeWidth = 1;
+    final grid =
+        Paint()
+          ..color = HpiColors.divider
+          ..strokeWidth = 1;
     for (var i = 1; i < 4; i++) {
       final y = size.height * i / 4;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);

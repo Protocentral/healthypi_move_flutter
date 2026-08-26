@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'dart:typed_data';
+
 import '../globals.dart';
 import '../models/hs_recording.dart';
 import 'connection_manager.dart';
@@ -15,6 +17,128 @@ import 'database_helper.dart';
 import 'healthy_store_client.dart';
 import 'hrv_analysis.dart';
 import 'signal_view.dart';
+
+/// Single RR-run carried inside a larger HRV payload.
+class HrvRunBlock {
+  const HrvRunBlock({
+    required this.tStartMs,
+    required this.nBeats,
+    required this.tStopMs,
+    required this.totalSum,
+    required this.rr,
+    required this.confidence,
+  });
+
+  final int tStartMs;
+  final int nBeats;
+  final int tStopMs;
+  final int totalSum;
+  final List<int> rr;
+  final List<int> confidence;
+}
+
+/// Decode an HRV payload that is framed as repeated RR-run blocks.
+///
+/// Exact firmware header layout:
+///
+/// struct rr_run_header {
+///   uint32_t t_start_ms;
+///   uint16_t n_beats;
+///   uint32_t t_stop_ms;
+///   uint32_t total_sum;
+/// };
+///
+/// After the header comes `n_beats * uint16 rr[]` and `n_beats * uint8 conf[]`.
+/// `n_beats` is variable per block, so the parser advances by the header + RR
+/// + conf size rather than a fixed sample count.
+List<HrvRunBlock> decodeHrvRunBlocks(Uint8List payload) {
+  final bd = ByteData.sublistView(payload);
+  final runs = <HrvRunBlock>[];
+  var off = 0;
+
+  while (off + 8 <= payload.length) {
+    final tStartMs = bd.getUint32(off, Endian.little);
+    final nBeats = bd.getUint16(off + 4, Endian.little);
+
+    if (tStartMs == 0 && nBeats == 0) break;
+    if (nBeats == 0) break;
+
+    // Firmware packs the header as:
+    // [t_start_ms:4][n_beats:2][padding:2][t_stop_ms:4][total_sum:4]
+    // so the first 4 bytes of the field block are the 2-byte padding and the
+    // next 4 bytes are the stop time, followed by total_sum.
+    final tStopMs = bd.getUint32(off + 8, Endian.little);
+    final totalSum = bd.getUint32(off + 12, Endian.little);
+
+    final rrBytes = nBeats * 2;
+    final confBytes = nBeats;
+    final headerSize = 16;
+    final rrOffset = off + headerSize;
+
+    if (off + headerSize + rrBytes + confBytes > payload.length) break;
+
+    final rr = <int>[];
+    final conf = <int>[];
+    for (var i = 0; i < nBeats; i++) {
+      rr.add(bd.getUint16(rrOffset + (i * 2), Endian.little));
+      conf.add(bd.getUint8(rrOffset + rrBytes + i));
+    }
+
+    runs.add(HrvRunBlock(
+      tStartMs: tStartMs,
+      nBeats: nBeats,
+      tStopMs: tStopMs,
+      totalSum: totalSum,
+      rr: rr,
+      confidence: conf,
+    ));
+
+    // Keep the stop/sum fields for diagnostics, even though the parser only
+    // needs the run length to step forward.
+    debugPrint(
+      '[HRV] run start=$tStartMs stop=$tStopMs n=$nBeats totalSum=$totalSum',
+    );
+    off += headerSize + rrBytes + confBytes;
+  }
+
+  return runs;
+}
+
+List<double> decodeHrvIntervals(Uint8List payload) {
+  final runs = decodeHrvRunBlocks(payload);
+  if (runs.isEmpty) return const <double>[];
+  return [
+    for (final run in runs) ...[for (final v in run.rr) v.toDouble()],
+  ];
+}
+
+String formatHrvBlockData(Uint8List payload) {
+  final runs = decodeHrvRunBlocks(payload);
+  final out = StringBuffer();
+
+  if (runs.isEmpty) {
+    final rr = decodeHrvIntervals(payload);
+    final startMs = rr.isEmpty ? 0 : 0;
+    out.writeln(
+      '[HEADER: t_start_ms=$startMs n_beats=${rr.length} '
+      't_stop_ms=0 total_sum=0]',
+    );
+    out.writeln('[RR: ${rr.map((v) => v.round()).join(', ')}]');
+    out.writeln('[CONF: ${List.filled(rr.length, 100).join(', ')}]');
+    return out.toString().trimRight();
+  }
+
+  for (final run in runs) {
+    out.writeln(
+      '[HEADER: t_start_ms=${run.tStartMs} n_beats=${run.nBeats} '
+      't_stop_ms=${run.tStopMs} total_sum=${run.totalSum}]',
+    );
+    out.writeln('[RR: ${run.rr.join(', ')}]');
+    out.writeln('[CONF: ${run.confidence.join(', ')}]');
+  }
+
+  return out.toString().trimRight();
+}
 
 /// On-demand list / download / CRC / ack for HPI_HS **RECORDS** (episodic
 /// raw-signal sessions: ECG, GSR, PPG, HRV, IMU).
@@ -65,13 +189,16 @@ class HealthyStoreRecordsManager {
     if (!client.hasHealthyStore) {
       await client.disconnect();
       throw StateError(
-          'This watch does not expose the Healthy Store (HELLO failed). '
-          'Update firmware to use RECORDS.');
+        'This watch does not expose the Healthy Store (HELLO failed). '
+        'Update firmware to use RECORDS.',
+      );
     }
 
     _client = client;
-    debugPrint('[HS-Records] open dev=${client.hello!.storeKey} '
-        'mtu=${client.maxWriteLength}');
+    debugPrint(
+      '[HS-Records] open dev=${client.hello!.storeKey} '
+      'mtu=${client.maxWriteLength}',
+    );
   }
 
   Future<void> close() async {
@@ -106,9 +233,10 @@ class HealthyStoreRecordsManager {
         HsRecording(
           header: h,
           localPath: local[h.id]?['file_path'] as String?,
-          crcOk: local[h.id] == null
-              ? null
-              : (local[h.id]!['crc_ok'] as int? ?? 0) == 1,
+          crcOk:
+              local[h.id] == null
+                  ? null
+                  : (local[h.id]!['crc_ok'] as int? ?? 0) == 1,
           acked: (local[h.id]?['acked'] as int? ?? 0) == 1,
         ),
     ];
@@ -118,12 +246,14 @@ class HealthyStoreRecordsManager {
     for (final e in local.entries) {
       if (seen.contains(e.key)) continue;
       final row = e.value;
-      out.add(HsRecording(
-        header: _headerFromRow(row),
-        localPath: row['file_path'] as String?,
-        crcOk: (row['crc_ok'] as int? ?? 0) == 1,
-        acked: true,
-      ));
+      out.add(
+        HsRecording(
+          header: _headerFromRow(row),
+          localPath: row['file_path'] as String?,
+          crcOk: (row['crc_ok'] as int? ?? 0) == 1,
+          acked: true,
+        ),
+      );
     }
 
     out.sort((a, b) => b.startTs.compareTo(a.startTs));
@@ -226,11 +356,14 @@ class HealthyStoreRecordsManager {
   /// half-finished delete that reports failure is worse than an orphaned byte
   /// range the wipe sweep will collect later.
   Future<void> deleteLocal(HsRecording recording) async {
-    final device = _client?.hello?.storeKey ??
+    final device =
+        _client?.hello?.storeKey ??
         await _db.getHsRecordDeviceKey(recording.id) ??
         await _db.getHealthyStoreDeviceKey();
     if (device == null) {
-      throw StateError('No Healthy Store device key — nothing to delete under.');
+      throw StateError(
+        'No Healthy Store device key — nothing to delete under.',
+      );
     }
 
     final paths = await _db.deleteHsRecord(device, recording.id);
@@ -241,7 +374,8 @@ class HealthyStoreRecordsManager {
     try {
       final dir = await getApplicationDocumentsDirectory();
       paths.add(
-          '${dir.path}/hs_record_${recording.id}_${recording.kindLabel.toLowerCase()}.csv');
+        '${dir.path}/hs_record_${recording.id}_${recording.kindLabel.toLowerCase()}.csv',
+      );
     } catch (e) {
       debugPrint('[HS-Records] could not resolve export path: $e');
     }
@@ -296,7 +430,10 @@ class HealthyStoreRecordsManager {
       [
         'timestamp_utc',
         't_ms',
-        for (var c = 0; c < samples.channels; c++) ...['ch$c', 'ch${c}_detrended'],
+        for (var c = 0; c < samples.channels; c++) ...[
+          'ch$c',
+          'ch${c}_detrended',
+        ],
       ],
     ];
     final n = samples.sampleCount;
@@ -330,45 +467,10 @@ class HealthyStoreRecordsManager {
   /// rows — a researcher validating the watch needs to see the beats the filter
   /// rejected, not a quietly shortened file.
   Future<File> exportHrvCsv(HsRecording recording, Uint8List payload) async {
-    final samples = HsRecordSamples.decode(recording.header, payload);
-    final raw = samples.data.isEmpty ? const <double>[] : samples.data.first;
-    final start = recording.startTime.toUtc();
-    final accepted = RrSeries.filtered(raw).rrMs.toList();
-
-    // Walk the accepted list in step with the raw one to label each row.
-    var next = 0;
-    var elapsedMs = 0.0;
-
-    final rows = <List<dynamic>>[
-      [
-        'beat_index',
-        'timestamp_utc',
-        't_ms',
-        'rr_ms',
-        'instant_hr_bpm',
-        'rr_accepted',
-      ],
-    ];
-    for (var i = 0; i < raw.length; i++) {
-      final rr = raw[i];
-      final isAccepted = next < accepted.length && accepted[next] == rr;
-      if (isAccepted) next++;
-      elapsedMs += rr;
-      rows.add([
-        i,
-        start.add(Duration(microseconds: (elapsedMs * 1000).round()))
-            .toIso8601String(),
-        elapsedMs.toStringAsFixed(1),
-        rr.toStringAsFixed(1),
-        rr > 0 ? (60000 / rr).toStringAsFixed(2) : '',
-        isAccepted ? 1 : 0,
-      ]);
-    }
-
-    final csv = const ListToCsvConverter().convert(rows);
+    final formatted = formatHrvBlockData(payload);
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/hs_record_${recording.id}_hrv.csv');
-    await file.writeAsString(csv);
+    await file.writeAsString(formatted);
     return file;
   }
 
@@ -380,7 +482,8 @@ class HealthyStoreRecordsManager {
   /// they are the same shape.
   Future<File> exportEcgRrCsv(HsRecording recording, Uint8List payload) async {
     final samples = HsRecordSamples.decode(recording.header, payload);
-    final channel = samples.data.isEmpty ? const <double>[] : samples.data.first;
+    final channel =
+        samples.data.isEmpty ? const <double>[] : samples.data.first;
     final sr = recording.sampleRate;
     final peaks = detectRPeaks(channel, sampleRate: sr);
     final raw = rrIntervalsMs(peaks, sr);
@@ -410,7 +513,9 @@ class HealthyStoreRecordsManager {
       rows.add([
         i,
         sample,
-        start.add(Duration(microseconds: (tMs * 1000).round())).toIso8601String(),
+        start
+            .add(Duration(microseconds: (tMs * 1000).round()))
+            .toIso8601String(),
         tMs.toStringAsFixed(1),
         rr.toStringAsFixed(1),
         rr > 0 ? (60000 / rr).toStringAsFixed(2) : '',
@@ -432,7 +537,8 @@ class HealthyStoreRecordsManager {
   ) async {
     final appDir = await getApplicationDocumentsDirectory();
     final dir = Directory(
-        '${appDir.path}/HealthyPiRecordings/$device/hs_records');
+      '${appDir.path}/HealthyPiRecordings/$device/hs_records',
+    );
     if (!await dir.exists()) await dir.create(recursive: true);
     final file = File('${dir.path}/${header.id}.bin');
     await file.writeAsBytes(data, flush: true);
@@ -445,22 +551,19 @@ class HealthyStoreRecordsManager {
     String path,
     HsRecordDownload dl,
   ) async {
-    final duration = header.sampleRate > 0 && header.nSamples > 0
-        ? (header.nSamples / header.sampleRate).round()
-        : 0;
+    final duration =
+        header.sampleRate > 0 && header.nSamples > 0
+            ? (header.nSamples / header.sampleRate).round()
+            : 0;
     final mask = _signalMask(header.signal);
     await _db.insertResearchSession(
       deviceMac: device,
       sessionTimestamp: header.id,
       startTime: header.startTime.toLocal(),
-      endTime: header.startTime
-          .toLocal()
-          .add(Duration(seconds: duration)),
+      endTime: header.startTime.toLocal().add(Duration(seconds: duration)),
       durationSeconds: duration,
       signalMask: mask,
-      status: header.isPartial
-          ? 'partial'
-          : (dl.crcOk ? 'complete' : 'error'),
+      status: header.isPartial ? 'partial' : (dl.crcOk ? 'complete' : 'error'),
       totalSizeBytes: dl.data.length,
       syncStatus: dl.crcOk ? 'synced' : 'error',
     );
