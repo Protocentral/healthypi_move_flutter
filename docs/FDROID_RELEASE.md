@@ -66,24 +66,43 @@ Sources: [Inclusion Policy](https://f-droid.org/docs/Inclusion_Policy/),
 
 Findings against `main` at `c58ff7a` (3.0.8+96). Ordered by how much thought each needs.
 
-### 1. Firmware download — the one that needs a policy decision
+### 1. Firmware download — disclosure, not a licensing fix
 
 [`firmware_update_service.dart`](../lib/utils/firmware_update_service.dart) downloads
 watch firmware images from the `Protocentral/healthypi-move-fw` GitHub releases, and
-[`scr_dfu_new.dart`](../lib/screens/scr_dfu_new.dart) flashes them. Two distinct issues:
+[`scr_dfu_new.dart`](../lib/screens/scr_dfu_new.dart) flashes them.
 
-- **`healthypi-move-fw` is public but carries no licence file at all.** Unlicensed
-  means all rights reserved, so as things stand the app fetches a non-free binary.
-  Adding a licence to that repo is the cheap fix and is worth doing regardless.
-- F-Droid's "downloads executables without opt-in consent" rule exists for apps that
-  pull code they then *run on the phone*. Here the binary is flashed to a separate
-  device and never executed on Android, and the download is user-initiated (Device
-  tab → update). That is a good argument, but it is an argument to *make*, not to
-  assume. Expect to disclose it, and possibly to carry an anti-feature label such as
-  `NonFreeAssets` if the firmware stays unlicensed.
+**The firmware repo's licensing is in good order** — better than this one's. It is MIT
+(© 2019-2025 ProtoCentral) with a full REUSE-style breakdown: per-file
+`SPDX-License-Identifier` headers, licence texts in `LICENSES/`, a component-by-component
+`THIRD_PARTY.md`, and a `LICENSE.md` splitting hardware (CERN-OHL-P v2), software (MIT)
+and documentation (CC BY-SA 4.0). Nothing needs adding there.
 
-**Action:** licence the firmware repo, then raise the DFU flow explicitly in the merge
-request rather than waiting for a reviewer to find it.
+What remains is narrower and cannot be fixed by licensing, because it is upstream:
+
+- **Four files are `LicenseRef-Nordic-5-Clause`**, which the firmware's own `LICENSE`
+  correctly flags as **not OSI-approved** — redistribution is permitted only for use
+  with Nordic Semiconductor devices. Three are required (`Kconfig.sysbuild`, the nPM1300
+  fuel-gauge model, the ipc_radio and MCUboot configs). The fourth,
+  `app/linker_arm_extxip.ld`, is marked unused and safe to delete.
+- The **net-core image** the v3 DFU path uploads is the nRF5340's BLE controller, which
+  comes from the nRF Connect SDK as a Nordic-licensed binary.
+
+So the *app* is fully FLOSS, but a binary it can fetch is not. Worth stating clearly in
+the merge request: the image is never executed on Android, it is flashed to separate
+hardware, the download is user-initiated, and the genuinely proprietary parts of the
+system — the Analog Devices MAX32664C/D `.msbl` sensor-hub images — are **not**
+distributed by either repo (verified: `lib/` contains no `.msbl` handling at all).
+
+**Action:** disclose in the merge request and accept an anti-feature label
+(`NonFreeDep` or similar) if the reviewers want one. Do not wait for them to find it.
+
+One thing that *is* worth changing:
+[`firmware_update_checker.dart`](../lib/utils/firmware_update_checker.dart) polls the
+GitHub releases API automatically at start and resume behind a 6-hour cache. It is a
+modest, unauthenticated request and it never connects to the watch — but it is an
+automatic network call the user did not ask for, which reviewers do ask about. Put it
+behind a settings toggle.
 
 ### 2. `upgrader` queries the Play Store at runtime
 
@@ -194,18 +213,87 @@ CurrentVersion: 3.0.9
 CurrentVersionCode: 97
 ```
 
-## Suggested order of work
+## Plan
 
-1. Add a licence to `Protocentral/healthypi-move-fw`. Unblocks the only real question.
-2. Add `OFL.txt` for the four bundled fonts.
-3. Add the F-Droid build flavour that drops `upgrader`, with a local firmware-version
-   gate in its place.
-4. Adopt the `vX.Y.Z` tag scheme at the next release, and add a
-   `fastlane/…/changelogs/<versionCode>.txt` per release from then on.
-5. Add release screenshots under `fastlane/metadata/android/en-US/images/phoneScreenshots/`.
-6. Fork fdroiddata, finish the YAML above, run `fdroid lint` and `fdroid build`, submit.
-7. **In parallel — submit to IzzyOnDroid** (see below). It is far less work and it
-   answers the actual complaint in issue #45 much sooner.
+Three phases. Phase A is self-contained repo hygiene that is worth doing whether or not
+F-Droid ever happens. Phase B ships to IzzyOnDroid, which answers issue #45 in days
+rather than weeks. Phase C is the F-Droid merge request.
+
+### Phase A — repo hygiene (no release needed)
+
+**A1. Font licences.** Copy the pattern the firmware repo already uses. Add
+`assets/fonts/OFL.txt` (SIL OFL 1.1 covers JetBrains Mono, Manrope, Rubik and Saira —
+one shared text is fine, the licence requires the text travel with the fonts) and a
+top-level `THIRD_PARTY.md` itemising them plus `material_symbols_icons` (Apache-2.0,
+© Google). Half a day. Closes gap 3.
+
+**A2. Pin the Android SDK floors.** Replace `minSdk = flutter.minSdkVersion` /
+`targetSdk = flutter.targetSdkVersion` in
+[`android/app/build.gradle.kts`](../android/app/build.gradle.kts) with literals — `21`
+and the current target — so the documented Android 5.0 floor stops moving whenever the
+Flutter toolchain's default moves. Also confirm whether `ndkVersion = "28.2.13676358"`
+is actually needed; if nothing requires it, drop the pin rather than make F-Droid's
+buildserver match it. An hour, plus a build to verify. Closes most of gap 5.
+
+**A3. Make the firmware update check opt-in.** Add a settings toggle gating
+`FirmwareUpdateChecker.refresh()` so the automatic GitHub poll only happens if the user
+wants it. Manual "check now" from the Device tab stays regardless. Half a day. Closes
+the loose end in gap 1.
+
+**A4. Adopt one tag scheme.** `vX.Y.Z` from the next release, build number left to
+`pubspec.yaml`. Both release workflows trigger on `tags: ['*']`, so **nothing in CI
+breaks** — this is purely a convention change. Old tags stay; F-Droid only needs to
+find new ones. Write it down in the README or a `RELEASING.md`. An hour. Closes gap 4.
+
+### Phase B — IzzyOnDroid (the fast path to answering #45)
+
+**B1. Screenshots.** Capture 4-6 from a release build on a real paired device, no real
+personal health data, into
+`fastlane/metadata/android/en-US/images/phoneScreenshots/`. This is the only piece of
+fastlane metadata not already scaffolded on this branch.
+
+**B2. Verify the release APK is acceptable.** Signed with the release key (it is, via
+`KEYSTORE_BASE64` in CI), and neither `debuggable` nor `testOnly`. Confirm against the
+published 3.0.8+96 artefact rather than assuming.
+
+**B3. Submit.** Open the inclusion request with the source URL and the release APK
+location. No buildserver work, and because *you* keep signing, **no signature change
+and no uninstall for existing users**.
+
+**B4. Reply to issue #45** — Obtainium works today with the existing GitHub releases,
+IzzyOnDroid is in progress, F-Droid main is the longer track. That closes the loop with
+the two people who asked, one of whom only wanted a non-Play install route at all.
+
+### Phase C — F-Droid main
+
+**C1. Decouple from the Play listing.** Gate `upgrader` behind a compile-time flag —
+`bool.fromEnvironment('STORE_UPDATE_CHECKS', defaultValue: true)`, set false for the
+F-Droid build — and replace the mandatory-update path in
+[`lib/main.dart`](../lib/main.dart) with a local check. The app already learns the
+watch's firmware version from `HELLO`, so it can refuse a protocol mismatch without
+asking any store anything, which is a better gate than the store one even on Play.
+Two to three days including testing both paths. Closes gap 2.
+
+**C2. Prove the build.** Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata),
+finish the YAML above against a real `vX.Y.Z` tag, run `fdroid lint` and `fdroid build`
+locally or via their GitLab CI. Expect iteration here — the Flutter SDK pin, the NDK,
+and the `healthypi_healthy_store` git dependency are each a plausible first failure.
+
+**C3. Submit the merge request**, disclosing the DFU flow up front per gap 1.
+
+**C4. Document the migration.** Whichever way it lands, F-Droid signs with its own key,
+so switching from the Play build means uninstall — and with no backend, that **wipes
+every stored reading**. Make sure CSV export is reachable and say so in the release
+notes and store description. Revisit
+[reproducible builds](https://f-droid.gitlab.io/jekyll-fdroid/docs/Reproducible_Builds/)
+later if the uninstall proves to be a real obstacle; it lets F-Droid ship your signed
+APK instead. Closes gap 6.
+
+### What is not on the critical path
+
+Gap 1 needs no licensing work — the firmware repo is already in order. Phases A and B
+together are roughly a week and require no architectural change; C1 is the only item
+that touches app logic.
 
 ---
 
