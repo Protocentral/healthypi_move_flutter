@@ -177,35 +177,68 @@ That file is not read from this repository — it is the working copy of what go
 `metadata/com.protocentral.move.yml` in a fdroiddata fork — but it is versioned here so
 the recipe travels with the code it builds.
 
-Two deliberate departures from fdroiddata's `templates/build-flutter.yml`:
+**It carries no comments, deliberately.** fdroiddata's CI runs `fdroid rewritemeta` and
+fails the pipeline on any diff, and rewriting strips every comment and reorders keys —
+which is why the upstream template says, in capitals, to remove all comments before
+submitting. The file is kept byte-identical to `fdroid rewritemeta` output; everything
+that would have been a comment is in this section instead. After editing it, run:
+
+```sh
+fdroid rewritemeta com.protocentral.move   # must produce no diff
+fdroid lint com.protocentral.move          # must be silent
+```
+
+### Departures from the upstream Flutter template
 
 - The Flutter version is scraped from `.github/workflows/android-deploy.yml`, not the
   template's `release.yml`, which this repo does not have. The Android workflow's
   `flutter-version: '3.44.0'` is single-quoted, which is the form the template's regex
   expects; the iOS workflow uses double quotes, so it must not be pointed at that one.
+- **No `scanignore`.** The template's `.flutter/bin/cache` entry belongs to the
+  *submodule* method, where Flutter is checked out to `.flutter` inside the app. This
+  recipe uses *srclibs*, so Flutter lives in `build/srclib/flutter` and is reached
+  through `$$flutter$$` — that path never exists, and `fdroid` treats a `scanignore`
+  glob matching nothing as a hard error, not a warning. `scandelete` keeps `.pub-cache`,
+  which does exist because the build points `PUB_CACHE` into the tree so the scanner can
+  see the Dart packages.
 - The `/upstream/path` relocation dance is omitted. It exists to make the build path
   match upstream's for reproducible builds, which is gap 6's optional follow-up, not a
   requirement for acceptance.
 
-It builds `armeabi-v7a` and `arm64-v8a` with `--dart-define=STORE_UPDATE_CHECKS=false`,
-and takes versionName/versionCode from `pubspec.yaml` via `UpdateCheckData` rather than
-parsing them out of the tag.
+### versionCodes are not ours to choose
 
-**Verification status:** the build command is proven locally. Against a freshly
-installed Android SDK 36 / JDK 17 / AGP 8.11.1 toolchain it produces all three APKs,
-and the arm64 artifact reports `minSdkVersion 24`, `targetSdkVersion 36` and
-`debuggable false`. `flutter pub get --enforce-lockfile` passes against the committed
-`pubspec.lock`, which the template requires. No NDK was needed, confirming A2's removal
-of the `ndkVersion` pin.
+`flutter build apk --split-per-abi` stamps each APK with `abiCode * 1000 + the pubspec
+build number`, so 3.0.8+96 really produced **1096 / 2096 / 4096** — note x86_64 is 4,
+not 3. F-Droid's versionCodes must match what the APK actually carries, so
+`VercodeOperation` reproduces that arithmetic rather than the template's illustrative
+`%c * 10 + n`, which would have published codes no APK has.
 
-Building it caught a real error in the recipe. `--split-per-abi` does not leave the
-versionCode alone: Flutter stamps each APK with `abiCode * 1000 + build number`, so
-3.0.8+96 actually produced **1096 / 2096 / 4096** — and x86_64 is 4, not 3. The
-template's illustrative `%c * 10 + n` would have published versionCodes that no APK
-carries. `VercodeOperation` now reproduces Flutter's arithmetic instead.
+### Verification status
 
-Still unrun: `fdroid build` itself — the Debian buildserver, the `flutter` srclib
-checkout and the scanner. That needs a fdroiddata fork, not just an SDK.
+**`fdroid build` passes end to end**, on `fdroidserver` 2.4.5 against a real Android SDK
+36 / JDK 17 / AGP 8.11.1 toolchain:
+
+```
+Successfully built version 3.0.8 of com.protocentral.move from 5e7aa72
+1 build succeeded
+```
+
+It produces `unsigned/com.protocentral.move_2096.apk` — versionCode 2096 exactly as
+declared, arm64-v8a, unsigned (F-Droid signs at publish), `minSdkVersion 24`,
+`targetSdkVersion 36`. `flutter pub get --enforce-lockfile` passes against the committed
+`pubspec.lock`. No NDK is pulled in, confirming A2's removal of the `ndkVersion` pin.
+
+That run was on macOS, not the Debian buildserver, so it proves the **recipe** rather
+than the production environment — two of the failures along the way were host quirks
+rather than metadata bugs. The authoritative run is fdroiddata's own CI.
+
+### What running it actually caught
+
+Five errors, none visible in a file that parsed cleanly: the `VercodeOperation`
+arithmetic; the `scanignore` path; a `Changelog` URL needing `/HEAD` rather than
+`/main`; the comment stripping above; and a **committed upload keystore**
+(`android/akw-newkey`, public for ~18 months) that F-Droid's scanner refused to build
+around. The last one mattered more than the listing.
 
 ## Plan
 

@@ -1,30 +1,6 @@
-# F-Droid build metadata for HealthyPi Move.
-#
-# This file is NOT read from this repository. It is the working copy of what
-# goes to metadata/com.protocentral.move.yml in a fork of
-# https://gitlab.com/fdroid/fdroiddata, submitted as a merge request from a
-# branch named com.protocentral.move. It is kept here so the build recipe is
-# versioned alongside the code it builds.
-#
-# Adapted from templates/build-flutter.yml in fdroiddata. Two deliberate
-# departures from that template, both noted inline: the workflow filename the
-# Flutter version is scraped from, and the omission of the /upstream/path
-# relocation (only needed when chasing reproducible builds — see
-# docs/FDROID_RELEASE.md, gap 6).
-#
-# STATUS: the build command below is verified locally -- it produces all three
-# APKs from a clean Android SDK 36 / JDK 17 / AGP 8.11.1 toolchain, and the
-# arm64 artifact reports minSdkVersion 24, targetSdkVersion 36, debuggable
-# false. `fdroid build` itself (the Debian buildserver, the flutter srclib
-# checkout, the scanner) is still unrun -- that needs fdroiddata, not just an
-# SDK. No NDK was required, which confirms dropping the ndkVersion pin.
-#
-# Summary, description, icon, screenshots and changelogs are NOT set here.
-# F-Droid reads them from fastlane/metadata/android/en-US/ in the app repo.
-
 Categories:
-  - Sports & Health
   - Connectivity
+  - Sports & Health
 License: MIT
 AuthorName: ProtoCentral Electronics
 WebSite: https://www.protocentral.com
@@ -36,18 +12,11 @@ RepoType: git
 Repo: https://github.com/Protocentral/healthypi_move_flutter.git
 
 Builds:
-  # One block per ABI, in the same order as VercodeOperation below.
-  #
-  # The offsets are NOT ours to choose. `flutter build apk --split-per-abi`
-  # stamps each APK with abiCode * 1000 + the pubspec build number, so 3.0.8+96
-  # really produced 1096 / 2096 / 4096 -- note x86_64 is 4, not 3. F-Droid's
-  # versionCodes have to match what the APK actually carries or the published
-  # entry is wrong, so VercodeOperation reproduces that arithmetic rather than
-  # the template's `%c * 10 + n` illustration. Verified against built APKs.
   - versionName: 3.0.9
     versionCode: 1097
     commit: v3.0.9
     subdir: .
+    output: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
     srclibs:
       - flutter@stable
     rm:
@@ -57,41 +26,24 @@ Builds:
       - web
       - windows
     prebuild:
-      # The template scrapes .github/workflows/release.yml; this repo's Android
-      # workflow is android-deploy.yml. Its line is `flutter-version: '3.44.0'`
-      # (single-quoted), which is the form this regex expects. The ios workflow
-      # uses double quotes — do not point this at that one.
       - flutterVersion=$(sed -n -E "s/.*flutter-version:\ '(.*)'/\1/p" .github/workflows/android-deploy.yml)
       - '[[ $flutterVersion ]]'
       - git -C $$flutter$$ checkout -f $flutterVersion
-      # Keep pub's cache inside the build tree so the scanner sees it.
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
-      # --enforce-lockfile: build exactly what pubspec.lock pins, never resolve
-      # something newer at build time. Verified to pass against the committed
-      # lockfile.
       - $$flutter$$/bin/flutter pub get --enforce-lockfile
-    # No scanignore for the Flutter SDK: that entry only applies to the
-    # submodule method, which checks Flutter out to .flutter inside the app.
-    # With srclibs it lives in build/srclib/flutter and is reached through
-    # $$flutter$$, so `.flutter/bin/cache` matches nothing -- and fdroid treats
-    # a glob that matches nothing as a hard error, not a warning.
     scandelete:
       - .pub-cache
     build:
       - export PUB_CACHE=$(pwd)/.pub-cache
-      # STORE_UPDATE_CHECKS=false is what makes this build legitimate off a
-      # store: it stops `upgrader` querying the Play listing, which does not
-      # exist for an F-Droid install. See lib/feature_flags.dart.
-      - $$flutter$$/bin/flutter build apk --release --no-shrink --split-per-abi
-        --target-platform=android-arm
+      - $$flutter$$/bin/flutter build apk --release --no-shrink --split-per-abi --target-platform=android-arm
         --dart-define=STORE_UPDATE_CHECKS=false
-    output: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
 
   - versionName: 3.0.9
     versionCode: 2097
     commit: v3.0.9
     subdir: .
+    output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
     srclibs:
       - flutter@stable
     rm:
@@ -111,20 +63,14 @@ Builds:
       - .pub-cache
     build:
       - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter build apk --release --no-shrink --split-per-abi
-        --target-platform=android-arm64
+      - $$flutter$$/bin/flutter build apk --release --no-shrink --split-per-abi --target-platform=android-arm64
         --dart-define=STORE_UPDATE_CHECKS=false
-    output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 
-# pubspec.yaml is the single source of version truth (X.Y.Z+BUILD), so read the
-# version straight out of it rather than parsing the tag. Tags mode still finds
-# the release; UpdateCheckData says where the numbers live inside it.
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 VercodeOperation:
-  - '%c + 1000'   # armeabi-v7a
-  - '%c + 2000'   # arm64-v8a
-  # - '%c + 4000' # x86_64, if a third Build block is ever added
+  - '%c + 1000'
+  - '%c + 2000'
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 CurrentVersion: 3.0.9
 CurrentVersionCode: 2097
