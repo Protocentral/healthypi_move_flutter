@@ -153,8 +153,9 @@ stay; F-Droid only needs to find new ones.
   moves. Pin them explicitly if the floor is a real commitment.
 - `healthypi_healthy_store` is a **git** dependency (`ref: v0.2.0`). It is source, not
   a prebuilt, so it should be acceptable — but flag it in the merge request, and never
-  submit a commit carrying a `dependency_overrides:` path entry (currently present on
-  `feature/ultralight-support`, absent on `main`).
+  submit a commit carrying a `dependency_overrides:` path entry — those exist on some
+  feature branches to build against a local checkout, and would make the build
+  unreproducible for anyone else.
 
 ### 6. Signature divergence — tell users about this
 
