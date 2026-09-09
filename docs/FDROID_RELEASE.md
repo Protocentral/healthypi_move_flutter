@@ -219,15 +219,20 @@ Three phases. Phase A is self-contained repo hygiene that is worth doing whether
 F-Droid ever happens. Phase B ships to IzzyOnDroid, which answers issue #45 in days
 rather than weeks. Phase C is the F-Droid merge request.
 
-### Phase A — repo hygiene (no release needed)
+### Phase A — repo hygiene (no release needed) — **done**
 
-**A1. Font licences.** Copy the pattern the firmware repo already uses. Add
+All four landed in one commit. `flutter analyze` 0 errors, `flutter test` 162 pass with
+only the documented `widget_test.dart` sqflite harness failure. A2 turned up a real
+discrepancy: the app had been shipping `minSdk 24` while the docs, the changelog and the
+store copy all claimed API 21 — corrected rather than papered over.
+
+**A1. Font licences — done.** Copy the pattern the firmware repo already uses. Add
 `assets/fonts/OFL.txt` (SIL OFL 1.1 covers JetBrains Mono, Manrope, Rubik and Saira —
 one shared text is fine, the licence requires the text travel with the fonts) and a
 top-level `THIRD_PARTY.md` itemising them plus `material_symbols_icons` (Apache-2.0,
 © Google). Half a day. Closes gap 3.
 
-**A2. Pin the Android SDK floors.** Replace `minSdk = flutter.minSdkVersion` /
+**A2. Pin the Android SDK floors — done.** Replace `minSdk = flutter.minSdkVersion` /
 `targetSdk = flutter.targetSdkVersion` in
 [`android/app/build.gradle.kts`](../android/app/build.gradle.kts) with literals — `21`
 and the current target — so the documented Android 5.0 floor stops moving whenever the
@@ -235,12 +240,12 @@ Flutter toolchain's default moves. Also confirm whether `ndkVersion = "28.2.1367
 is actually needed; if nothing requires it, drop the pin rather than make F-Droid's
 buildserver match it. An hour, plus a build to verify. Closes most of gap 5.
 
-**A3. Make the firmware update check opt-in.** Add a settings toggle gating
+**A3. Make the firmware update check opt-in — done.** Add a settings toggle gating
 `FirmwareUpdateChecker.refresh()` so the automatic GitHub poll only happens if the user
 wants it. Manual "check now" from the Device tab stays regardless. Half a day. Closes
 the loose end in gap 1.
 
-**A4. Adopt one tag scheme.** `vX.Y.Z` from the next release, build number left to
+**A4. Adopt one tag scheme — done.** `vX.Y.Z` from the next release, build number left to
 `pubspec.yaml`. Both release workflows trigger on `tags: ['*']`, so **nothing in CI
 breaks** — this is purely a convention change. Old tags stay; F-Droid only needs to
 find new ones. Write it down in the README or a `RELEASING.md`. An hour. Closes gap 4.
