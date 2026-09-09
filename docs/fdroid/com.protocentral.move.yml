@@ -12,10 +12,12 @@
 # relocation (only needed when chasing reproducible builds — see
 # docs/FDROID_RELEASE.md, gap 6).
 #
-# STATUS: not yet verified with `fdroid build`. No Android SDK is installed on
-# the machine this was written on, so only the Dart compile was checked
-# (`flutter build bundle --dart-define=STORE_UPDATE_CHECKS=false`, clean).
-# Expect the Flutter/NDK/Gradle steps to need iteration.
+# STATUS: the build command below is verified locally -- it produces all three
+# APKs from a clean Android SDK 36 / JDK 17 / AGP 8.11.1 toolchain, and the
+# arm64 artifact reports minSdkVersion 24, targetSdkVersion 36, debuggable
+# false. `fdroid build` itself (the Debian buildserver, the flutter srclib
+# checkout, the scanner) is still unrun -- that needs fdroiddata, not just an
+# SDK. No NDK was required, which confirms dropping the ndkVersion pin.
 #
 # Summary, description, icon, screenshots and changelogs are NOT set here.
 # F-Droid reads them from fastlane/metadata/android/en-US/ in the app repo.
@@ -34,11 +36,16 @@ RepoType: git
 Repo: https://github.com/Protocentral/healthypi_move_flutter.git
 
 Builds:
-  # One block per ABI. versionCodes are derived by VercodeOperation below, so
-  # they must stay in the same order as the operations: +1 armeabi-v7a,
-  # +2 arm64-v8a, +3 x86_64.
+  # One block per ABI, in the same order as VercodeOperation below.
+  #
+  # The offsets are NOT ours to choose. `flutter build apk --split-per-abi`
+  # stamps each APK with abiCode * 1000 + the pubspec build number, so 3.0.8+96
+  # really produced 1096 / 2096 / 4096 -- note x86_64 is 4, not 3. F-Droid's
+  # versionCodes have to match what the APK actually carries or the published
+  # entry is wrong, so VercodeOperation reproduces that arithmetic rather than
+  # the template's `%c * 10 + n` illustration. Verified against built APKs.
   - versionName: 3.0.9
-    versionCode: 971
+    versionCode: 1097
     commit: v3.0.9
     subdir: .
     srclibs:
@@ -80,7 +87,7 @@ Builds:
     output: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
 
   - versionName: 3.0.9
-    versionCode: 972
+    versionCode: 2097
     commit: v3.0.9
     subdir: .
     srclibs:
@@ -117,7 +124,8 @@ AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 VercodeOperation:
-  - '%c * 10 + 1'
-  - '%c * 10 + 2'
+  - '%c + 1000'   # armeabi-v7a
+  - '%c + 2000'   # arm64-v8a
+  # - '%c + 4000' # x86_64, if a third Build block is ever added
 CurrentVersion: 3.0.9
-CurrentVersionCode: 972
+CurrentVersionCode: 2097

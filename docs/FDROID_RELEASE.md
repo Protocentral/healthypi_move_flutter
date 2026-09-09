@@ -190,13 +190,21 @@ It builds `armeabi-v7a` and `arm64-v8a` with `--dart-define=STORE_UPDATE_CHECKS=
 and takes versionName/versionCode from `pubspec.yaml` via `UpdateCheckData` rather than
 parsing them out of the tag.
 
-**Verification status:** the YAML parses and the folded build commands resolve
-correctly. It has *not* been through `fdroid build` — there is no Android SDK on the
-machine this was written on, so the APK step is unproven. What is proven is that the
-Dart side compiles under the F-Droid define (`flutter build bundle --release
---dart-define=STORE_UPDATE_CHECKS=false`, clean) and that
-`flutter pub get --enforce-lockfile` passes against the committed `pubspec.lock`, which
-the template requires.
+**Verification status:** the build command is proven locally. Against a freshly
+installed Android SDK 36 / JDK 17 / AGP 8.11.1 toolchain it produces all three APKs,
+and the arm64 artifact reports `minSdkVersion 24`, `targetSdkVersion 36` and
+`debuggable false`. `flutter pub get --enforce-lockfile` passes against the committed
+`pubspec.lock`, which the template requires. No NDK was needed, confirming A2's removal
+of the `ndkVersion` pin.
+
+Building it caught a real error in the recipe. `--split-per-abi` does not leave the
+versionCode alone: Flutter stamps each APK with `abiCode * 1000 + build number`, so
+3.0.8+96 actually produced **1096 / 2096 / 4096** — and x86_64 is 4, not 3. The
+template's illustrative `%c * 10 + n` would have published versionCodes that no APK
+carries. `VercodeOperation` now reproduces Flutter's arithmetic instead.
+
+Still unrun: `fdroid build` itself — the Debian buildserver, the `flutter` srclib
+checkout and the scanner. That needs a fdroiddata fork, not just an SDK.
 
 ## Plan
 
@@ -280,7 +288,7 @@ which fails if `upgrader` is imported anywhere but `main.dart` or if the constru
 stops being conditional — a second call site would otherwise reach a store from a build
 that has none, silently. Closes gap 2.
 
-**C2. Prove the build — in progress.** Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata),
+**C2. Prove the build — local build proven; `fdroid build` still to run.** Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata),
 finish the YAML above against a real `vX.Y.Z` tag, run `fdroid lint` and `fdroid build`
 locally or via their GitLab CI. Expect iteration here — the Flutter SDK pin, the NDK,
 and the `healthypi_healthy_store` git dependency are each a plausible first failure.
