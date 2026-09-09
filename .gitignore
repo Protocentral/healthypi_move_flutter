@@ -52,7 +52,16 @@ app.*.map.json
 # Project-specific
 /android/app/local.properties
 .github/copilot-instructions.md
+# Signing material. NEVER commit any of this -- the upload keystore was
+# committed here once (android/akw-newkey, 2025-03 to 2026-09) and had to be
+# rotated. The key belongs in CI as the KEYSTORE_BASE64 secret and in the
+# product folder outside this repo; see RELEASING.md.
 keystore.base64
+key.properties
+android/key.properties
+*.jks
+*.keystore
+akw-newkey
 /healthypi_trends.db
 x
 /temp_docs

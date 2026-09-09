@@ -46,6 +46,23 @@ release or the block will not fire.
 This mechanism does not work for installs from outside those stores — see
 `docs/FDROID_RELEASE.md`, gap 2.
 
+## Signing
+
+**No signing material lives in this repository.** CI signs from the
+`KEYSTORE_BASE64` secret; for a local release build, put the upload keystore
+somewhere outside the working tree and point `android/key.properties` at it —
+that file is gitignored, along with `*.jks`, `*.keystore` and `keystore.base64`.
+
+The upload keystore itself is kept in the product management folder, not here.
+Ask if you need it.
+
+> The upload key was committed to this public repo as `android/akw-newkey` from
+> March 2025 until it was removed in September 2026, so **it must be treated as
+> public and reset**. Google's App Signing holds the real app signing key, so an
+> upload key is resettable from the Play Console without affecting installed
+> users — but until it is reset, anyone who cloned the repo has it. Deleting the
+> file does not remove it from git history.
+
 ## Platform floors
 
 - Android `minSdk 24` — pinned in [`android/app/build.gradle.kts`](android/app/build.gradle.kts).
