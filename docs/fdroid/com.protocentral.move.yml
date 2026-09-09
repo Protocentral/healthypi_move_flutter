@@ -15,7 +15,6 @@ Builds:
   - versionName: 3.0.9
     versionCode: 1097
     commit: v3.0.9
-    subdir: .
     output: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
     srclibs:
       - flutter@stable
@@ -42,7 +41,6 @@ Builds:
   - versionName: 3.0.9
     versionCode: 2097
     commit: v3.0.9
-    subdir: .
     output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
     srclibs:
       - flutter@stable
@@ -67,7 +65,7 @@ Builds:
         --dart-define=STORE_UPDATE_CHECKS=false
 
 AutoUpdateMode: Version
-UpdateCheckMode: Tags
+UpdateCheckMode: Tags ^v\d+\.\d+\.\d+$
 VercodeOperation:
   - '%c + 1000'
   - '%c + 2000'
