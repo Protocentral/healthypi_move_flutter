@@ -169,49 +169,34 @@ let F-Droid ship *your* signed APK instead — more work up front, no uninstall 
 
 ---
 
-## Draft fdroiddata metadata
+## fdroiddata metadata
 
-Starting point for `metadata/com.protocentral.move.yml`, to be validated with
-`fdroid lint` and `fdroid build` before opening the merge request. Not yet verified
-against a real build.
+The build recipe lives at [`docs/fdroid/com.protocentral.move.yml`](fdroid/com.protocentral.move.yml).
+That file is not read from this repository — it is the working copy of what goes to
+`metadata/com.protocentral.move.yml` in a fdroiddata fork — but it is versioned here so
+the recipe travels with the code it builds.
 
-```yaml
-Categories:
-  - Science & Education
-License: MIT
-AuthorName: ProtoCentral Electronics
-WebSite: https://www.protocentral.com
-SourceCode: https://github.com/Protocentral/healthypi_move_flutter
-IssueTracker: https://github.com/Protocentral/healthypi_move_flutter/issues
-Changelog: https://github.com/Protocentral/healthypi_move_flutter/blob/main/CHANGELOG.md
+Two deliberate departures from fdroiddata's `templates/build-flutter.yml`:
 
-RepoType: git
-Repo: https://github.com/Protocentral/healthypi_move_flutter.git
+- The Flutter version is scraped from `.github/workflows/android-deploy.yml`, not the
+  template's `release.yml`, which this repo does not have. The Android workflow's
+  `flutter-version: '3.44.0'` is single-quoted, which is the form the template's regex
+  expects; the iOS workflow uses double quotes, so it must not be pointed at that one.
+- The `/upstream/path` relocation dance is omitted. It exists to make the build path
+  match upstream's for reproducible builds, which is gap 6's optional follow-up, not a
+  requirement for acceptance.
 
-Builds:
-  - versionName: 3.0.9
-    versionCode: 97
-    commit: v3.0.9
-    subdir: .
-    sudo:
-      - apt-get update
-      - apt-get install -y clang cmake ninja-build pkg-config
-    srclibs:
-      - flutter@3.44.0
-    output: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-    prebuild:
-      - rm -rf ios linux macos web windows
-    build:
-      - $$flutter$$/bin/flutter config --no-analytics
-      - $$flutter$$/bin/flutter pub get
-      - $$flutter$$/bin/flutter build apk --release --no-shrink --split-per-abi
-    ndk: 28.2.13676358
+It builds `armeabi-v7a` and `arm64-v8a` with `--dart-define=STORE_UPDATE_CHECKS=false`,
+and takes versionName/versionCode from `pubspec.yaml` via `UpdateCheckData` rather than
+parsing them out of the tag.
 
-AutoUpdateMode: Version
-UpdateCheckMode: Tags
-CurrentVersion: 3.0.9
-CurrentVersionCode: 97
-```
+**Verification status:** the YAML parses and the folded build commands resolve
+correctly. It has *not* been through `fdroid build` — there is no Android SDK on the
+machine this was written on, so the APK step is unproven. What is proven is that the
+Dart side compiles under the F-Droid define (`flutter build bundle --release
+--dart-define=STORE_UPDATE_CHECKS=false`, clean) and that
+`flutter pub get --enforce-lockfile` passes against the committed `pubspec.lock`, which
+the template requires.
 
 ## Plan
 
@@ -250,7 +235,11 @@ the loose end in gap 1.
 breaks** — this is purely a convention change. Old tags stay; F-Droid only needs to
 find new ones. Write it down in the README or a `RELEASING.md`. An hour. Closes gap 4.
 
-### Phase B — IzzyOnDroid (the fast path to answering #45)
+### Phase B — IzzyOnDroid — **skipped**
+
+Dropped on request: going straight to F-Droid. Kept below for the record, since it
+remains the fallback if the F-Droid merge request stalls. B1's screenshots are still
+needed — F-Droid reads the same `fastlane/` tree.
 
 **B1. Screenshots.** Capture 4-6 from a release build on a real paired device, no real
 personal health data, into
@@ -271,15 +260,27 @@ the two people who asked, one of whom only wanted a non-Play install route at al
 
 ### Phase C — F-Droid main
 
-**C1. Decouple from the Play listing.** Gate `upgrader` behind a compile-time flag —
-`bool.fromEnvironment('STORE_UPDATE_CHECKS', defaultValue: true)`, set false for the
-F-Droid build — and replace the mandatory-update path in
-[`lib/main.dart`](../lib/main.dart) with a local check. The app already learns the
-watch's firmware version from `HELLO`, so it can refuse a protocol mismatch without
-asking any store anything, which is a better gate than the store one even on Play.
-Two to three days including testing both paths. Closes gap 2.
+**C1. Decouple from the Play listing — done.** `kStoreUpdateChecks` in
+[`lib/feature_flags.dart`](../lib/feature_flags.dart) is
+`bool.fromEnvironment('STORE_UPDATE_CHECKS', defaultValue: true)`; the F-Droid build
+sets it false. [`lib/main.dart`](../lib/main.dart) then skips *constructing* the
+`Upgrader` rather than merely hiding the alert — it queries the store listing on
+creation, so a hidden alert would still make the request.
 
-**C2. Prove the build.** Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata),
+**No local replacement gate was needed, contrary to the plan as first written.**
+`Upgrader.blocked()` fires when the *installed* version is below
+`kMinimumAppVersion`, so it only ever reached pre-3.0 binaries already in the field —
+and those were installed from a store. F-Droid has never shipped this app, so no
+F-Droid build can be one of them. Disabling the check costs no enforcement. Protocol
+mismatch against a newer watch is separately handled by the `HELLO` probe, which
+already distinguishes a verdict (`supported: false, reachable: true`) from a timeout.
+
+Covered by [`test/store_update_checks_test.dart`](../test/store_update_checks_test.dart),
+which fails if `upgrader` is imported anywhere but `main.dart` or if the construction
+stops being conditional — a second call site would otherwise reach a store from a build
+that has none, silently. Closes gap 2.
+
+**C2. Prove the build — in progress.** Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata),
 finish the YAML above against a real `vX.Y.Z` tag, run `fdroid lint` and `fdroid build`
 locally or via their GitLab CI. Expect iteration here — the Flutter SDK pin, the NDK,
 and the `healthypi_healthy_store` git dependency are each a plausible first failure.

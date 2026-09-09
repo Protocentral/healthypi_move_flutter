@@ -29,3 +29,30 @@ library;
 /// `nSamples` counts intervals rather than bytes — the decode and every duration
 /// shown in the UI depend on both. See `HsRecording.isIntervalSeries`.
 const bool kHrvRecordsEnabled = false;
+
+/// Whether the app may ask an **app store** how up to date it is.
+///
+/// On by default — that is the Play/App Store build. Set false for a build
+/// distributed anywhere that has no such listing behind it:
+///
+/// ```sh
+/// flutter build apk --release --dart-define=STORE_UPDATE_CHECKS=false
+/// ```
+///
+/// `upgrader` reads the store's listing to learn the latest version and the
+/// `[:mav:]` minimum-version tag. Off a store there is no listing to read, so
+/// the check is a network request to Google or Apple that can only ever fail —
+/// and on F-Droid, keeping the app current is the store client's job anyway.
+/// See [kMinimumAppVersion] and docs/FDROID_RELEASE.md.
+///
+/// Turning this off costs no enforcement. `Upgrader.blocked()` fires when the
+/// *installed* version is below [kMinimumAppVersion], so it only ever reached
+/// pre-3.0 binaries already in the field — which by definition were installed
+/// from a store, never from F-Droid. A build with this flag off cannot be one
+/// of them.
+///
+/// This gates the runtime call, not the dependency: `upgrader` is still linked
+/// in. Removing the package outright would need a separate pubspec, which is
+/// not worth a second dependency tree to maintain.
+const bool kStoreUpdateChecks =
+    bool.fromEnvironment('STORE_UPDATE_CHECKS', defaultValue: true);

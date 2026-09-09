@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:upgrader/upgrader.dart';
 
+import 'feature_flags.dart';
 import 'screens/scr_main_shell.dart';
 import 'screens/scr_device_scan.dart';
 import 'screens/scr_bpt_calibration.dart';
@@ -53,7 +54,13 @@ const String kMinimumAppVersion = '3.0.0';
 ///
 ///   Play Store description:  `[Minimum supported app version: 3.0.0]`
 ///   App Store description:   `[:mav: 3.0.0]`
-final Upgrader _upgrader = Upgrader(minAppVersion: kMinimumAppVersion);
+///
+/// Null when [kStoreUpdateChecks] is off (a store-less build — F-Droid). The
+/// construction is skipped entirely rather than the alert merely hidden,
+/// because `Upgrader` queries the store listing on creation; a hidden alert
+/// would still make the request.
+final Upgrader? _upgrader =
+    kStoreUpdateChecks ? Upgrader(minAppVersion: kMinimumAppVersion) : null;
 
 class HealthyPiApp extends StatelessWidget {
   const HealthyPiApp({super.key});
@@ -77,20 +84,7 @@ class HealthyPiApp extends StatelessWidget {
         // The redesigned 4-tab shell is the app entry. The pre-redesign screens
         // (legacy home / trends / device / settings) have been deleted; all
         // in-app navigation now goes through the shell and MaterialPageRoutes.
-        // Ignore/Later are shown for an ordinary optional update, and suppressed
-        // automatically by UpgradeAlert when Upgrader.blocked() is true (below
-        // the minimum version), so a mandatory update leaves only "Update Now".
-        //
-        // shouldPopScope feeds PopScope.canPop. Its default is a flat `false`,
-        // which also traps the back button on *optional* updates that already
-        // have a Later button; this relaxes that to "dismissable unless the
-        // update is mandatory", which is the only case that must not be
-        // bypassed by a back gesture.
-        '/': (context) => UpgradeAlert(
-              upgrader: _upgrader,
-              shouldPopScope: () => !_upgrader.blocked(),
-              child: const ScrMainShell(),
-            ),
+        '/': (context) => _homeRoute(),
         '/scan': (context) => const ScrDeviceScan(),
         '/device/bpt-calibration': (context) => const ScrBPTCalibration(),
         '/blood-pressure': (context) => const ScrBloodPressure(),
@@ -101,6 +95,30 @@ class HealthyPiApp extends StatelessWidget {
           builder: (context) => const ScrMainShell(),
         );
       },
+    );
+  }
+
+  /// The `/` route: the shell, wrapped in the update alert on store builds.
+  ///
+  /// Ignore/Later are shown for an ordinary optional update, and suppressed
+  /// automatically by [UpgradeAlert] when [Upgrader.blocked] is true (below the
+  /// minimum version), so a mandatory update leaves only "Update Now".
+  ///
+  /// `shouldPopScope` feeds `PopScope.canPop`. Its default is a flat `false`,
+  /// which also traps the back button on *optional* updates that already have a
+  /// Later button; this relaxes that to "dismissable unless the update is
+  /// mandatory", which is the only case that must not be bypassed by a back
+  /// gesture.
+  ///
+  /// On a store-less build ([kStoreUpdateChecks] off) the shell is returned
+  /// bare — no alert, and nothing that could reach out to a store listing.
+  Widget _homeRoute() {
+    final upgrader = _upgrader;
+    if (upgrader == null) return const ScrMainShell();
+    return UpgradeAlert(
+      upgrader: upgrader,
+      shouldPopScope: () => !upgrader.blocked(),
+      child: const ScrMainShell(),
     );
   }
 }
