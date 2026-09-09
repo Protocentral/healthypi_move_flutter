@@ -30,7 +30,7 @@ AuthorName: ProtoCentral Electronics
 WebSite: https://www.protocentral.com
 SourceCode: https://github.com/Protocentral/healthypi_move_flutter
 IssueTracker: https://github.com/Protocentral/healthypi_move_flutter/issues
-Changelog: https://github.com/Protocentral/healthypi_move_flutter/blob/main/CHANGELOG.md
+Changelog: https://github.com/Protocentral/healthypi_move_flutter/blob/HEAD/CHANGELOG.md
 
 RepoType: git
 Repo: https://github.com/Protocentral/healthypi_move_flutter.git
@@ -71,10 +71,12 @@ Builds:
       # something newer at build time. Verified to pass against the committed
       # lockfile.
       - $$flutter$$/bin/flutter pub get --enforce-lockfile
-    scanignore:
-      - .flutter/bin/cache
+    # No scanignore for the Flutter SDK: that entry only applies to the
+    # submodule method, which checks Flutter out to .flutter inside the app.
+    # With srclibs it lives in build/srclib/flutter and is reached through
+    # $$flutter$$, so `.flutter/bin/cache` matches nothing -- and fdroid treats
+    # a glob that matches nothing as a hard error, not a warning.
     scandelete:
-      - .flutter
       - .pub-cache
     build:
       - export PUB_CACHE=$(pwd)/.pub-cache
@@ -105,10 +107,7 @@ Builds:
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get --enforce-lockfile
-    scanignore:
-      - .flutter/bin/cache
     scandelete:
-      - .flutter
       - .pub-cache
     build:
       - export PUB_CACHE=$(pwd)/.pub-cache
