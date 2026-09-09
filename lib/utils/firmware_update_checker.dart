@@ -3,6 +3,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../ble/firmware_compatibility.dart';
 import 'device_manager.dart';
@@ -76,14 +77,39 @@ class FirmwareUpdateChecker {
   /// enough that a release published this morning is offered today.
   static const Duration cacheTtl = Duration(hours: 6);
 
+  /// Settings toggle for the *background* check. Default **on** — an update the
+  /// user never hears about is an update they never install — but this is the
+  /// one thing the app does over the network without being asked, so it is
+  /// theirs to switch off. Mirrors [AutoSyncController.enabledPrefKey].
+  ///
+  /// Turning it off does not disable firmware updates: a `force: true` check is
+  /// unaffected, and opening the Firmware update row still queries GitHub
+  /// directly (see `ScrDFUNew`). It only stops the unprompted poll.
+  static const String enabledPrefKey = 'fw_auto_check_enabled';
+
+  static Future<bool> isEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(enabledPrefKey) ?? true;
+  }
+
+  static Future<void> setEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(enabledPrefKey, value);
+  }
+
   bool _running = false;
 
-  /// Re-evaluate. [force] bypasses the release cache (user-initiated check).
+  /// Re-evaluate. [force] bypasses the release cache *and* the
+  /// [enabledPrefKey] toggle — it means "the user asked for this".
   ///
   /// Never throws: a failed check leaves the previous verdict in place rather
   /// than flapping the UI back to `unknown` because the phone was offline.
   Future<void> refresh({bool force = false}) async {
     if (_running) return;
+    // Checked before `_running` is claimed so an opted-out user cannot be left
+    // holding the flag. Leaves `status` untouched rather than resetting it: the
+    // last verdict is still true, it just stops being refreshed.
+    if (!force && !await isEnabled()) return;
     _running = true;
     try {
       final device = await DeviceManager.getPairedDevice();

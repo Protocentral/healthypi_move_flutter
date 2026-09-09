@@ -19,6 +19,7 @@ import '../utils/auto_sync_controller.dart';
 import '../utils/connection_manager.dart';
 import '../utils/database_helper.dart';
 import '../utils/device_manager.dart';
+import '../utils/firmware_update_checker.dart';
 import '../utils/healthy_store_client.dart';
 import '../utils/healthy_store_sync_manager.dart';
 import 'scr_developer.dart';
@@ -44,6 +45,7 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
   final _cm = ConnectionManager.instance;
   bool _devMode = false;
   bool _autoSync = true;
+  bool _fwAutoCheck = true;
   bool _deleting = false;
   bool _erasingWatch = false;
   bool _exporting = false;
@@ -307,6 +309,8 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
     setState(() {
       _devMode = prefs.getBool(ScrSettingsNew.devModePrefKey) ?? false;
       _autoSync = prefs.getBool(AutoSyncController.enabledPrefKey) ?? true;
+      _fwAutoCheck =
+          prefs.getBool(FirmwareUpdateChecker.enabledPrefKey) ?? true;
       _version = '${info.version}+${info.buildNumber}';
     });
   }
@@ -323,6 +327,14 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
   Future<void> _setAutoSync(bool v) async {
     setState(() => _autoSync = v);
     await AutoSyncController.setEnabled(v);
+  }
+
+  /// The background firmware check is the only network call the app makes
+  /// without being asked. Off, it stops polling GitHub — it does not stop
+  /// firmware updates: opening the Firmware update row still checks.
+  Future<void> _setFwAutoCheck(bool v) async {
+    setState(() => _fwAutoCheck = v);
+    await FirmwareUpdateChecker.setEnabled(v);
   }
 
   @override
@@ -367,6 +379,24 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
                   activeTrackColor: HpiColors.hr,
                 ),
                 onTap: () => _setAutoSync(!_autoSync),
+              ),
+              HpiListRow(
+                icon: Symbols.system_update,
+                iconColor:
+                    _fwAutoCheck ? HpiColors.hr : HpiColors.onSurfaceVariant,
+                title: 'Check for watch firmware',
+                supporting: _fwAutoCheck
+                    ? 'In the background, at most every '
+                        '${FirmwareUpdateChecker.cacheTtl.inHours} h'
+                    : 'Off — check by opening Firmware update',
+                showChevron: false,
+                trailing: Switch(
+                  value: _fwAutoCheck,
+                  onChanged: _setFwAutoCheck,
+                  activeThumbColor: HpiColors.onHr,
+                  activeTrackColor: HpiColors.hr,
+                ),
+                onTap: () => _setFwAutoCheck(!_fwAutoCheck),
               ),
               HpiListRow(
                 icon: Symbols.description,
