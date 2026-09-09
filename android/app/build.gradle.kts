@@ -18,9 +18,14 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.protocentral.move"
     compileSdk = flutter.compileSdkVersion
-    //ndkVersion = flutter.ndkVersion
 
-    ndkVersion = "28.2.13676358"
+    // Was pinned to the literal "28.2.13676358", which is exactly what
+    // flutter.ndkVersion already resolves to on the toolchain we build with — so
+    // the pin bought nothing and would silently drift the day Flutter moves. It
+    // also forces any third-party builder (F-Droid's buildserver, say) to have
+    // that exact NDK installed. No plugin in this project declares an NDK
+    // requirement; track the toolchain instead. See docs/FDROID_RELEASE.md.
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -36,7 +41,15 @@ android {
         applicationId = "com.protocentral.move"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+
+        // Pinned deliberately. This inherited `flutter.minSdkVersion`, which means
+        // the app's real Android floor moved every time the toolchain's default
+        // moved — and it had: the docs and the store listing still claimed API 21
+        // (Android 5.0) while Flutter 3.44 was quietly building at 24 (Android
+        // 7.0). Flutter itself no longer supports API < 24, so 24 is the floor
+        // whether or not universal_ble would tolerate 21. Pinning it makes the
+        // number we publish and the number we ship the same one.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

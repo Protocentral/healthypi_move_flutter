@@ -27,7 +27,7 @@ Requirements
 
 Version 3 of the app requires version 3 firmware on the watch; the older
 transfer protocol has been removed. Use the firmware updater on the Device tab
-to bring the watch to a matching release. Requires Android 5.0 (API 21) or
+to bring the watch to a matching release. Requires Android 7.0 (API 24) or
 later, Bluetooth LE, and the HealthyPi Move hardware — the app does nothing on
 its own.
 

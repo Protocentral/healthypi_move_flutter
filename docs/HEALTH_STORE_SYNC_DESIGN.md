@@ -98,7 +98,8 @@ DFU):
   deliberately rejected `mcumgr_flutter` for being native-mobile-only; here it's
   simply redundant once the SMP core is in.)
 - universal_ble needs **iOS deployment target ≥ 13.1** (bump `ios/Podfile` + Runner),
-  macOS ≥ 10.15, Android `minSdk 21`.
+  macOS ≥ 10.15, Android `minSdk 21`. The app itself pins `minSdk 24`, which is
+  higher: Flutter no longer supports API < 24, so that is the real floor we ship.
 
 ### 2.1 Why a hand-rolled SMP client (not `mcumgr_flutter`)
 
