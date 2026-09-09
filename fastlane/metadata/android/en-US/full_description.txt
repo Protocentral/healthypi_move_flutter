@@ -1,0 +1,39 @@
+HealthyPi Move is the companion app for the HealthyPi Move wearable, an open
+hardware health monitor from ProtoCentral.
+
+Everything runs on your phone. There is no account to create, no cloud service,
+and no backend — your readings are stored in a local database on your device and
+go nowhere else. The app contains no analytics, advertising or tracking SDKs.
+
+Features
+
+* Live view — watch ECG, PPG, heart rate, SpO2 and skin temperature stream from
+  the watch in real time over Bluetooth LE.
+* Trends — hourly and daily summaries with a rolling 30-day baseline, so a
+  reading is shown against your own usual rather than a generic chart. Day,
+  week, month and 6-month ranges, with a detail view per metric.
+* Continuous HRV and a stress score derived from it. While the app is still
+  learning your baseline it says so, rather than showing a meaningless zero.
+* Recordings library — episodic ECG, PPG, GSR/EDA, HRV and motion captures are
+  listed as soon as the watch reports them and downloaded only when you tap one.
+  Every download is checksum-verified.
+* Export any recording as CSV to analyse or share elsewhere.
+* Firmware updates for the watch, over the air, from the app.
+* Resumable sync — an interrupted transfer picks up where it stopped, and data
+  is only acknowledged to the watch once it is written to your phone and
+  verified, so a failed sync cannot lose readings.
+
+Requirements
+
+Version 3 of the app requires version 3 firmware on the watch; the older
+transfer protocol has been removed. Use the firmware updater on the Device tab
+to bring the watch to a matching release. Requires Android 5.0 (API 21) or
+later, Bluetooth LE, and the HealthyPi Move hardware — the app does nothing on
+its own.
+
+Not a medical device
+
+HealthyPi Move is intended for wellness, education and research. The readings it
+shows, including the estimated blood pressure range, are not a diagnosis and
+must not be used to make medical decisions. Talk to a clinician about anything
+that concerns you.

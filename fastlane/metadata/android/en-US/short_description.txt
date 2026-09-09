@@ -1,0 +1,1 @@
+Companion app for the HealthyPi Move wearable. No account, no cloud.

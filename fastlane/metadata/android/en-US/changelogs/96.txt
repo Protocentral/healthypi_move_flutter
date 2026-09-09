@@ -1,0 +1,7 @@
+Version 3 is a full rebuild of the app: a four-tab interface (Home, Trends,
+Live, Device), a new Health Store sync that is resumable and fetches the newest
+samples first, and a real recordings library with CSV export.
+
+Requires version 3 firmware on the watch — use the updater on the Device tab.
+
+Full notes: CHANGELOG.md in the source repository.
