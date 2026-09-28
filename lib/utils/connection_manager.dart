@@ -202,6 +202,14 @@ class ConnectionManager extends ChangeNotifier {
     return id == null ? null : _ble.requestMtu(id, mtu);
   }
 
+  /// Ask for a low-latency connection interval while streaming, and hand it
+  /// back afterwards (best-effort; Android only — Apple manages the interval).
+  Future<bool> requestConnectionPriority({required bool high}) async {
+    final id = _deviceId;
+    if (id == null) return false;
+    return _ble.requestConnectionPriority(id, high: high);
+  }
+
   // --- Streaming helpers (delegate to BleManager with the owned deviceId) ---
 
   /// Subscribe to a characteristic on the current link and get its value stream.

@@ -22,7 +22,10 @@ import 'package:move/utils/healthy_store_sync_manager.dart';
 void main() {
   final flag = HealthyStoreSyncManager.instance.syntheticIncluded;
 
-  tearDown(() => flag.value = false);
+  tearDown(() {
+    flag.value = false;
+    HpiSyntheticBanner.liveSyntheticSource.value = null;
+  });
 
   Future<void> pump(WidgetTester tester) => tester.pumpWidget(
         const MaterialApp(
@@ -64,6 +67,26 @@ void main() {
     expect(find.byType(IconButton), findsNothing);
     expect(find.byType(CloseButton), findsNothing);
     expect(find.byType(TextButton), findsNothing);
+  });
+
+  testWidgets('a SYNTHETIC live frame raises the same banner, naming the device',
+      (tester) async {
+    await pump(tester);
+    expect(find.textContaining('SYNTHETIC'), findsNothing);
+
+    // Set by the Ultralight Live screen on a DBLK frame with the SYNTHETIC flag.
+    HpiSyntheticBanner.liveSyntheticSource.value = 'MoveUL A1B2C3';
+    await tester.pump();
+    expect(find.textContaining('SYNTHETIC'), findsOneWidget);
+    expect(find.textContaining('MoveUL A1B2C3'), findsOneWidget);
+    expect(find.textContaining('fabricated'), findsOneWidget);
+    expect(find.textContaining('not measurements'), findsOneWidget);
+    expect(find.text('charts'), findsOneWidget);
+    expect(find.byType(IconButton), findsNothing);
+
+    HpiSyntheticBanner.liveSyntheticSource.value = null;
+    await tester.pump();
+    expect(find.textContaining('SYNTHETIC'), findsNothing);
   });
 
   group('containment', () {

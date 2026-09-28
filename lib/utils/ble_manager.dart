@@ -183,6 +183,23 @@ class BleManager {
     }
   }
 
+  /// Ask for a low-latency (`high`) or default (`!high`) connection interval.
+  /// Best-effort: Android-only in universal_ble; a no-op or throw elsewhere,
+  /// swallowed here. Returns whether the request was accepted.
+  Future<bool> requestConnectionPriority(String deviceId,
+      {required bool high}) async {
+    try {
+      await UniversalBle.requestConnectionPriority(
+          deviceId,
+          high
+              ? BleConnectionPriority.highPerformance
+              : BleConnectionPriority.balanced);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // --- Characteristics -----------------------------------------------------
 
   /// Enable notifications on a characteristic. Its values arrive on

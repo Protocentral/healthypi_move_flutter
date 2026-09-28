@@ -14,6 +14,7 @@ import '../utils/device_manager.dart';
 import 'scr_device_new.dart';
 import 'scr_home.dart';
 import 'scr_live.dart';
+import 'scr_live_ultralight.dart';
 import 'scr_settings_new.dart';
 import 'scr_trends_hub.dart';
 
@@ -86,6 +87,9 @@ class _ScrMainShellState extends State<ScrMainShell> {
     await DatabaseHelper.instance.acknowledgeLegacyDataCleared();
   }
 
+  /// Index of the Live tab in [_destinations].
+  static const _liveTab = 2;
+
   static const _destinations = [
     HpiDestination(icon: Symbols.home, label: 'Home'),
     HpiDestination(icon: Symbols.monitoring, label: 'Trends'),
@@ -103,7 +107,18 @@ class _ScrMainShellState extends State<ScrMainShell> {
     final tabs = [
       const ScrHome(),
       const ScrTrendsHub(),
-      const ScrLive(),
+      // Profile-selected (ULTRALIGHT_SHARED_APP_DESIGN §4.2): the Move's live
+      // characteristics do not exist on an Ultralight, which streams DBLK
+      // frames on 0x2002 instead. The Ultralight screen is told whether it is
+      // the visible tab, because subscribing is what switches the band's PPG
+      // on — it must not stream from behind the IndexedStack.
+      ValueListenableBuilder<DeviceProfile>(
+        valueListenable: DeviceManager.activeProfile,
+        builder: (context, profile, _) =>
+            profile.model == DeviceModel.moveUltralight
+                ? ScrLiveUltralight(active: _index == _liveTab)
+                : const ScrLive(),
+      ),
       const ScrDeviceNew(),
     ];
     return HpiAdaptiveScaffold(

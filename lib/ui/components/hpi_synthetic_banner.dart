@@ -23,17 +23,37 @@ import '../../utils/healthy_store_sync_manager.dart';
 ///
 /// Mounted from `MaterialApp.builder`, so it covers pushed routes and dialogs
 /// too, not just the shell's four tabs.
+///
+/// It has a second trigger: a **live** stream frame carrying the DBLK
+/// `SYNTHETIC` flag (Move Ultralight, `lib/ble/dblk_frame.dart`). A fabricated
+/// waveform on a live screen is more convincing than a fabricated chart, not
+/// less, so it raises this same banner — naming the device, so a bench
+/// Ultralight is not mistaken for anything else. See [liveSyntheticSource].
 class HpiSyntheticBanner extends StatelessWidget {
   const HpiSyntheticBanner({super.key, required this.child});
 
   final Widget child;
 
+  /// Non-null while a live stream is showing frames its device flagged
+  /// SYNTHETIC; the value names that device. Set by the live screen when such
+  /// a frame arrives and cleared when that stream stops — it is a fact about
+  /// what is on screen now, so, like the preview flag, it is never persisted.
+  static final ValueNotifier<String?> liveSyntheticSource =
+      ValueNotifier<String?>(null);
+
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: HealthyStoreSyncManager.instance.syntheticIncluded,
-      builder: (context, on, _) {
-        if (!on) return child;
+    final preview = HealthyStoreSyncManager.instance.syntheticIncluded;
+    return ListenableBuilder(
+      listenable: Listenable.merge([preview, liveSyntheticSource]),
+      builder: (context, _) {
+        final live = liveSyntheticSource.value;
+        if (!preview.value && live == null) return child;
+        final message = live != null
+            ? 'SYNTHETIC DATA — $live is streaming fabricated test samples, '
+                'not measurements'
+            : 'SYNTHETIC DATA — these are fabricated test samples, '
+                'not measurements';
         return Column(
           children: [
             Material(
@@ -51,8 +71,7 @@ class HpiSyntheticBanner extends StatelessWidget {
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
-                          'SYNTHETIC DATA — these are fabricated test samples, '
-                          'not measurements',
+                          message,
                           style: Theme.of(context)
                               .textTheme
                               .labelMedium

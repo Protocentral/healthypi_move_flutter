@@ -35,6 +35,15 @@ class hPi4Global {
       "cd5c7491-4448-7db8-ae4c-d1da8cba36d0";
   static const String UUID_STREAM_2 = "01bf1525-970f-8d96-d44d-9023c47faddc";
 
+  /// Move Ultralight live stream: one whole DBLK frame per notification on
+  /// `0x2002` (see lib/ble/dblk_frame.dart). Subscribing starts PPG on the
+  /// device; the last unsubscribe stops it. `0x2001` in the same service is
+  /// legacy ad-hoc packing, superseded — do not target it.
+  static const String UUID_SERV_UL_STREAM =
+      "00002000-0000-1000-8000-00805f9b34fb";
+  static const String UUID_CHAR_UL_DBLK =
+      "00002002-0000-1000-8000-00805f9b34fb";
+
   static const String UUID_CHAR_HR = "00002a37-0000-1000-8000-00805f9b34fb";
   static const String UUID_SPO2_CHAR = "00002a5e-0000-1000-8000-00805f9b34fb";
   static const String UUID_TEMP_CHAR = "00002a6e-0000-1000-8000-00805f9b34fb";
