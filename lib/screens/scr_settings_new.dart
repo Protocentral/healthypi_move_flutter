@@ -9,7 +9,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mcumgr_dart/mcumgr_dart.dart' show SmpException;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/hpi_colors.dart';
@@ -22,6 +21,7 @@ import '../utils/device_manager.dart';
 import '../utils/firmware_update_checker.dart';
 import '../utils/healthy_store_client.dart';
 import '../utils/healthy_store_sync_manager.dart';
+import '../utils/share_csv.dart';
 import 'scr_developer.dart';
 
 /// Settings (handoff 1i). A pushed route (no nav bar). Preference rows that
@@ -122,10 +122,11 @@ class _ScrSettingsNewState extends State<ScrSettingsNew> {
       final file = File('${dir.path}/healthypi_all_data_$stamp.csv');
       await file.writeAsString(const ListToCsvConverter().convert(csv));
       if (!mounted) return;
-      await SharePlus.instance.share(ShareParams(
-        files: [XFile(file.path)],
+      await shareCsv(
+        context,
+        file,
         text: 'HealthyPi Move — ${rows.length} samples',
-      ));
+      );
     } catch (e) {
       _toast('Export failed: $e');
     } finally {

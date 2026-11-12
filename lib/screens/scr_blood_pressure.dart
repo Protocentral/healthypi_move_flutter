@@ -7,12 +7,12 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../data/health_repository.dart';
 import '../theme/hpi_colors.dart';
 import '../theme/hpi_text.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/share_csv.dart';
 
 /// Blood pressure — **relative wellness trend, not a measurement** (handoff
 /// 6a/6b). The display counterpart to the 5b baseline set-up.
@@ -137,10 +137,11 @@ class _ScrBloodPressureState extends State<ScrBloodPressure> {
           File('${dir.path}/healthypi_blood_pressure_${_range.name}_$stamp.csv');
       await file.writeAsString(const ListToCsvConverter().convert(rows));
       if (!mounted) return;
-      await SharePlus.instance.share(ShareParams(
-        files: [XFile(file.path)],
+      await shareCsv(
+        context,
+        file,
         text: 'Blood pressure — wellness estimates, not cuff measurements',
-      ));
+      );
     } catch (e) {
       _toast('Export failed: $e');
     } finally {

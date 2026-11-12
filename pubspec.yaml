@@ -25,7 +25,7 @@ dependencies:
   file_selector: ^1.0.0
   flutter_archive: ^6.0.0
   csv: ^6.0.0
-  share_plus: ^12.0.0
+  share_plus: ^12.0.2
   package_info_plus: ^8.3.1
   upgrader: ^12.1.0
   json_annotation: ^4.8.1

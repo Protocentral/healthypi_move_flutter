@@ -7,7 +7,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:healthypi_healthy_store/healthypi_healthy_store.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../feature_flags.dart';
 import '../models/hs_recording.dart';
@@ -17,6 +16,7 @@ import '../ui/components/hpi_components.dart';
 import '../utils/device_manager.dart';
 import '../utils/healthy_store_records_manager.dart';
 import '../utils/hrv_analysis.dart';
+import '../utils/share_csv.dart';
 import '../utils/signal_view.dart';
 
 /// Recording preview + CSV export (handoff 2d) for HPI_HS **RECORDS** payloads.
@@ -140,8 +140,7 @@ class _ScrRecordingPreviewState extends State<ScrRecordingPreview> {
     try {
       final file = await build(m);
       if (!mounted) return;
-      await SharePlus.instance
-          .share(ShareParams(files: [XFile(file.path)], text: shareText));
+      await shareCsv(context, file, text: shareText);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
