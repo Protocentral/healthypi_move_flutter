@@ -8,7 +8,6 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../data/health_repository.dart';
 import '../globals.dart';
@@ -17,6 +16,7 @@ import '../theme/hpi_text.dart';
 import '../ui/charts/hpi_sparkline.dart';
 import '../ui/charts/hpi_trend_charts.dart';
 import '../ui/components/hpi_components.dart';
+import '../utils/share_csv.dart';
 
 /// Per-metric visual identity for the trend screens.
 class TrendMetricStyle {
@@ -180,10 +180,11 @@ class TrendDetailViewState extends State<TrendDetailView> {
           '${dir.path}/healthypi_${widget.metricKey}_${_range.name}_$stamp.csv');
       await file.writeAsString(const ListToCsvConverter().convert(rows));
       if (!mounted) return;
-      await SharePlus.instance.share(ShareParams(
-        files: [XFile(file.path)],
+      await shareCsv(
+        context,
+        file,
         text: '${style.title} · ${_rangeLabel()}',
-      ));
+      );
     } catch (e) {
       _toast('Export failed: $e');
     } finally {
